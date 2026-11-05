@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { useNotifications } from '@/hooks/useNotifications'
+import { notificationOpenPath } from '@/lib/notification-target'
 import { formatDistanceToNow } from 'date-fns'
 import { id } from 'date-fns/locale'
 
@@ -31,9 +32,7 @@ export function NotificationBell() {
     if (!notification.is_read) {
       markAsRead(notification.id)
     }
-    if (notification.link) {
-      window.location.href = notification.link
-    }
+    window.location.href = notificationOpenPath(notification.id)
     setOpen(false)
   }
 

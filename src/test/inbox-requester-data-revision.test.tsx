@@ -19,6 +19,8 @@ type Fixture = {
 const mocks = vi.hoisted(() => ({
   fixture: {} as Fixture,
   compact: null as Record<string, unknown> | null,
+  currentUser: null as {id:string}|null,
+  detailError: false,
   noop: vi.fn(),
   requestRevision: vi.fn(),
   prompt: vi.fn(),
@@ -29,8 +31,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: mocks.noop }),
   useQuery: ({ queryKey }: { queryKey: unknown[] }) => ({
-    data: queryKey[0] === "surat-inbox-detail" ? mocks.fixture : queryKey[0] === "user-profile-inbox" ? null : mocks.empty,
-    isFetching: false, isLoading: false,
+    data: queryKey[0] === "surat-inbox-detail" ? queryKey[1] && !mocks.detailError ? mocks.fixture : undefined : queryKey[0] === "user-profile-inbox" ? mocks.currentUser : mocks.empty,
+    isError: queryKey[0] === "surat-inbox-detail" && mocks.detailError,isFetching: false, isLoading: false,
   }),
 }));
 vi.mock("@/features/surat/inbox/lib/use-inbox-pagination", () => ({
@@ -46,7 +48,10 @@ vi.mock("@/hooks/useDocumentOpener", () => ({
   useDocumentOpener: () => ({ openPdf: mocks.noop, openFile: mocks.noop, isOpening: () => false }),
   documentOperationKey: { pdf: () => "document", file: () => "file" },
 }));
-vi.mock("@/lib/supabase", () => ({ supabase: {} }));
+vi.mock("@/lib/supabase", () => ({
+  supabase: {channel:()=>{const channel={on:()=>channel,subscribe:()=>channel};return channel;},removeChannel:()=>undefined},
+  onRealtimeReconnect:()=>({unsubscribe:()=>undefined}),
+}));
 vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({
   suratApprovalApi: { requestProcessRevision: mocks.requestRevision },
 }));
@@ -74,6 +79,7 @@ const useKeu10 = (role = "verifikator") => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.compact = null;
+  mocks.currentUser=null;mocks.detailError=false;
   mocks.requestRevision.mockResolvedValue({ id: "revision" });
   mocks.prompt.mockResolvedValue(reason);
   Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
@@ -104,6 +110,18 @@ afterEach(() => {
 });
 
 describe("Inbox requester data and attachment revision", () => {
+  it('opens the requested canonical detail even when absent from the paginated compact queue',()=>{
+    const signature='00000000-0000-4000-8000-000000000003',user='00000000-0000-4000-8000-000000000004';
+    mocks.currentUser={id:user};mocks.fixture.id=signature;Object.assign(mocks.fixture,{user_id:user});
+    mocks.compact={id:'other-signature',task_type:'approval',no_surat:'UNRELATED',judul_surat:'Unrelated queue'};
+    render(<MemoryRouter initialEntries={[`/surat/inbox?task=approval:${signature}`]}><InboxPage/></MemoryRouter>);
+    expect(screen.getByText('001/UAI/X/2026')).toBeInTheDocument();expect(screen.queryByText('Unrelated queue')).not.toBeInTheDocument();
+  });
+  it('keeps a stale requested task unavailable instead of selecting an unrelated first task',()=>{
+    mocks.detailError=true;mocks.compact={id:'other-signature',task_type:'approval',judul_surat:'Unrelated queue'};
+    render(<MemoryRouter initialEntries={['/surat/inbox?task=approval:00000000-0000-4000-8000-000000000003']}><InboxPage/></MemoryRouter>);
+    expect(screen.getByText('Tugas yang dipilih tidak tersedia untuk akun ini atau sudah berpindah tahap.')).toBeInTheDocument();expect(screen.queryByText('Unrelated queue')).not.toBeInTheDocument();
+  });
   it("shows queue identity from flat compact rows without loading every detail", async () => {
     mocks.compact = { id: "signature", surat_id: "surat", task_type: "approval", step_order: 3,
       no_surat: "009/UAI/TEST/X/2026", judul_surat: "Pengajuan Dana Operasional: Perawatan",

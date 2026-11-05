@@ -26,6 +26,10 @@ vi.mock("nodemailer", () => ({
 vi.mock("web-push", () => ({
   default: {
     setVapidDetails: () => undefined,
+    generateRequestDetails: (subscription: {endpoint:string}, payload: string) => {
+      pushCapture.sent.push({subscription,payload});
+      return {endpoint:subscription.endpoint,method:'POST',headers:{'content-encoding':'aes128gcm'},body:Buffer.from('encrypted-fixture')};
+    },
     sendNotification: async (subscription: unknown, payload: string) => {
       pushCapture.sent.push({ subscription, payload });
       return {};
@@ -477,6 +481,24 @@ describe("audit candidate: unrestricted web push endpoint", () => {
     await runtime.handleRequest(request, response);
 
     expect(response.statusCode).toBe(200);
+  });
+});
+
+describe('durable push provider revalidation',()=>{
+  const payload={title:'SIGAP',message:'Generic',link:'/notifications/open?id=fixture',tag:'fixture',notificationId:'00000000-0000-4000-8000-000000000001'};
+  it.each(['https://127.0.0.1/push','https://attacker.example/push','https://fcm.googleapis.com.attacker.example/push','http://fcm.googleapis.com/push'])("rejects persisted untrusted endpoint before encryption or network: %s",async(endpoint)=>{
+    const {runtime}=await boot({});
+    await expect(runtime.sendQueuedBrowserPush({endpoint,keys:{p256dh:'fixture',auth:'fixture'}},payload)).rejects.toMatchObject({code:'invalid_endpoint'});
+    expect(pushCapture.sent).toHaveLength(0);expect(fetch).not.toHaveBeenCalled();
+  });
+  it('sends only the encrypted provider request with a hard deadline and no redirects',async()=>{
+    const {runtime}=await boot({}),cancel=vi.fn(async()=>undefined);
+    vi.mocked(fetch).mockResolvedValue({ok:true,status:201,body:{cancel}} as unknown as Response);
+    await runtime.sendQueuedBrowserPush({endpoint:'https://fcm.googleapis.com/push',keys:{p256dh:'fixture',auth:'fixture'}},payload);
+    expect(fetch).toHaveBeenCalledWith('https://fcm.googleapis.com/push',expect.objectContaining({method:'POST',redirect:'error',signal:expect.any(AbortSignal),body:Buffer.from('encrypted-fixture')}));
+    expect(cancel).toHaveBeenCalled();
+    vi.mocked(fetch).mockResolvedValue({ok:false,status:410} as Response);
+    await expect(runtime.sendQueuedBrowserPush({endpoint:'https://fcm.googleapis.com/push',keys:{p256dh:'fixture',auth:'fixture'}},payload)).rejects.toMatchObject({statusCode:410});
   });
 });
 

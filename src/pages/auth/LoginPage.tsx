@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
+import { notificationReturnPath } from '@/lib/notification-target';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Sun, Moon, Cloud, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const isDark = skyMode === 'dark';
   const stars = [
     { top: '9%', left: '12%', size: 1.4, delay: '0.1s', duration: '3.8s' },
@@ -77,7 +79,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const destination = window.location.pathname === '/maintenance-admin' ? '/admin/configuration/maintenance'
-      : window.location.pathname === '/desktop/authorize' ? `/desktop/authorize${window.location.search}` : '/dashboard';
+      : window.location.pathname === '/desktop/authorize' ? `/desktop/authorize${window.location.search}` : notificationReturnPath(location.state?.from);
     setIsLoading(true);
 
     try {

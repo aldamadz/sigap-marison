@@ -1,6 +1,6 @@
 import { attentionService } from "@/services/attention.service";
 
-const serviceWorkerPath = "/sigap-sw.js?v=202606261640";
+const serviceWorkerPath = "/sigap-sw.js?v=202611050620";
 
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = "=".repeat((4 - base64String.length % 4) % 4);
@@ -20,14 +20,14 @@ export const pushService = {
   async ensureSubscription({ requestPermission = false } = {}) {
     if (!this.isSupported()) return { enabled: false, reason: "unsupported" as const };
 
-    const key = await attentionService.getPushPublicKey();
-    if (!key.enabled || !key.publicKey) return { enabled: false, reason: "server_not_configured" as const };
-
     let permission = Notification.permission;
     if (permission === "default" && requestPermission) {
       permission = await Notification.requestPermission();
     }
     if (permission !== "granted") return { enabled: false, reason: "permission_not_granted" as const };
+
+    const key = await attentionService.getPushPublicKey();
+    if (!key.enabled || !key.publicKey) return { enabled: false, reason: "server_not_configured" as const };
 
     const registration = await navigator.serviceWorker.register(serviceWorkerPath);
     const existing = await registration.pushManager.getSubscription();

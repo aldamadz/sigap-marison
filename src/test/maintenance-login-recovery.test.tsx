@@ -18,3 +18,15 @@ it('retains the admin recovery destination even if the auth transition changes p
  fireEvent.submit(password.closest('form')!);
  await waitFor(()=>expect(mocks.navigate).toHaveBeenCalledWith('/admin/configuration/maintenance'));
 });
+
+it('returns to a validated notification after login and rejects arbitrary redirects',async()=>{
+ vi.stubGlobal('ResizeObserver',class{observe(){}unobserve(){}disconnect(){}});
+ const path='/notifications/open?id=00000000-0000-4000-8000-000000000001';
+ mocks.login.mockResolvedValue({data:{session:{user:{id:'tester'}}},error:null});
+ for(const from of [path,'https://attacker.example']) {
+  render(<MemoryRouter initialEntries={[{pathname:'/',state:{from}}]}><LoginPage/></MemoryRouter>);
+  fireEvent.change(screen.getByPlaceholderText('nama@perusahaan.com'),{target:{value:'tester@example.test'}});
+  const password=screen.getByPlaceholderText('Masukkan password Anda');fireEvent.change(password,{target:{value:'test-only-fixture'}});fireEvent.submit(password.closest('form')!);
+  await waitFor(()=>expect(mocks.navigate).toHaveBeenLastCalledWith(from===path?path:'/dashboard'));cleanup();
+ }
+});
