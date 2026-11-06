@@ -1,4 +1,5 @@
 import { useDeferredValue, useState, useEffect } from 'react';
+import {ReceivingPeriodNotice} from '@/components/surat/ReceivingPeriodNotice';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -765,6 +766,7 @@ const MonitoringPage = () => {
                       </div>
 
                       {/* ── Catatan penolakan ── */}
+                      {!sig.is_signed && sig.step_order===selectedSurat?.current_step && <ReceivingPeriodNotice availableAt={sig.available_at} note={sig.receiving_message||sig.sla_policy_snapshot?.receiving?.message}/>}
                       {sig.status === 'REJECTED' && sig.catatan && (
                         <div className="mt-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
                           <p className="text-[9px] font-black uppercase text-red-400 mb-1 tracking-widest">Alasan Penolakan</p>

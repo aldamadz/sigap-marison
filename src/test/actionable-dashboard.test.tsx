@@ -177,4 +177,8 @@ describe('actionable dashboard', () => {
     expect(screen.getByText('Dijeda untuk perbaikan')).toBeInTheDocument();
     expect(screen.queryByText('Melewati SLA')).not.toBeInTheDocument();
   });
+  it('shows deferred receiving separately from overdue or running SLA',()=>{
+    render(<DashboardSla row={{...row,bucket:'waiting',receiving_at:'2099-12-01T01:00:00Z',elapsed_minutes:null}}/>);
+    expect(screen.getByText('Menunggu periode penerimaan')).toBeInTheDocument();expect(screen.queryByText('Melewati SLA')).not.toBeInTheDocument();expect(screen.queryByText('Dalam SLA')).not.toBeInTheDocument();
+  });
 });

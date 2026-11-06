@@ -31,6 +31,31 @@
 - Migration20261105062000; repeat PG17/concurrent claims and targeted tests pass.
   Default jobs off; staging enablement requires explicit tester audience.
   Runtime and browser acceptance pending. No Ticketing/broadcast/production.
+## SLA-02 Weekly Intake And Delegated Managers (2026-11-06)
+
+- User now authorizes staging then production for the department package.
+  Weekly receiving windows and week-specific exceptions complement monthly
+  closing rules. Exact cutoff defers to the next valid open period, not rejection.
+- New20261106060000 makes department intake/override policy explicitly opt-in,
+  default off without inserting settings. Existing signer SLA and captured
+  approval histories remain unchanged. Stored rules survive disabling.
+- Admin assigns active current-department managers; delegates may change only
+  their department SLA/calendar/intake, not appoint peers or gain admin reports.
+  Revocation, transfer and inactivity take effect immediately; writes are audited.
+- Repeated real PG17 weekly/calendar/intersection/default-off/ACL/snapshot tests
+  pass. UI integration, actual database rehearsal, staged and selective production
+  rollout still pending; no production changes at this implementation checkpoint.
+
+## SLA-02 Department Receiving Periods (2026-11-05)
+
+- Issue825, main-based staging-only candidate. Regular monthly cutoff/opening
+  and specific-month overrides are independent of processing SLA. Closed intake
+  queues a request to the next period rather than rejecting it.
+- New activated stages freeze their calendar/SLA and reception date. Existing
+  signatures are not backfilled. Future reception cannot be signed, verified,
+  reminded or counted overdue; dashboard and monitoring explain its start.
+- Migration20261105063000; real PG17 repeat/clock/authorization tests pass.
+  Admin edits retain actor/before/after audit. Live rehearsal and rollout pending.
 
 ## SUR-40 Project And Signer Search (2026-11-05, Issue813)
 

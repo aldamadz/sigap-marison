@@ -63,6 +63,39 @@
   tester-only audience and explicit browser acceptance. Department monthly
   receiving/SLA policies are a separate remaining work item, not implemented by
   this notification candidate. `docs/PROJECT_CONTEXT.md` remains absent.
+## 2026-11-06 [Codex] SLA-02 Weekly Reception / Scoped Delegation
+
+- Issue825 continues on its owned main-based SLA branch. User explicitly
+  authorized staging then production, including the prior department package.
+- Added forward migration20261106060000: optional default-off department policy,
+  regular/specific ISO-week windows intersecting monthly closing, own-department
+  managers assigned only by admin, dynamic transfer/revocation checks and audit.
+  Signer SLA remains independent when optional policy is off; historical frozen
+  snapshots are not rewritten. Closed intake moves to the next valid period.
+- Real PostgreSQL17 repeated migration and legacy/monthly regressions pass,
+  including exact Thursday16 cutoff, ISO year boundary, holiday/break, weekly
+  exception, monthly intersection, forbidden delegation, default off and immutable
+  stage hold. New --weekly gate remains focused; no whole-suite expansion.
+- UI work isolated with agent on codex/sla-weekly-ui-20261106; parent owns SQL,
+  test runner and shared status docs. Review and rollout remain pending.
+  No business submission, approval, vendor resend or production mutation yet.
+
+## 2026-11-05 [Codex] SLA-02 Monthly Receiving Candidate
+
+- Issue825; main-based owned `codex/department-receiving-periods-20261105`.
+  Staging only. User approved moving closed intake to the next period rather
+  than rejecting it; monthly SLA/receiving overrides are separate from defaults.
+- New rules/admin audit, immutable per-stage processing snapshot, bounded
+  working-day/holiday reopening and canonical future-availability enforcement
+  implemented. Completed/historical signatures are not backfilled or rewritten.
+- Future stages stay out of actionable inbox/count, SLA breach and running SLA.
+  Signature/verification writes and manual reminders reject early processing.
+  Limited progress detail exposes only reception date/message, not internal rules.
+- PostgreSQL17 applies migration twice and checks exact cutoff, monthly override,
+  month/year rollover, holiday/weekend/break, snapshot forgery/clock immutability,
+  early actions, RLS/admin audit and existing dashboard reminder concurrency.
+  Nineteen focused UI/validation/dashboard tests pass; final gates, actual staging
+  shape rehearsal and deployment remain. No production or vendor action.
 
 ## 2026-11-05 [Codex] SUR-40 Searchable Registration Choices
 
