@@ -8,7 +8,8 @@
 - Activation state restores from actual existing browser subscription and backend
   acceptance after remount/focus, without prompting. Revocation/failure are not
   displayed as active; safe diagnostics and stale-result protection retained.
-- Focused102tests/lint pass; remaining release checks recorded in WORKLOG.
+- Shared activation events keep Settings/header/provider consistent.
+- Focused103tests/lint pass; remaining release checks recorded in WORKLOG.
   No production release or provider/audience expansion is authorized.
 
 ## NTF-07 Staging Release Evidence (2026-11-06)

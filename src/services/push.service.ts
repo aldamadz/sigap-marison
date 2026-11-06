@@ -110,6 +110,7 @@ export const pushService = {
   },
 
   async ensureSubscription({ requestPermission = false } = {}): Promise<PushActivationResult> {
+    const result = await (async (): Promise<PushActivationResult> => {
     if (!this.isSupported()) return { enabled: false, reason: "unsupported" as const };
 
     let stage: PushActivationStage = "permission";
@@ -146,5 +147,9 @@ export const pushService = {
     } catch (error) {
       return activationFailure(error, stage);
     }
+    })();
+    // The automatic provider and all activation controls share the latest result.
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sigap:push-activation', { detail: result }));
+    return result;
   },
 };

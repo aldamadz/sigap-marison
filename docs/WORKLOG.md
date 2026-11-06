@@ -12,7 +12,9 @@
   on mount and visible focus. No permission prompt or new subscription from the
   status check; no permission-only false success. Stale background results cannot
   overwrite manual activation; status/read errors remain safe and retryable.
-- Focused8files102tests, lint, typecheck and build pass. Hosted gate, staging deploy
+- Shared activation events synchronize Settings/header with the automatic
+  provider; old in-flight checks cannot undo its completed activation.
+- Focused8files103tests, lint, typecheck and build pass. Hosted gate, staging deploy
   and browser popup acceptance pending. No backend/schema/audience/allowlist change.
 
 ## 2026-11-06 [Codex] NTF-07 Verified Staging Release

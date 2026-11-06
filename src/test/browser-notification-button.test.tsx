@@ -8,6 +8,16 @@ beforeEach(() => { h.status.mockReset().mockResolvedValue({ enabled: false, reas
 afterEach(cleanup);
 
 describe('browser activation rehydration', () => {
+  it('synchronizes all controls with background activation and ignores older initial checks', async () => {
+    let resolve!: (value: unknown) => void;
+    h.status.mockReturnValue(new Promise(done => { resolve = done; }));
+    render(<><BrowserNotificationButton /><BrowserNotificationButton /></>);
+    act(() => { window.dispatchEvent(new CustomEvent('sigap:push-activation', { detail: { enabled: true } })); });
+    expect(screen.getAllByRole('button', { name: 'Notifikasi browser aktif' })).toHaveLength(2);
+    await act(async () => { resolve({ enabled: false, reason: 'not_subscribed' }); });
+    expect(screen.getAllByRole('button', { name: 'Notifikasi browser aktif' })).toHaveLength(2);
+    expect(h.activate).not.toHaveBeenCalled();
+  });
   it('restores actual activation on mount and remount without a permission prompt', async () => {
     h.status.mockResolvedValue({ enabled: true });
     const first = render(<BrowserNotificationButton />);

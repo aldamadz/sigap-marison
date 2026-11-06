@@ -27,8 +27,14 @@ export function BrowserNotificationButton() {
    finally{refreshPending=false;if(live&&version===generation.current)setChecking(false);}
   };
   const onFocus=()=>{if(document.visibilityState!=='hidden')void refresh();};
+  const onActivation=(event:Event)=>{
+   const result=(event as CustomEvent<PushActivationResult>).detail;
+   if(!result||typeof result.enabled!=='boolean')return;
+   ++generation.current;applyResult(result);setChecking(false);
+  };
+  window.addEventListener('sigap:push-activation',onActivation);
   void refresh();window.addEventListener('focus',onFocus);document.addEventListener('visibilitychange',onFocus);
-  return()=>{live=false;window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onFocus);};
+  return()=>{live=false;window.removeEventListener('sigap:push-activation',onActivation);window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onFocus);};
  },[applyResult]);
  const activate=async()=>{
   if(pending.current)return;pending.current=true;++generation.current;setBusy(true);setMessage('');
