@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## MRN-30 Authenticated Fund Decision Receipts (2026-11-06, Issue839)
+
+- User approves staging then production for missing-receipt Fund callback422,
+  specifically010/UAI/06-KWS1.2.1/X/2026. Forward migration20261106090000 allows
+  authenticated decisions to prove vendor receipt for the latest terminal/unknown
+  posted Fund generation, with intact frozen body/hash/number and final signatures.
+- Immutable private audit binds the decision to the historical dispatch. The
+  dispatch remains failed/unknown; no fabricated vendor ID, manual acceptance,
+  business rejection/revision, old payload rewrite, or vendor resend at migration.
+- Existing succeeded path, machine auth/HMAC/scopes, idempotency and configurable
+  rejection/revision wrappers remain. In-flight/unposted/stale/changed/wrong-env
+  callbacks fail closed. KEU blocked; Unit vendor-ID revision contract unchanged.
+- Repeated PostgreSQL17 migration, rollback, negative cases and two-connection
+  idempotency pass locally. Live schema rehearsal and staged rollout pending.
+
 ## CAL-10 Organization Calendar Scope (2026-11-05, Issue819)
 
 - User approved shared Pusat-department and branch-office calendars, KC including
