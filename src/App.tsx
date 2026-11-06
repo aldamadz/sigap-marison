@@ -25,6 +25,7 @@ const WorkCalendarPage = lazy(() => import("@/pages/work-calendar/WorkCalendarPa
 const WorkCalendarUnavailablePage = lazy(() => import("@/pages/work-calendar/WorkCalendarUnavailablePage"));
 const ActivityLogsPage = lazy(() => import("@/pages/activity-logs/ActivityLogsPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const DepartmentSlaSettingsPage = lazy(() => import("@/pages/settings/DepartmentSlaSettingsPage"));
 const PublicDocsPage = lazy(() => import("@/pages/docs/PublicDocsPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
@@ -202,7 +203,8 @@ const App = () => {
           />
           <Route path="/activity-logs" element={<Navigate to="/audit-logs" replace />} />
           <Route path="/audit-logs" element={<AdminOnlyRoute><ActivityLogsPage /></AdminOnlyRoute>} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={<SettingsPage key={session?.user.id} userId={session?.user.id} />} />
+          <Route path="/settings/department-sla" element={<DepartmentSlaSettingsPage key={session?.user.id} userId={session?.user.id} />} />
 
           {/* SURAT MODULE */}
           <Route path="/surat/registrasi" element={<SuratPage />} />
