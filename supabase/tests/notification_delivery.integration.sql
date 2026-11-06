@@ -83,7 +83,10 @@ select check_ok(generate_notification_reminders_at('2026-11-05T16:46:00+07:00',a
 select check_ok(not exists(select 1 from notification_team_members(tid(2)) where user_id in(tid(3),tid(4),tid(5),tid(7))),'department digest does not cross office/dept');
 select check_ok(exists(select 1 from notification_team_members(tid(5)) where user_id=tid(4)),'KC gets KCP signer digest');
 select check_ok(not exists(select 1 from notification_team_members(tid(5)) where user_id=tid(6)),'sibling KCP does not get digest');
-insert into surat_signatures(id,surat_id,user_id,step_order,role_name,available_at) values(tid(930),tid(15),tid(5),1,'BM',now()-interval '1 day');
+insert into surat_signatures(id,surat_id,user_id,step_order,role_name,available_at)
+ values(tid(930),tid(15),tid(5),1,'BM','2026-11-05T09:01:00+07:00');
+select check_ok(generate_notification_reminders_at('2026-11-05T09:00:00+07:00',array[tid(4)])=0,'future stage receives no team digest');
+update surat_signatures set available_at='2026-11-05T08:59:00+07:00' where id=tid(930);
 select check_ok(generate_notification_reminders_at('2026-11-05T09:00:00+07:00',array[tid(4)])=1,'KC member receives the KCP signer digest');
 select check_ok((select count(*)=1 from notifications where user_id=tid(4) and data->>'category'='team_digest'),'single team digest');
 select check_ok(not exists(select 1 from notification_push_deliveries d join notifications n on n.id=d.notification_id where n.data->>'category'='team_digest' and d.user_id=tid(4)),'team popup default remains off');
