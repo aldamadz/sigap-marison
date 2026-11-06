@@ -1,5 +1,29 @@
 # SIGAP Feature and Release Map
 
+## 2026-11-06 [Codex] CAL-10 / OPS-18 / NTF-06 / SLA-02 Release Checkpoint
+
+- Supersedes the staging-only authorization/candidate notes below: user approved
+  the selected package through production. Main539f200 is contained in live
+  stagingf4475f8; exact-main quality and official staging deployment passed.
+  Production workflow42149212928 is awaiting final runtime verification.
+- Six audited forward migrations are applied in both environments, including
+  weekly opt-in/delegation600 and PostgREST relationship compatibility700.
+  Department intake remains OFF with no managers assigned; signer SLA stays in
+  effect. Admin route /admin/configuration/kpi assigns managers and activates
+  receiving policy. Delegates use /settings/department-sla, restricted dynamically
+  to their own active current department; no delegation or admin-report rights.
+- Closed receiving defers to the next valid weekly/monthly working period.
+  Team calendar reads follow Pusat department / KC descendants / exact KCP, while
+  owner-only writes remain. Notifications use canonical task links, current scope,
+  durable bounded delivery and preferences; staging jobs target only Tester P3.
+- What's New publishes only on actual completed maintenance, until next midnight
+  WIB or explicit account opt-out. Closing alone suppresses the current session.
+  Production edge is updated without creating maintenance/release events.
+- Acceptance limits: live OS popup/background-click in a supported browser and
+  actual completed-maintenance modal event remain unverified. Embedded browser
+  push is explicitly unsupported; no provider allowlist relaxation. Ticketing is
+  deferred, no broadcast interface or business/vendor resend is included.
+
 ## CAL-10 Organization Calendar Scope (2026-11-05, Issue819)
 
 - User approved shared Pusat-department and branch-office calendars, KC including
