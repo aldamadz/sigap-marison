@@ -1,5 +1,33 @@
 # Worklog
 
+## 2026-11-06 [Codex] Department Package Production Runtime Verified
+
+- Supersedes the pending production checkpoint below. Official workflow
+  42149212928 attempt2 succeeded: preflight, exact-main quality and app deployment.
+  Production public /health/version is539f200c18327f322c5e5fede09a001a342435ad;
+  live stagingf4475f8a7cf7c20d3d9c1e674444bba7f13ae7de contains that main commit.
+  Public root/readiness200, local live/ready/root200, appbf32fa7e2113 healthy,
+  restart0. Profile department embedding200; migration ledger/default-off and
+  managers0 reverified after cutover. Four worker/API container IDs unchanged.
+- Official affected production gate passed592 tests plus actual disposable PG17
+  calendar, organization scope, notification lease concurrency, monthly/weekly
+  SLA, audit and authorization assertions, lint/typecheck/build/high-critical
+  dependency gate. Existing moderate advisories remain; this is not a full audit.
+- First deployment attempt stopped before application replacement: atomic host
+  env update did not retain runner read permissions. Corrected protected file to
+  root:sigap-runner0640 (backup root-only0600), verified runner read access and
+  reran only failed deployment against the same previously tested SHA. No secret
+  values were output. Operator helper now preserves source ownership/metadata.
+- Production notification jobs enabled, no cycle warnings at initial observation;
+  three naturally created queued deliveries reached sent, without a manual test
+  notification. Delivery acknowledgement does NOT prove OS-popup display.
+  Staging remains restricted to Tester P3. No approval, submission, vendor POST,
+  resend, worker restart or historical business-data correction was performed.
+- OS-popup/background-click acceptance in a supported browser and actual live
+  post-maintenance release-modal event remain explicitly unverified as below.
+  Production code/DB/edge rollout is complete; these are acceptance limitations,
+  not a claim that the embedded browser supports push. No Ticketing integration.
+
 ## 2026-11-06 [Codex] Department Package Production Release Verification
 
 - User explicitly approved staging then production, including weekly receiving

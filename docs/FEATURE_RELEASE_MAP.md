@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## 2026-11-06 [Codex] CAL-10 / OPS-18 / NTF-06 / SLA-02 Production Verified
+
+- Supersedes pending rollout notes below. Official production42149212928 attempt2
+  succeeded; runtime539f200c18327f322c5e5fede09a001a342435ad, live stagingf4475f8
+  contains main. Health/root200, app healthy/restart0, profile embedding200,
+  four worker/API IDs unchanged. All six migrations verified in both databases.
+- Production affected gate592 tests, PostgreSQL17 assertions, lint/typecheck/build
+  and high-critical audit gate passed. Production planner/delivery enabled and
+  observed without cycle warnings. No manual notification or vendor resend.
+- Optional department receiving remains OFF and no managers are assigned by this
+  release. Admin configures /admin/configuration/kpi; appointed current-department
+  users use /settings/department-sla. Existing signer SLA remains independent.
+- Retain the acceptance limits below: OS-popup/background click in a supported
+  normal browser and actual live completed-maintenance modal event unverified.
+  Embedded-browser unsupported provider is diagnosed, not bypassed. Ticketing
+  remains deferred. No full staging-to-main promotion or business-data rewrite.
+
 ## 2026-11-06 [Codex] CAL-10 / OPS-18 / NTF-06 / SLA-02 Release Checkpoint
 
 - Supersedes the staging-only authorization/candidate notes below: user approved
