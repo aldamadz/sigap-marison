@@ -14,6 +14,13 @@
   callbacks fail closed. KEU blocked; Unit vendor-ID revision contract unchanged.
 - Repeated PostgreSQL17 migration, rollback, negative cases and two-connection
   idempotency pass locally. Live schema rehearsal and staged rollout pending.
+- Follow-up930 completes the authorized return/revision lifecycle: only resolved
+  current decision/history plus completed approvals may enqueue a new Fund
+  generation. Receipted originals cannot be reopened or have payloads rewritten;
+  unapproved replacement and identity changes are blocked at the database.
+  Full fixture covers callback, requester draft/resubmit, reapproval completion,
+  one new generation and completion replay. Migration900 remains unedited after
+  its initial staging apply; both versions are required for this release.
 
 ## CAL-10 Organization Calendar Scope (2026-11-05, Issue819)
 

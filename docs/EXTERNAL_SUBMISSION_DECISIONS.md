@@ -69,6 +69,13 @@ Tidak ada ID vendor rekaan, pengiriman ulang, atau pembuatan keputusan otomatis
 saat migration diterapkan. External perlu mengulangi callback resminya setelah
 rilis; penolakan final dan permintaan revisi tetap mempunyai perilaku berbeda.
 
+Setelah revisi diperbaiki dan seluruh persetujuan selesai, migration
+`20261106093000` mengizinkan generasi baru dari bukti callback tersebut. Bukti
+harus terikat ke event revisi yang sudah resolved, history dan generation aktif.
+Pengulangan completion tidak membuat generasi tambahan. Bukti callback tidak
+mengizinkan reopen/retry dispatch lama atau replacement tanpa revisi yang sah;
+guard database tetap berlaku walaupun aksi dipanggil langsung melalui RPC.
+
 ## Keputusan
 
 `rejected` membuat dokumen terminal dengan label **Ditolak sistem departemen**.
