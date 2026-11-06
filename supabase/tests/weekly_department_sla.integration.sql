@@ -3,6 +3,7 @@ grant select,insert,update,delete on public.department_kpi_configs to authentica
 alter table public.department_kpi_configs enable row level security;
 select check_ok(not exists(select 1 from department_receiving_settings),'no departments enabled by migration');
 select check_ok(not exists(select 1 from department_sla_managers),'no managers auto-assigned');
+select check_ok((select pg_get_constraintdef(oid)='PRIMARY KEY (id)' from pg_constraint where conrelid='department_sla_managers'::regclass and contype='p'),'grant junction cannot infer an ambiguous profile department embedding');
 create temp table old_snapshot as select id,sla_policy_snapshot from surat_signatures;
 insert into department_receiving_weekly_rules(dept_id,enabled,message,sla_minutes)
  values(tid(2),true,'Penerimaan ditutup Kamis16.00.',40);
