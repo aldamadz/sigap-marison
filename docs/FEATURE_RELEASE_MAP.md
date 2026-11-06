@@ -1,5 +1,26 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Popup Test Follow-Up (2026-11-06)
+
+- Staging candidate separates device popup test from self server delivery test.
+  Device popup uses the browser's Notification API and existing service worker,
+  requires explicit click/permission, and never creates a server push subscription.
+- Activation state restores from actual existing browser subscription and backend
+  acceptance after remount/focus, without prompting. Revocation/failure are not
+  displayed as active; safe diagnostics and stale-result protection retained.
+- Shared activation events keep Settings/header/provider consistent.
+- Focused103tests/lint pass; remaining release checks recorded in WORKLOG.
+  No production release or provider/audience expansion is authorized.
+
+## NTF-07 Staging Release Evidence (2026-11-06)
+
+- PR846/source06d5fde deployed as49d7aba; live staging SHA/readiness verified.
+  Official guarded script used after cancelled Actions runner network failures;
+  no worker restart or migration.28/28 affected tests and both hosted CIs pass.
+- Tester P3 saw and used the button: one self notice, cooldown, bell unread state
+  and dashboard destination pass. Native OS popup remains unverified on this IAB.
+- Production deliberately excluded and remains c2e95a8. Details in WORKLOG.
+
 ## NTF-07 Staging Notification Test Button (2026-11-06, Issue845)
 
 - Staging-only Settings control reuses the existing authenticated self-notification

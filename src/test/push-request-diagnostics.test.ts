@@ -85,7 +85,7 @@ describe('sanitized push HTTP diagnostics', () => {
     vi.stubGlobal('PushManager', function PushManager() {});
     vi.stubGlobal('Notification', { permission: 'granted', requestPermission: vi.fn() });
     vi.stubGlobal('navigator', { serviceWorker: {
-      register: vi.fn(async () => registration), ready: Promise.resolve(registration),
+      getRegistration: vi.fn(async () => undefined), register: vi.fn(async () => registration), ready: Promise.resolve(registration),
     } });
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ enabled: true, publicKey: 'fixture-public' })))
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -93,7 +93,7 @@ describe('sanitized push HTTP diagnostics', () => {
         keys: { auth: 'fixture-auth', p256dh: 'fixture-key' },
       }), { status: httpStatus }));
     render(createElement(BrowserNotificationButton));
-    fireEvent.click(screen.getByRole('button', { name: 'Aktifkan notifikasi browser' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Aktifkan notifikasi browser' }));
     const status = await screen.findByRole('status');
     expect(status).toHaveTextContent(`Tahap: persist; kode: HttpError; HTTP: ${httpStatus}; ID: push_req-1234.`);
     expect(status).not.toHaveTextContent(/private|endpoint|fixture-auth|fixture-key/);
