@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Popup Follow-Up Released Staging (2026-11-06)
+
+- PR847/live1268e27; source CI42201443801, push CI42201791767 and official
+  staging deploy42201791834 succeeded.103 affected tests, lint/typecheck/build pass.
+  No migration or worker restart; production unchanged and excluded.
+- Tester P3 popup API request/cooldown and separate controls verified on live UI.
+  IAB's unsupported remote push provider is correctly explained, not marked active.
+  OS toast appearance and full Chrome/Edge remote delivery not claimed verified.
+  Details and limitations are in WORKLOG.
+
 ## NTF-07 Popup Test Follow-Up (2026-11-06)
 
 - Staging candidate separates device popup test from self server delivery test.
