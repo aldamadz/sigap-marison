@@ -1,5 +1,51 @@
 # SIGAP Feature and Release Map
 
+## MRN-30 Authenticated Fund Decision Receipts (2026-11-06, Issue839)
+
+- User approves staging then production for missing-receipt Fund callback422,
+  specifically010/UAI/06-KWS1.2.1/X/2026. Forward migration20261106090000 allows
+  authenticated decisions to prove vendor receipt for the latest terminal/unknown
+  posted Fund generation, with intact frozen body/hash/number and final signatures.
+- Immutable private audit binds the decision to the historical dispatch. The
+  dispatch remains failed/unknown; no fabricated vendor ID, manual acceptance,
+  business rejection/revision, old payload rewrite, or vendor resend at migration.
+- Existing succeeded path, machine auth/HMAC/scopes, idempotency and configurable
+  rejection/revision wrappers remain. In-flight/unposted/stale/changed/wrong-env
+  callbacks fail closed. KEU blocked; Unit vendor-ID revision contract unchanged.
+- Repeated PostgreSQL17 migration, rollback, negative cases and two-connection
+  idempotency pass locally. Live schema rehearsal and staged rollout pending.
+
+## CAL-10 Organization Calendar Scope (2026-11-05, Issue819)
+
+- User approved shared Pusat-department and branch-office calendars, KC including
+  descendant KCP. Existing active reporting hierarchy remains readable; only
+  owner mutations remain allowed. Target staging only; production not authorized.
+- Migration20261105060000 shares one current-profile scope across team RPCs,
+  entry/event read policies, counts/search/detail/export. No profile ACL expansion,
+  task rewrite or notification escalation change. Actual PG17 authorization,
+  repeat migration, read-only peer, transfer and department/office cases pass.
+## OPS-18 Post-Maintenance What's New (2026-11-05, Issue821)
+
+- Staging-only candidate. Admin-authored plain-text notes are private until
+  actual completion after the scheduled start. Expired ETA/cancellation never
+  publishes notes. Edge-owned release survives subsequent scheduling and is
+  public only until next midnight WIB, not for24hours.
+- New migration20261105061000 stores one dismissal preference per account;
+  explicit opt-out follows the user across devices. Closing without opt-out is
+  session-only. Owner RLS, authenticated active-user RPC, no direct write grants.
+- Existing maintenance notice/recovery and independent edge fallback preserved.
+  Edge/unit/PostgreSQL tests pass; UI acceptance and staging rollout pending.
+## NTF-06 Durable Notifications And Canonical Task Links (2026-11-05)
+
+- Issue823, main-based candidate; staging only. Department/office digests,
+  work-calendar reminders and explicit browser push preferences use a bounded
+  server planner plus durable service-only delivery leases.
+- Canonical notification landing preserves login return, verifies task access
+  and type, and never substitutes an unrelated first task. Peers can remind
+  within SUR39 progress scope; existing cooldown and actor audit remain.
+- Migration20261105062000; repeat PG17/concurrent claims and targeted tests pass.
+  Default jobs off; staging enablement requires explicit tester audience.
+  Runtime and browser acceptance pending. No Ticketing/broadcast/production.
 ## SLA-02 Weekly Intake And Delegated Managers (2026-11-06)
 
 - User now authorizes staging then production for the department package.
