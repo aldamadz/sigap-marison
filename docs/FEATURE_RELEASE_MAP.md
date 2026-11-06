@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Staging Notification Test Button (2026-11-06, Issue845)
+
+- Staging-only Settings control reuses the existing authenticated self-notification
+  service, fixed harmless message/dashboard destination and email:false. No new
+  endpoint, schema, role, production change or push-audience expansion.
+- Exact staging public build URL required. No automatic send/permission prompt;
+  pending/double-click protection,30second UI cooldown, generic retryable errors.
+  Creation is not claimed as OS-popup delivery. Existing browser consent/provider
+  and staging tester audience restrictions still apply.
+- Focused component/notification regressions28/28, lint, typecheck and build pass.
+  Staging PR/deployment and live tester acceptance pending.
+
 ## MRN-30 Authenticated Fund Decision Receipts (2026-11-06, Issue839)
 
 - User approves staging then production for missing-receipt Fund callback422,

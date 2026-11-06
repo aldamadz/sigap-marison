@@ -1,5 +1,19 @@
 # Worklog
 
+## 2026-11-06 [Codex] NTF-07 Staging Self Notification Test
+
+- Issue845; isolated main-based codex/staging-test-notification-20261106.
+  User explicitly requests staging only. Settings button creates one fixed test
+  notice for its current account via existing authenticated notification service,
+  never email or arbitrary recipient/link/content. No new endpoint or migration.
+- Production build excludes the control; no production rollout authorized.
+  Cooldown is UI ergonomics, not a new server rate-limit guarantee. Existing
+  backend recipient authorization is retained. Popup follows browser consent and
+  configured tester audience; successful creation never claims OS delivery.
+- Affected tests28/28, lint, typecheck, build and diff check pass. Remaining:
+  PR/staging integration, live button acceptance
+  with tester and final runtime proof. No production mutation or vendor action.
+
 ## 2026-11-06 [Codex] MRN-30 Receipt-Bound Revision Completion
 
 - Forward follow-up20261106093000 is required alongside900. Final review found
