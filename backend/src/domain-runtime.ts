@@ -1079,6 +1079,7 @@ const normalizePushSubscription = (value) => {
   if (!isAllowedPushEndpoint(endpoint) || !p256dh || !auth) {
     const err = new Error("Subscription Web Push tidak valid.");
     err.status = 400;
+    err.code = !isAllowedPushEndpoint(endpoint) ? 'push_provider_unsupported' : 'push_keys_missing';
     throw err;
   }
   return {
@@ -5398,6 +5399,8 @@ export const handleRequest = async (req, res) => {
     if (status >= 500) console.error(logMessage);
     else if (status === 429) console.warn(logMessage);
     if (error.retryAfter) res.setHeader("Retry-After", String(error.retryAfter));
-    sendJson(res, status, { error: error.message || "Internal server error", requestId });
+    const pushCode = requestPath === '/api/push/subscribe' && status === 400
+      && ['push_provider_unsupported', 'push_keys_missing'].includes(error.code) ? error.code : undefined;
+    sendJson(res, status, { error: error.message || "Internal server error", requestId, ...(pushCode ? { code: pushCode } : {}) });
   }
 };

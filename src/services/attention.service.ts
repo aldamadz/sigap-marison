@@ -84,12 +84,14 @@ const safeRequestId = (value: unknown) => typeof value === "string" && value.len
 export class AttentionRequestError extends Error {
   readonly httpStatus?: number;
   readonly requestId?: string;
+  readonly code?: 'push_provider_unsupported' | 'push_keys_missing';
 
-  constructor(status: number, requestId?: unknown) {
+  constructor(status: number, requestId?: unknown, code?: unknown) {
     super("Request gagal diproses.");
     this.name = "HttpError";
     if (Number.isInteger(status) && status >= 400 && status <= 599) this.httpStatus = status;
     this.requestId = safeRequestId(requestId);
+    if (code === 'push_provider_unsupported' || code === 'push_keys_missing') this.code = code;
   }
 }
 
@@ -97,7 +99,7 @@ const readJsonResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new AttentionRequestError(response.status,
-      safeRequestId(response.headers.get("X-Request-Id")) ?? safeRequestId(payload?.requestId));
+      safeRequestId(response.headers.get("X-Request-Id")) ?? safeRequestId(payload?.requestId), payload?.code);
   }
   return payload as T;
 };

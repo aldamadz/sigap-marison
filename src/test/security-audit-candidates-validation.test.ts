@@ -463,6 +463,7 @@ describe("audit candidate: unrestricted web push endpoint", () => {
     await runtime.handleRequest(request, response);
 
     expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).code).toBe('push_provider_unsupported');
     expect(pushCapture.sent).toHaveLength(0);
   });
 

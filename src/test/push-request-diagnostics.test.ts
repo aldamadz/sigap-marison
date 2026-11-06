@@ -14,6 +14,11 @@ beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('sanitized push HTTP diagnostics', () => {
+  it.each(['push_provider_unsupported','push_keys_missing'])('preserves only recognized push diagnosis %s',async(code)=>{
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({code,error:'private endpoint'}),{status:400}));
+    await expect(attentionService.savePushSubscription(subscription)).rejects.toMatchObject({code,httpStatus:400});
+    expect(new AttentionRequestError(400,'valid_id-123','https://private.invalid/key').code).toBeUndefined();
+  });
   it.each([400, 401, 403, 500])('keeps HTTP %s and a validated response-header request ID only', async (status) => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'private endpoint and key', requestId: 'body_req-1234', subscription }), {
       status, headers: { 'X-Request-Id': 'header_req-1234' },
