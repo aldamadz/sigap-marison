@@ -2,8 +2,11 @@ export type MaintenanceSchedule = {
   id?: string; category: 'repair'|'development'|'update'; impact: 'full'|'disruption';
   message: string; startsAt: string; endsAt?: string; duration: number; unit: 'minutes'|'hours'|'days';
   status?: 'published'|'completed'|'cancelled';
+  whatsNew?: string;
 };
+export type ReleaseNotice = {id:string;completedAt:string;expiresAt:string;items:string[]};
 export type MaintenanceState = { revision:number; schedule:MaintenanceSchedule|null; phase?:'none'|'scheduled'|'announced'|'maintenance'|'disruption'; serverNow?:string;
+  release?:ReleaseNotice;
   history?:{revision:number;actorId:string;action:string;at:string;before:MaintenanceSchedule|null;after:MaintenanceSchedule}[] };
 export const maintenanceLabels = {repair:'Perbaikan',development:'Pengembangan',update:'Pembaruan'};
 export const maintenanceDate = (value:string) => new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',dateStyle:'full',timeStyle:'short'}).format(new Date(value))+' WIB';

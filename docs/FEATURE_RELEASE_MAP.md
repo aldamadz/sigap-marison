@@ -9,6 +9,17 @@
   entry/event read policies, counts/search/detail/export. No profile ACL expansion,
   task rewrite or notification escalation change. Actual PG17 authorization,
   repeat migration, read-only peer, transfer and department/office cases pass.
+## OPS-18 Post-Maintenance What's New (2026-11-05, Issue821)
+
+- Staging-only candidate. Admin-authored plain-text notes are private until
+  actual completion after the scheduled start. Expired ETA/cancellation never
+  publishes notes. Edge-owned release survives subsequent scheduling and is
+  public only until next midnight WIB, not for24hours.
+- New migration20261105061000 stores one dismissal preference per account;
+  explicit opt-out follows the user across devices. Closing without opt-out is
+  session-only. Owner RLS, authenticated active-user RPC, no direct write grants.
+- Existing maintenance notice/recovery and independent edge fallback preserved.
+  Edge/unit/PostgreSQL tests pass; UI acceptance and staging rollout pending.
 
 ## SUR-40 Project And Signer Search (2026-11-05, Issue813)
 

@@ -16,6 +16,21 @@
 - Other approved work (monthly reception/SLA, durable notifications/reminders,
   post-maintenance What's New) remains separate. No remote schema/data changes
   yet. PROJECT_CONTEXT absent; shared structure unchanged.
+## 2026-11-05 [Codex] OPS-18 Completion Release Notice Candidate
+
+- Claimed821 on codex/maintenance-whats-new-20261105 from main; staging only.
+  Admin notes publish only on actual complete after start, expire at next WIB
+  midnight and remain separate from next schedule. Public status hides draft
+  notes; existing signed/CAS controls and maintenance status behavior retained.
+- What's New uses the existing maintenance-status query and authenticated
+  account preference, no additional status polling. Explicit opt-out is stored
+  via new20261105061000, one bounded row/account, authenticated own-user RPC;
+  close/X/Mengerti only suppresses the current browser session. Failed durable
+  dismissal stays visible with an error, never silently claims success.
+- Edge/server15 tests, affected frontend20 tests and actual PG17 ownership/
+  duplicate/inactive/anonymous/direct-write assertions pass. Remaining gates,
+  responsive/browser acceptance and staging rollout pending. No remote changes
+  or production authorization. PROJECT_CONTEXT remains absent.
 
 ## 2026-11-05 [Codex] SUR-40 Searchable Registration Choices
 
