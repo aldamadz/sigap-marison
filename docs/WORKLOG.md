@@ -1,5 +1,25 @@
 # Worklog
 
+## 2026-11-06 [Codex] MRN-30 Receipt-Bound Revision Completion
+
+- Forward follow-up20261106093000 is required alongside900. Final review found
+  the existing external-revision enqueue still selected succeeded predecessors
+  only; accepting a callback alone would leave later Fund reapproval unsent.
+  New evidence predicate binds the resolved current revision event/history to
+  its receipt, exact predecessor and completed approvals. Original retry and
+  unrelated replacement/identity rewrites are blocked by a database trigger.
+- Real PG17 fixture covers callback -> requester draft -> resubmit -> approval
+  completion -> exactly one fresh pending generation. Original failed payload
+  stays unchanged, unsigned/unresolved replacement and completion replay fail
+  closed. Two-connection idempotency still passes. Unit path unchanged.
+- Migration900 already applied staging after rehearsals, ledger254; app runtime
+  staging420fd01 deployed by42162774102. Source0487746 CI42162628010 passed;
+  initial staging integration PR841 completed. Production900 was NOT applied.
+  Actual010 rejected/revision_required canonical routines both passed inside
+  deliberately rolled-back subtransactions; all business fingerprints retained.
+- This new930 is never an edit of applied900. Remaining: combined rehearsal,
+  source/CI refresh, staging930 rollout and selective production promotion.
+
 ## 2026-11-06 [Codex] MRN-30 Missing Fund Callback Receipt
 
 - Issue839, owned isolated codex/external-decision-receipt-20261106 from main539f200.

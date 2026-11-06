@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 
 const migration = readFileSync("supabase/migrations/20260818170000_external_submission_decisions.sql", "utf8");
 const receiptMigration = readFileSync("supabase/migrations/20261106090000_external_submission_decision_receipts.sql", "utf8");
+const receiptRevisionMigration = readFileSync("supabase/migrations/20261106093000_external_submission_decision_revision_dispatch.sql", "utf8");
 const receiptTests = readFileSync("supabase/tests/external_submission_decision_receipts.integration.sql", "utf8");
+const receiptRevisionTests = readFileSync("supabase/tests/external_submission_decision_revision_dispatch.integration.sql", "utf8");
 const canonicalOwnerFixture = String.raw`
 create role canonical_writer;
 grant service_role to canonical_writer;
@@ -154,7 +156,7 @@ try {
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
-  process.stdout.write(run(["exec", "-i", containerId, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], `${schema}\n${canonicalOwnerFixture}\n${tests}\n${receiptMigration}\n${receiptMigration}\n${receiptTests}`));
+  process.stdout.write(run(["exec", "-i", containerId, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], `${schema}\n${canonicalOwnerFixture}\n${tests}\n${receiptMigration}\n${receiptMigration}\n${receiptRevisionMigration}\n${receiptRevisionMigration}\n${receiptTests}\n${receiptRevisionTests}`));
   const sqlArgs = ["exec", "-i", containerId, "psql", "-X", "-qAt", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"];
   run(sqlArgs, `
     insert into auth.users values('70000000-0000-4000-8000-000000000001');
