@@ -11,6 +11,9 @@ select check_ok((department_receiving_policy(tid(2),'2026-11-05T16:00:00+07:00')
 insert into department_receiving_settings(dept_id,enabled) values(tid(2),true);
 select check_ok((department_receiving_policy(tid(2),'2026-11-05T15:59:59+07:00')#>>'{receiving,available_at}')::timestamptz='2026-11-05T15:59:59+07:00','Thursday before cutoff immediate');
 select check_ok((department_receiving_policy(tid(2),'2026-11-05T16:00:00+07:00')#>>'{receiving,available_at}')::timestamptz='2026-11-09T08:00:00+07:00','exact Thursday16 cutoff defers to Monday');
+update department_receiving_weekly_rules set open_time='00:00',cutoff_weekday=1,cutoff_time='00:01' where dept_id=tid(2);
+do $$begin begin perform department_receiving_policy(tid(2),'2026-11-05T16:00:00+07:00');exception when object_not_in_prerequisite_state then return;end;raise exception 'impossible weekly calendar accepted';end$$;
+update department_receiving_weekly_rules set open_time='08:00',cutoff_weekday=4,cutoff_time='16:00' where dept_id=tid(2);
 select check_ok((department_receiving_policy(tid(2),'2026-11-06T10:00:00+07:00')#>>'{receiving,period_week}')::date='2026-11-09','period records next ISO week');
 select check_ok((department_receiving_policy(tid(2),'2026-12-31T16:00:00+07:00')#>>'{receiving,available_at}')::timestamptz='2027-01-04T08:00:00+07:00','ISO year boundary');
 insert into department_receiving_weekly_rules(dept_id,week_start,enabled,cutoff_weekday,cutoff_time,sla_minutes)
@@ -48,6 +51,13 @@ do $$begin begin insert into department_receiving_settings(dept_id) values(tid(1
 do $$begin begin perform set_department_sla_managers(tid(1),array[tid(1)]);exception when insufficient_privilege then return;end;raise exception 'staff self-granted';end$$;
 reset role;select set_config('request.jwt.claim.sub',tid(9)::text,true);set local role authenticated;
 select set_department_sla_managers(tid(2),array[tid(3)]);
+reset role;
+create temp table audit_before_repeat as select count(*) n from department_policy_events;
+set local role authenticated;
+select set_department_sla_managers(tid(2),array[tid(3)]);
+reset role;
+select check_ok((select count(*)=(select n from audit_before_repeat) from department_policy_events),'repeated grant has no phantom insert audit');
+set local role authenticated;
 select check_ok((select count(*)=2 from get_department_sla_scope()),'admin scope includes all departments');
 select check_ok((select count(*)=1 and bool_and(selected) from get_department_sla_manager_candidates(tid(2))),'candidate list scoped to active department members');
 do $$begin begin perform set_department_sla_managers(tid(2),array[tid(1)]);exception when invalid_parameter_value then return;end;raise exception 'foreign member assigned';end$$;
@@ -60,6 +70,24 @@ update department_kpi_configs set sla_minutes=90 where dept_id=tid(2);
 select check_ok(exists(select 1 from department_policy_events where actor_id=tid(3) and entity='department_kpi_configs'
  and after_data->>'sla_minutes'='90'),'delegate SLA edit audited');
 select check_ok(exists(select 1 from department_policy_events where actor_id=tid(3) and entity='department_receiving_settings'),'delegate settings edit audited');
+reset role;
+create temp table audit_before_ignore as select count(*) n from department_policy_events;
+set local role authenticated;
+insert into department_receiving_weekly_rules(dept_id) values(tid(2)) on conflict do nothing;
+reset role;
+select check_ok((select count(*)=(select n from audit_before_ignore) from department_policy_events),'conflict ignore has no phantom policy audit');
+create temp table monthly_audit_before as select count(*) n from department_receiving_rule_events;
+set local role authenticated;
+insert into department_receiving_rules(dept_id) values(tid(2)) on conflict do nothing;
+reset role;
+select check_ok((select count(*)=(select n from monthly_audit_before) from department_receiving_rule_events),'monthly conflict ignore has no phantom audit');
+set local role authenticated;
+insert into department_receiving_rules(dept_id,sla_minutes) values(tid(2),91)
+ on conflict(dept_id,period_month) do update set sla_minutes=excluded.sla_minutes;
+reset role;
+select check_ok((select count(*)=(select n+1 from monthly_audit_before) from department_receiving_rule_events),'monthly conflict update writes one persisted audit');
+select check_ok(exists(select 1 from department_receiving_rule_events where actor_id=tid(3) and before_data->>'sla_minutes'='80' and after_data->>'sla_minutes'='91' and after_data->>'updated_by'=tid(3)::text),'monthly update audit matches actor and persisted values');
+set local role authenticated;
 do $$begin begin insert into department_receiving_weekly_rules(dept_id) values(tid(1));exception when insufficient_privilege then return;end;raise exception 'delegate changed foreign week';end$$;
 do $$begin begin perform set_department_sla_managers(tid(2),array[tid(3)]);exception when insufficient_privilege then return;end;raise exception 'delegate can assign peers';end$$;
 do $$begin begin delete from department_policy_events;exception when insufficient_privilege then return;end;raise exception 'delegate erased audit';end$$;

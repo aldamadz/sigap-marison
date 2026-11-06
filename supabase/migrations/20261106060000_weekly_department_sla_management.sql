@@ -82,9 +82,6 @@ returns trigger language plpgsql security definer set search_path='' as $$
 declare old_data jsonb;new_data jsonb;
 begin
  if tg_op<>'DELETE' then
-  if tg_table_name in('department_receiving_settings','department_receiving_weekly_rules') then
-   new.updated_at:=now();new.updated_by:=auth.uid();
-  end if;
   new_data:=to_jsonb(new);
  end if;
  if tg_op<>'INSERT' then old_data:=to_jsonb(old);end if;
@@ -96,9 +93,32 @@ revoke all on function public.audit_department_policy() from public,anon,authent
 do $$declare tab text;begin
  foreach tab in array array['department_receiving_settings','department_receiving_weekly_rules','department_sla_managers','department_kpi_configs'] loop
   execute format('drop trigger if exists audit_department_policy on public.%I',tab);
-  execute format('create trigger audit_department_policy before insert or update or delete on public.%I for each row execute function public.audit_department_policy()',tab);
+  execute format('create trigger audit_department_policy after insert or update or delete on public.%I for each row execute function public.audit_department_policy()',tab);
  end loop;
 end $$;
+
+create or replace function public.stamp_department_policy_metadata()
+returns trigger language plpgsql set search_path='' as $$
+begin new.updated_at:=now();new.updated_by:=auth.uid();return new;end $$;
+revoke all on function public.stamp_department_policy_metadata() from public,anon,authenticated;
+do $$declare tab text;begin
+ foreach tab in array array['department_receiving_settings','department_receiving_weekly_rules','department_receiving_rules'] loop
+  execute format('drop trigger if exists stamp_department_policy_metadata on public.%I',tab);
+  execute format('create trigger stamp_department_policy_metadata before insert or update on public.%I for each row execute function public.stamp_department_policy_metadata()',tab);
+ end loop;
+end $$;
+create or replace function public.audit_department_receiving_rule()
+returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ insert into public.department_receiving_rule_events(dept_id,period_month,actor_id,before_data,after_data)
+ values(coalesce(new.dept_id,old.dept_id),coalesce(new.period_month,old.period_month),auth.uid(),
+  case when tg_op<>'INSERT' then to_jsonb(old) end,case when tg_op<>'DELETE' then to_jsonb(new) end);
+ return coalesce(new,old);
+end $$;
+revoke all on function public.audit_department_receiving_rule() from public,anon,authenticated;
+drop trigger if exists audit_department_receiving_rule on public.department_receiving_rules;
+create trigger audit_department_receiving_rule after insert or update or delete on public.department_receiving_rules
+ for each row execute function public.audit_department_receiving_rule();
 
 create or replace function public.get_department_sla_scope()
 returns table(dept_id uuid,name text) language sql stable security definer set search_path='' as $$
@@ -142,7 +162,7 @@ returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare config jsonb;base_config jsonb;monthly public.department_receiving_rules;weekly public.department_receiving_weekly_rules;
  enabled boolean;local_at timestamp;ready timestamp;month_start date;week_anchor date;
  month_open timestamp;month_close timestamp;week_open timestamp;week_close timestamp;
- work_days integer[];attempt integer;note text;
+ work_days integer[];attempt integer;note text;resolved boolean:=false;
 begin
  select to_jsonb(k) into config from public.department_kpi_configs k where k.dept_id=p_dept and k.is_active;
  base_config:=jsonb_build_object('sla_minutes',120,'work_days',jsonb_build_array(1,2,3,4,5),
@@ -153,7 +173,7 @@ begin
  for attempt in 1..750 loop
   month_start:=date_trunc('month',ready)::date;week_anchor:=date_trunc('week',ready)::date;
   config:=base_config;month_close:=null;week_close:=null;note:='';
-  if not enabled then exit;end if;
+  if not enabled then resolved:=true;exit;end if;
   select * into monthly from public.department_receiving_rules r where r.dept_id=p_dept
    and r.period_month in(month_start,date '2000-01-01') order by (r.period_month=month_start) desc limit 1;
   if monthly.sla_minutes is not null then config:=config||jsonb_build_object('sla_minutes',monthly.sla_minutes,'is_active',true);end if;
@@ -174,7 +194,7 @@ begin
    if ready>=week_close then ready:=week_anchor+7;continue;end if;
   end if;
   if date_trunc('month',ready)::date<>month_start then continue;end if;
-  if not coalesce(monthly.enabled,false) and not coalesce(weekly.enabled,false) then exit;end if;
+  if not coalesce(monthly.enabled,false) and not coalesce(weekly.enabled,false) then resolved:=true;exit;end if;
   select array_agg(value::integer) into work_days from jsonb_array_elements_text(config->'work_days');
   if not(extract(isodow from ready)::integer=any(work_days)) or exists(select 1 from public.holidays h where h.holiday_date=ready::date)
    or ready::time>=(config->>'work_end')::time then ready:=(ready::date+1)+(config->>'work_start')::time;continue;end if;
@@ -182,9 +202,9 @@ begin
   if ready::time>=(config->>'break_start')::time and ready::time<(config->>'break_end')::time then ready:=ready::date+(config->>'break_end')::time;end if;
   if ready>=month_close then ready:=(month_start+interval '1 month')::date;continue;end if;
   if ready>=week_close then ready:=week_anchor+7;continue;end if;
-  exit;
+  resolved:=true;exit;
  end loop;
- if attempt>=750 then raise exception 'Tidak ditemukan periode penerimaan yang valid.' using errcode='55000';end if;
+ if not resolved then raise exception 'Tidak ditemukan periode penerimaan yang valid. Periksa jadwal penerimaan dan jam kerja.' using errcode='55000';end if;
  return config||jsonb_build_object('version',2,'department_id',p_dept,'captured_at',p_at,
   'receiving',jsonb_build_object('enabled',enabled,'available_at',ready at time zone (config->>'timezone'),
    'period_month',month_start,'period_week',week_anchor,'deferred',ready>local_at,'message',note,
