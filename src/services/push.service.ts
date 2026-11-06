@@ -9,6 +9,7 @@ export type PushActivationDetails = {
   code: PushActivationCode;
   httpStatus?: number;
   requestId?: string;
+  serverCode?: 'push_provider_unsupported' | 'push_keys_missing';
 };
 type PushActivationResult = { enabled: true } | {
   enabled: false;
@@ -96,6 +97,7 @@ export const pushService = {
       if (error instanceof AttentionRequestError) {
         if (error.httpStatus !== undefined) details.httpStatus = error.httpStatus;
         if (error.requestId !== undefined) details.requestId = error.requestId;
+        if (error.code !== undefined) details.serverCode = error.code;
       }
       return {
         enabled: false,
