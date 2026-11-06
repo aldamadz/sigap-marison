@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Staging Release Evidence (2026-11-06)
+
+- PR846/source06d5fde deployed as49d7aba; live staging SHA/readiness verified.
+  Official guarded script used after cancelled Actions runner network failures;
+  no worker restart or migration.28/28 affected tests and both hosted CIs pass.
+- Tester P3 saw and used the button: one self notice, cooldown, bell unread state
+  and dashboard destination pass. Native OS popup remains unverified on this IAB.
+- Production deliberately excluded and remains c2e95a8. Details in WORKLOG.
+
 ## NTF-07 Staging Notification Test Button (2026-11-06, Issue845)
 
 - Staging-only Settings control reuses the existing authenticated self-notification

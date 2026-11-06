@@ -1,5 +1,26 @@
 # Worklog
 
+## 2026-11-06 [Codex] NTF-07 Verified Staging Release
+
+- Source06d5fde; PR846 merged49d7aba. PR CI42176996328 and staging push
+  CI42177260800 passed; local affected tests28/28, lint, typecheck and build pass.
+  Deploy42177260793 quality passed, but both runner attempts timed out while
+  resolving/downloading GitHub Actions, before checkout/deploy. Run cancelled;
+  no Runner.Worker remained before the operator fallback.
+- Used an isolated exact49d7aba checkout on Ubuntu and unchanged official
+  scripts/deploy-app.sh staging, first --check-only then real deploy. All guards,
+  environment identity, image/runtime SHA and readiness/root smoke tests passed.
+  Live49d7aba10057c350a1f2c1b8eab935b53292408e, app2d1fba7f580c healthy;
+  PDF/sync/outbound/external API worker IDs unchanged. No migration/secrets change.
+- Real Tester P3 browser acceptance: button visible in Settings/Notifikasi,
+  explicit click created one self notification, disabled cooldown displayed,
+  unread bell incremented0->1, clicking test opened dashboard and marked it read.
+  No email, permission change or business/vendor action. Native OS popup was not
+  accepted as verified: this IAB has no active supported push subscription.
+- Production remains c2e95a8f09fcb0d35d4c4d3e8a6c42d0b4e9da21 (read-only check).
+  Automatic production workflows after cancelled staging attempts were skipped.
+  User explicitly excludes production for NTF-07. Operational task completed.
+
 ## 2026-11-06 [Codex] NTF-07 Staging Self Notification Test
 
 - Issue845; isolated main-based codex/staging-test-notification-20261106.
