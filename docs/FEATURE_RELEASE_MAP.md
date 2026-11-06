@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## MRN-30 Production Verified (2026-11-06, Issue839)
+
+- Supersedes candidate/pending notes below. Selective PR842 main/livec2e95a8;
+  staging PR843/livece9b88d contains main before cutover. Official production
+  42165012977 and staging42164325879 succeeded; public health/root200, restart0,
+  worker/API IDs unchanged. Forward900/930 verified, ledgers252/255.
+- Eligible signed Fund callback may create immutable private receipt evidence
+  without inventing vendor ID or rewriting failed dispatch. Original retry and
+  unapproved replacement remain blocked; only a corrected, resolved and approved
+  current external revision can enqueue its next generation. Unit unchanged.
+- PG17 lifecycle/negative/repeat/concurrency tests and16 focused auth/contract
+  tests passed; actual010 canonical callback/completion probes rolled back with
+  business data unchanged. Live vendor HTTP retry/browser acceptance is not
+  claimed: external must repeat its own desired decision after release.
+- At release010 remains DONE/step5 with its historical failed generation1 and
+  zero decision receipts. No real decision/approval/resend was made by the agent.
+
 ## MRN-30 Authenticated Fund Decision Receipts (2026-11-06, Issue839)
 
 - User approves staging then production for missing-receipt Fund callback422,

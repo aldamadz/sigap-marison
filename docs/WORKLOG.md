@@ -1,5 +1,50 @@
 # Worklog
 
+## 2026-11-06 [Codex] MRN-30 Production Callback Receipt Recovery Verified
+
+- Supersedes pending MRN-30 statuses below. User explicitly approved staging
+  then production. Sourceec8228e4ae19947957af20e62eb8bcb52f1a4bf2 selectively
+  merged through PR842, mainc2e95a8f09fcb0d35d4c4d3e8a6c42d0b4e9da21.
+  Final staging integration PR843/livece9b88d09e398d352b3efb622765a10e4cd6c16e
+  contains main. Source CI42163661938, final integration CI42163994085 and main
+  CI42163977251 passed. Official staging42164325879 and production42165012977
+  preflight/quality/deploy succeeded with exact migration acknowledgements.
+- Forward900/930 audited, twice-rehearsed and applied in both environments;
+  staging ledger255, production252. Combined normalized SHA256
+  c0888b0c55b7ed19394f1c4f9e779dd308c02db411d99ab6bcc1d4eb61410443.
+  Existing documents/signatures/revisions/history/notifications/drafts/attachments/
+  outbound fingerprints retained within apply transactions. No migration repair,
+  callback/receipt backfill, fabricated vendor ID or old dispatch rewrite.
+- Real PG17 tests cover rejection/revision, repeated migration, non-superuser
+  canonical writer, privacy/immutability, invalid/stale/changed/unposted/active/
+  wrong-environment cases, downstream rollback and two-connection idempotency.
+  Full fixture tests requester draft/resubmit, approval completion, exactly one
+  new pending generation, original retry denial and completion replay. Sixteen
+  focused contract/auth tests, lint/typecheck/frontend/backend builds passed;
+  hosted affected SQL suites and high-critical dependency gate passed. Existing
+  moderate advisories remain; no full-security-audit claim.
+- Actual010 canonical rejection and revision paths, then simulated resolved
+  revision/completed-approval transition through live database triggers, passed
+  only inside deliberately rolled-back subtransactions. Full before/after
+  business fingerprints and receipt_count0 verified. No committed production
+  decision, approval, new dispatch, vendor POST/resend or test push was performed.
+- Staging live catalog/ACL/repeat rehearsals passed. No pre-existing eligible
+  failed Fund was available for a direct positive stage callback. Attempted
+  rollback-only cloned fixture was rejected by existing issuer/signer rules;
+  those controls were not disabled or bypassed. Positive flow evidence is the
+  disposable PG17 lifecycle suite plus actual010 rollback-only canonical probe,
+  not a claimed successful live vendor HTTP callback or browser acceptance.
+- Production public exact SHA/ready/root200; appe8eb4e9c9b0e healthy/restart0,
+  profile embedding200 and notification cycle warnings0. PDF/sync/outbound/API
+  IDs unchanged. One503 was observed during app recreation, followed immediately
+  by the new SHA and healthy200; no zero-downtime claim. Both callback facade
+  and app target production/private DB, not the retired Cloud deployment.
+- At final check010 remains DONE/step5, generation1 failed_terminal, no external
+  decision/receipt. External should retry only its authentic desired decision;
+  the same five-field contract/auth/HMAC remains. No vendor ID is required for
+  this eligible Fund fallback. Real external retry result remains to be observed.
+  PROJECT_CONTEXT.md remains absent; shared document structure unchanged.
+
 ## 2026-11-06 [Codex] MRN-30 Receipt-Bound Revision Completion
 
 - Forward follow-up20261106093000 is required alongside900. Final review found
