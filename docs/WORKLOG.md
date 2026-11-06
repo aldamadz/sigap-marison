@@ -1,5 +1,22 @@
 # Worklog
 
+## 2026-11-05 [Codex] CAL-10 Shared Team Calendar Implementation
+
+- Claimed819 on main-based codex/calendar-team-scope-20261105. User approved
+  organization read scope independent of reporting, including KC child KCP.
+  Default target is staging; no production permission for this new feature set.
+- New migration20261105060000 preserves original reporting access and owner-only
+  writes, adds active same-department Pusat and branch office read access across
+  team search/availability/aggregates/detail/export and entry/event RLS.
+- Existing pagination/carryover/date/ACL contracts retained; unknown live RPC
+  shapes fail closed pending audit. Disposable PG17 repeated migration and real
+  authenticated tests pass peer read/no write/delete, cross-scope isolation,
+  office transfer and deactivated/deleted profile cases. Legacy suites run in
+  separate databases rather than silently changing historical expectations.
+- Other approved work (monthly reception/SLA, durable notifications/reminders,
+  post-maintenance What's New) remains separate. No remote schema/data changes
+  yet. PROJECT_CONTEXT absent; shared structure unchanged.
+
 ## 2026-11-05 [Codex] SUR-40 Searchable Registration Choices
 
 - Issue813, main-based `codex/registration-search-20261105`; staging then
