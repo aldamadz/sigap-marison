@@ -5,6 +5,7 @@ import {supabase} from '@/lib/supabase';
 import {Button} from '@/components/ui/button';
 import {Switch} from '@/components/ui/switch';
 import {BrowserNotificationButton} from './BrowserNotificationButton';
+import {StagingNotificationTest} from './StagingNotificationTest';
 
 const defaults={team_notifications:true,team_push:false,calendar_reminders:true,calendar_push:true};
 export function NotificationPreferences({userId}:{userId:string}) {
@@ -19,7 +20,7 @@ export function NotificationPreferences({userId}:{userId:string}) {
   try{const {error}=await supabase.from('notification_preferences').upsert({user_id:userId,...form});if(error)throw error;await query.refetch();setMessage('Pengaturan notifikasi tersimpan.');}
   catch{setMessage('Pengaturan belum dapat disimpan. Coba lagi.');}finally{setSaving(false);}
  };
- return <section className="space-y-5 border-y py-5"><h2 className="flex items-center gap-2 text-lg font-semibold"><BellRing className="h-5 w-5"/>Notifikasi</h2><BrowserNotificationButton/>
+ return <section className="space-y-5 border-y py-5"><h2 className="flex items-center gap-2 text-lg font-semibold"><BellRing className="h-5 w-5"/>Notifikasi</h2><div className="flex flex-wrap items-start gap-3"><BrowserNotificationButton/><StagingNotificationTest key={userId} userId={userId}/></div>
   {query.isError?<div role="alert" className="space-y-2 text-sm"><p>Pengaturan notifikasi belum dapat dimuat.</p><Button variant="outline" onClick={()=>{void query.refetch();}}>Coba lagi</Button></div>:<>
    <div className="max-w-2xl divide-y">{([
     ['team_notifications','Ringkasan pengajuan departemen / kantor'],['team_push','Popup browser untuk ringkasan tim'],
