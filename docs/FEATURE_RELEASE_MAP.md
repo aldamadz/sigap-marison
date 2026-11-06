@@ -1,5 +1,16 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Popup Test Follow-Up (2026-11-06)
+
+- Staging candidate separates device popup test from self server delivery test.
+  Device popup uses the browser's Notification API and existing service worker,
+  requires explicit click/permission, and never creates a server push subscription.
+- Activation state restores from actual existing browser subscription and backend
+  acceptance after remount/focus, without prompting. Revocation/failure are not
+  displayed as active; safe diagnostics and stale-result protection retained.
+- Focused102tests/lint pass; remaining release checks recorded in WORKLOG.
+  No production release or provider/audience expansion is authorized.
+
 ## NTF-07 Staging Release Evidence (2026-11-06)
 
 - PR846/source06d5fde deployed as49d7aba; live staging SHA/readiness verified.

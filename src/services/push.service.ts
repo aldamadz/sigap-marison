@@ -11,10 +11,10 @@ export type PushActivationDetails = {
   requestId?: string;
   serverCode?: 'push_provider_unsupported' | 'push_keys_missing';
 };
-type PushActivationResult = { enabled: true } | {
+export type PushActivationResult = { enabled: true } | {
   enabled: false;
   reason: "unsupported" | "permission_not_granted" | "server_not_configured" | "worker_not_ready"
-    | "provider_unavailable" | "activation_failed";
+    | "provider_unavailable" | "activation_failed" | "not_subscribed" | "permission_denied";
   details?: PushActivationDetails;
 };
 
@@ -29,6 +29,18 @@ const safeErrorCode = (error: unknown): PushActivationCode => {
 };
 
 const serviceWorkerPath = "/sigap-sw.js?v=202611050620";
+
+const activationFailure = (error: unknown, stage: PushActivationStage): PushActivationResult => {
+  const code = safeErrorCode(error);
+  const details: PushActivationDetails = { stage, code };
+  if (error instanceof AttentionRequestError) {
+    if (error.httpStatus !== undefined) details.httpStatus = error.httpStatus;
+    if (error.requestId !== undefined) details.requestId = error.requestId;
+    if (error.code !== undefined) details.serverCode = error.code;
+  }
+  return { enabled: false, reason: stage === "subscribe" && code === "AbortError"
+    ? "provider_unavailable" : "activation_failed", details };
+};
 
 const waitForActiveWorker = async () => {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -55,6 +67,46 @@ export const pushService = {
       && "serviceWorker" in navigator
       && "PushManager" in window
       && "Notification" in window;
+  },
+
+  async getSubscriptionStatus(): Promise<PushActivationResult> {
+    if (!this.isSupported()) return { enabled: false, reason: "unsupported" };
+    if (Notification.permission !== "granted") return { enabled: false,
+      reason: Notification.permission === 'denied' ? 'permission_denied' : 'permission_not_granted' };
+    let stage: PushActivationStage = "lookup";
+    try {
+      const registration = await navigator.serviceWorker.getRegistration('/');
+      const subscription = registration?.active ? await registration.pushManager.getSubscription() : null;
+      if (!subscription) return { enabled: false, reason: "not_subscribed" };
+      stage = "public_key";
+      const key = await attentionService.getPushPublicKey();
+      if (!key.enabled || !key.publicKey) return { enabled: false, reason: "server_not_configured" };
+      stage = "persist";
+      await attentionService.savePushSubscription(subscription);
+      return { enabled: true };
+    } catch (error) { return activationFailure(error, stage); }
+  },
+
+  async testPopup(): Promise<{ requested: boolean; reason?: string }> {
+    if (!['https://sigap.marison-testing.biz.id', 'https://sigap.marison-testing.biz.id/']
+      .includes(import.meta.env.VITE_APP_PUBLIC_URL)) return { requested: false, reason: 'staging_only' };
+    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+      return { requested: false, reason: 'unsupported' };
+    }
+    try {
+      const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission;
+      if (permission !== 'granted') return { requested: false, reason: 'permission_not_granted' };
+      await navigator.serviceWorker.register(serviceWorkerPath);
+      const registration = await waitForActiveWorker();
+      if (!registration) return { requested: false, reason: 'worker_not_ready' };
+      const options: NotificationOptions & { renotify: boolean } = {
+        body: 'Jika Anda melihat pesan ini, popup browser di perangkat ini berfungsi.',
+        tag: 'sigap-staging-popup-test', renotify: true,
+        icon: '/marison-sigap-logo-v2.png', data: { link: '/dashboard' },
+      };
+      await registration.showNotification('Tes popup SIGAP', options);
+      return { requested: true };
+    } catch { return { requested: false, reason: 'popup_failed' }; }
   },
 
   async ensureSubscription({ requestPermission = false } = {}): Promise<PushActivationResult> {
@@ -92,18 +144,7 @@ export const pushService = {
       await attentionService.savePushSubscription(subscription);
       return { enabled: true };
     } catch (error) {
-      const code = safeErrorCode(error);
-      const details: PushActivationDetails = { stage, code };
-      if (error instanceof AttentionRequestError) {
-        if (error.httpStatus !== undefined) details.httpStatus = error.httpStatus;
-        if (error.requestId !== undefined) details.requestId = error.requestId;
-        if (error.code !== undefined) details.serverCode = error.code;
-      }
-      return {
-        enabled: false,
-        reason: stage === "subscribe" && code === "AbortError" ? "provider_unavailable" : "activation_failed",
-        details,
-      };
+      return activationFailure(error, stage);
     }
   },
 };

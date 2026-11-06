@@ -1,5 +1,20 @@
 # Worklog
 
+## 2026-11-06 [Codex] NTF-07 Explicit Popup and Activation Restoration
+
+- User clarifies testing the actual device popup, not only an in-app notice.
+  Same owned branch/Issue845, staging only. PR847 expands from evidence-only
+  into the corrective follow-up; production remains explicitly excluded.
+- Separate explicit staging controls: local ServiceWorker showNotification test
+  (no server send/email/provider subscription) and existing self delivery test.
+  Both retain click-only execution/cooldown and do not claim remote push delivery.
+- Activation button checks existing worker/subscription plus server persistence
+  on mount and visible focus. No permission prompt or new subscription from the
+  status check; no permission-only false success. Stale background results cannot
+  overwrite manual activation; status/read errors remain safe and retryable.
+- Focused8files102tests, lint, typecheck and build pass. Hosted gate, staging deploy
+  and browser popup acceptance pending. No backend/schema/audience/allowlist change.
+
 ## 2026-11-06 [Codex] NTF-07 Verified Staging Release
 
 - Source06d5fde; PR846 merged49d7aba. PR CI42176996328 and staging push
