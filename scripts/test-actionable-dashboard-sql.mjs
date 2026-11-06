@@ -188,7 +188,8 @@ try {
   console.log('SLA02: monthly rules, immutable stage snapshots, receiving guards, RLS and clocks passed.');
   if(weekly){
    const weeklyPolicy=read('supabase/migrations/20261106060000_weekly_department_sla_management.sql');
-   const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],weeklyPolicy+weeklyPolicy
+   const relationship=read('supabase/migrations/20261106070000_weekly_department_sla_profile_relationship.sql');
+   const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],weeklyPolicy+weeklyPolicy+relationship+relationship
     +read('supabase/tests/weekly_department_sla.integration.sql'));
    if(!result.includes('SLA02 weekly receiving and delegated management passed'))throw Error('Missing weekly SLA assertions');
    console.log('SLA02: weekly windows, default off, scoped delegation, audit and frozen signer SLA passed.');
