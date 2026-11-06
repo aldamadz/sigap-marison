@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { addMonths, format, startOfMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { ArrowRight, BellRing, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FilePenLine, FileText, Inbox, RefreshCw, Search, Timer, TriangleAlert, Undo2, Users, XCircle } from 'lucide-react';
@@ -51,7 +51,9 @@ export const DashboardSla = ({ row }: { row: DashboardRow }) => {
 };
 
 export function ActionableDashboard({ userId }: { userId: string }) {
-  const [scope, setScope] = useState<DashboardScope>('mine');
+  const [params]=useSearchParams();
+  const requestedScope=['mine','signer','team'].includes(params.get('scope') || '')?params.get('scope') as DashboardScope:null;
+  const [scope, setScope] = useState<DashboardScope>(requestedScope || 'mine');
   const [bucket, setBucket] = useState<DashboardBucket>('active');
   const [month, setMonth] = useState(() => startOfMonth(new Date(`${todayWorkDate()}T12:00:00`)));
   const [search, setSearch] = useState('');
@@ -75,7 +77,8 @@ export function ActionableDashboard({ userId }: { userId: string }) {
   });
   const data = query.data;
   const selectBucket = (value: DashboardBucket) => { setBucket(value); setPage(1); };
-  const initialTabChosen = useRef(false);
+  const initialTabChosen = useRef(requestedScope!==null);
+  useEffect(()=>{if(requestedScope){initialTabChosen.current=true;setScope(requestedScope);setBucket(requestedScope==='signer'?'ready':'active');setPage(1);}},[requestedScope]);
   const changeScope = (value: DashboardScope) => { initialTabChosen.current = true; setScope(value); selectBucket(value === 'signer' ? 'ready' : 'active'); setSearch(''); };
   useEffect(() => {
     if (!data || initialTabChosen.current) return;

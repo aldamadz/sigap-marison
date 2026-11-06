@@ -6,6 +6,7 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { LogController } from "fastify";
 import { getEnvironment } from "./config/env.js";
 import { registerErrorHandler } from "./plugins/errors.js";
+import { registerNotificationJobs } from "./plugins/notification-jobs.js";
 import {
   pathnameFromUrl,
   shouldServeSpaIndex,
@@ -68,6 +69,7 @@ export const buildApp = async () => {
   await registerBffRoutes(app);
   await registerSuratRoutes(app);
   await registerDomainRoutes(app);
+  await registerNotificationJobs(app);
 
   await app.register(fastifyStatic, {
     root: resolve(env.DIST_DIR),

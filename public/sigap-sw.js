@@ -1,3 +1,5 @@
+self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
+self.addEventListener('activate',event=>event.waitUntil(clients.claim()));
 self.addEventListener("push", (event) => {
   let payload = {};
   try {
@@ -14,7 +16,7 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(title, {
       body,
       tag: payload.tag || "sigap-attention",
-      renotify: true,
+      renotify: false,
       data: { link },
       icon: "/marison-sigap-logo-v2.png",
       badge: "/marison-sigap-logo-v2.png",
@@ -24,7 +26,11 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = new URL(event.notification.data?.link || "/dashboard", self.location.origin).href;
+  let targetUrl = new URL('/dashboard',self.location.origin).href;
+  try {
+    const candidate=new URL(event.notification.data?.link || '/dashboard',self.location.origin);
+    if(candidate.origin===self.location.origin && ['/notifications/open','/dashboard','/calendar','/surat/inbox','/surat/monitoring','/surat/tindak-lanjut','/surat/rekomendasi'].includes(candidate.pathname))targetUrl=candidate.href;
+  }catch{/* Invalid legacy links never open an external destination. */}
 
   event.waitUntil((async () => {
     const clientList = await clients.matchAll({ type: "window", includeUncontrolled: true });
