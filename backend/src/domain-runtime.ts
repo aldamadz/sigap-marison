@@ -1079,6 +1079,7 @@ const normalizePushSubscription = (value) => {
   if (!isAllowedPushEndpoint(endpoint) || !p256dh || !auth) {
     const err = new Error("Subscription Web Push tidak valid.");
     err.status = 400;
+    err.code = !isAllowedPushEndpoint(endpoint) ? 'push_provider_unsupported' : 'push_keys_missing';
     throw err;
   }
   return {
@@ -1131,50 +1132,18 @@ const removeWebPushSubscription = async (token, payload) => {
   return { ok: true };
 };
 
-const sendWebPushToUsers = async (userIds, payload = {}) => {
-  if (!webPushConfig.publicKey || !webPushConfig.privateKey) return { sent: 0, skipped: "not_configured" };
-  const ids = [...new Set((userIds || []).filter(Boolean))];
-  if (ids.length === 0) return { sent: 0 };
-
-  const { data, error } = await supabase
-    .from("web_push_subscriptions")
-    .select("id, user_id, endpoint, subscription")
-    .in("user_id", ids)
-    .is("disabled_at", null);
-  if (error) {
-    console.error("Load push subscriptions failed:", error);
-    return { sent: 0, error: error.message };
-  }
-
-  let sent = 0;
-  for (const row of data || []) {
-    try {
-      await webpush.sendNotification(row.subscription, JSON.stringify({
-        title: "Marison - SIGAP",
-        message: "Ada pembaruan yang perlu dicek.",
-        link: payload.link || "/dashboard",
-        tag: "sigap-attention",
-      }), { TTL: 60 });
-      sent += 1;
-      supabase
-        .from("web_push_subscriptions")
-        .update({ last_success_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq("id", row.id)
-        .then(() => {});
-    } catch (error) {
-      const statusCode = error?.statusCode || error?.status;
-      if (statusCode === 404 || statusCode === 410) {
-        supabase
-          .from("web_push_subscriptions")
-          .update({ disabled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-          .eq("id", row.id)
-          .then(() => {});
-      } else {
-        console.error("Web Push send failed:", error?.message || error);
-      }
-    }
-  }
-  return { sent };
+export const isBrowserPushConfigured = () => Boolean(webPushConfig.publicKey && webPushConfig.privateKey);
+export const sendQueuedBrowserPush = async (subscription, payload) => {
+  if (!isAllowedPushEndpoint(subscription?.endpoint)) throw Object.assign(new Error('Invalid endpoint'),{statusCode:400,code:'invalid_endpoint'});
+  let details;
+  try {
+    const normalized=normalizePushSubscription(subscription);
+    if(normalized.keys.p256dh.length>256 || normalized.keys.auth.length>256)throw Error('Invalid keys');
+    details=webpush.generateRequestDetails(normalized,JSON.stringify(payload),{TTL:3600,topic:payload.notificationId.replaceAll('-','')});
+  }catch {throw Object.assign(new Error('Invalid subscription'),{statusCode:400});}
+  const response=await fetch(details.endpoint,{method:details.method,headers:details.headers,body:details.body,redirect:'error',signal:AbortSignal.timeout(10000)});
+  await response.body?.cancel();
+  if(!response.ok)throw Object.assign(new Error('Push provider rejected delivery'),{statusCode:response.status});
 };
 
 const getEmailSettings = async (formId = null) => {
@@ -2025,10 +1994,7 @@ const sendInternalNotification = async (token, payload) => {
     .insert(rows)
     .select("id");
   if (error) throw error;
-  const push = await sendWebPushToUsers(userIds, { link }).catch((pushError) => {
-    console.error("Web Push notify failed:", pushError);
-    return { sent: 0, error: pushError.message };
-  });
+  const push = { queued: data?.length || 0 };
 
   let email = null;
   if (shouldEmail) {
@@ -5433,6 +5399,8 @@ export const handleRequest = async (req, res) => {
     if (status >= 500) console.error(logMessage);
     else if (status === 429) console.warn(logMessage);
     if (error.retryAfter) res.setHeader("Retry-After", String(error.retryAfter));
-    sendJson(res, status, { error: error.message || "Internal server error", requestId });
+    const pushCode = requestPath === '/api/push/subscribe' && status === 400
+      && ['push_provider_unsupported', 'push_keys_missing'].includes(error.code) ? error.code : undefined;
+    sendJson(res, status, { error: error.message || "Internal server error", requestId, ...(pushCode ? { code: pushCode } : {}) });
   }
 };

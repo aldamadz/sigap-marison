@@ -77,10 +77,29 @@ const authHeaders = async () => ({
   Authorization: `Bearer ${await getAccessToken()}`,
 });
 
+const safeRequestId = (value: unknown) => typeof value === "string" && value.length >= 8 && value.length <= 80
+  && !/[^A-Za-z0-9_-]/.test(value)
+  ? value : undefined;
+
+export class AttentionRequestError extends Error {
+  readonly httpStatus?: number;
+  readonly requestId?: string;
+  readonly code?: 'push_provider_unsupported' | 'push_keys_missing';
+
+  constructor(status: number, requestId?: unknown, code?: unknown) {
+    super("Request gagal diproses.");
+    this.name = "HttpError";
+    if (Number.isInteger(status) && status >= 400 && status <= 599) this.httpStatus = status;
+    this.requestId = safeRequestId(requestId);
+    if (code === 'push_provider_unsupported' || code === 'push_keys_missing') this.code = code;
+  }
+}
+
 const readJsonResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error || "Request gagal diproses.");
+    throw new AttentionRequestError(response.status,
+      safeRequestId(response.headers.get("X-Request-Id")) ?? safeRequestId(payload?.requestId), payload?.code);
   }
   return payload as T;
 };

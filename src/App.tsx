@@ -8,6 +8,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from "@/lib/supabase";
 import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 import { MaintenanceNotice } from "@/components/app/MaintenanceNotice";
+import { notificationReturnPath } from "@/lib/notification-target";
 
 import { UserThemeSync } from "@/providers/UserThemeSync";
 import { AttentionProvider } from "@/providers/AttentionProvider";
@@ -25,8 +26,10 @@ const WorkCalendarPage = lazy(() => import("@/pages/work-calendar/WorkCalendarPa
 const WorkCalendarUnavailablePage = lazy(() => import("@/pages/work-calendar/WorkCalendarUnavailablePage"));
 const ActivityLogsPage = lazy(() => import("@/pages/activity-logs/ActivityLogsPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const DepartmentSlaSettingsPage = lazy(() => import("@/pages/settings/DepartmentSlaSettingsPage"));
 const PublicDocsPage = lazy(() => import("@/pages/docs/PublicDocsPage"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const NotificationOpenPage = lazy(() => import("@/pages/notifications/NotificationOpenPage"));
 
 // LAZY IMPORT - SURAT & MONITORING
 const SuratPage = lazy(() => import("@/pages/surat/SuratPage"));
@@ -183,7 +186,7 @@ const App = () => {
         {/* PUBLIC ROUTE */}
         <Route
           path="/"
-          element={isAuth ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+          element={isAuth ? <Navigate to={notificationReturnPath(location.state?.from)} replace /> : <LoginPage />}
         />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/maintenance-admin" element={isAuth ? <Navigate to="/admin/configuration/maintenance" replace /> : <LoginPage />} />
@@ -193,16 +196,18 @@ const App = () => {
 
         {/* PROTECTED ROUTES */}
         <Route
-          element={isAuth ? <AppLayout /> : <Navigate to="/" replace />}
+          element={isAuth ? <AppLayout /> : <Navigate to="/" replace state={{from:location.pathname==='/notifications/open'?location.pathname+location.search:undefined}} />}
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/notifications/open" element={<NotificationOpenPage />} />
           <Route
             path="/calendar"
             element={isWorkCalendarEnabled ? <WorkCalendarPage /> : <WorkCalendarUnavailablePage />}
           />
           <Route path="/activity-logs" element={<Navigate to="/audit-logs" replace />} />
           <Route path="/audit-logs" element={<AdminOnlyRoute><ActivityLogsPage /></AdminOnlyRoute>} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={<SettingsPage key={session?.user.id} userId={session?.user.id} />} />
+          <Route path="/settings/department-sla" element={<DepartmentSlaSettingsPage key={session?.user.id} userId={session?.user.id} />} />
 
           {/* SURAT MODULE */}
           <Route path="/surat/registrasi" element={<SuratPage />} />

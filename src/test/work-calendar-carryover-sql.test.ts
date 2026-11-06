@@ -109,7 +109,7 @@ describe("forward-only calendar carryover SQL", () => {
     expect(start).toBeGreaterThan(0);
     expect(start).toBeLessThan(setup);
     const orchestration = runner.slice(start, setup);
-    expect(orchestration).toContain('for (const suite of ["--baseline", "--carryover", "--results"])');
+    expect(orchestration).toContain('for (const suite of ["--baseline", "--carryover", "--results", "--team-scope"])');
     expect(orchestration).toContain('spawnSync(process.execPath, [process.argv[1], suite], { stdio: "inherit" })');
     expect(orchestration).toContain("if (result.error) throw result.error;");
     expect(orchestration).toContain("if (result.status !== 0) process.exit(result.status ?? 1);");
