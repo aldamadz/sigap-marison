@@ -1,5 +1,76 @@
 # Worklog
 
+## 2026-11-06 [Codex] Department Package Production Runtime Verified
+
+- Supersedes the pending production checkpoint below. Official workflow
+  42149212928 attempt2 succeeded: preflight, exact-main quality and app deployment.
+  Production public /health/version is539f200c18327f322c5e5fede09a001a342435ad;
+  live stagingf4475f8a7cf7c20d3d9c1e674444bba7f13ae7de contains that main commit.
+  Public root/readiness200, local live/ready/root200, appbf32fa7e2113 healthy,
+  restart0. Profile department embedding200; migration ledger/default-off and
+  managers0 reverified after cutover. Four worker/API container IDs unchanged.
+- Official affected production gate passed592 tests plus actual disposable PG17
+  calendar, organization scope, notification lease concurrency, monthly/weekly
+  SLA, audit and authorization assertions, lint/typecheck/build/high-critical
+  dependency gate. Existing moderate advisories remain; this is not a full audit.
+- First deployment attempt stopped before application replacement: atomic host
+  env update did not retain runner read permissions. Corrected protected file to
+  root:sigap-runner0640 (backup root-only0600), verified runner read access and
+  reran only failed deployment against the same previously tested SHA. No secret
+  values were output. Operator helper now preserves source ownership/metadata.
+- Production notification jobs enabled, no cycle warnings at initial observation;
+  three naturally created queued deliveries reached sent, without a manual test
+  notification. Delivery acknowledgement does NOT prove OS-popup display.
+  Staging remains restricted to Tester P3. No approval, submission, vendor POST,
+  resend, worker restart or historical business-data correction was performed.
+- OS-popup/background-click acceptance in a supported browser and actual live
+  post-maintenance release-modal event remain explicitly unverified as below.
+  Production code/DB/edge rollout is complete; these are acceptance limitations,
+  not a claim that the embedded browser supports push. No Ticketing integration.
+
+## 2026-11-06 [Codex] Department Package Production Release Verification
+
+- User explicitly approved staging then production, including weekly receiving
+  and admin-appointed own-department SLA managers. Selective PR832 maina92ea08
+  contains CAL-10/OPS-18/NTF-06/SLA-02, not unrelated staging-only Desktop routes.
+  Fixture-only PR836 main539f200 fixes a wall-clock-dependent notification test;
+  it now checks both future and eligible availability against a fixed clock.
+- Exact-main quality42148414856 and staging-sync PR837 quality42148463802 passed.
+  Staging deployment42148685229 succeeded atf4475f8a7cf7c20d3d9c1e674444bba7f13ae7de,
+  containing539f200c18327f322c5e5fede09a001a342435ad before production promotion.
+- Six forward migrations20261105060000/061000/062000/063000 and
+  20261106060000/070000 were audited, twice-rehearsed under rollback and applied
+  to both environments. Combined normalized SHA256
+  b76d5808709efe926396562fde67dcc1e48781161a82a2c336d808a772071231.
+  Staging ledger253/production250 and nine new tables verified. Default receiving
+  policy remains OFF, managers0; no automatic grants, old notification backfill
+  or historical SLA snapshot rewrite. Protected transaction fingerprints prove
+  documents/signatures/profiles/calendar/revisions/outbound were unchanged.
+- PostgREST relationship regression was reproduced as PGRST201 after600: a
+  composite manager PK inferred a second profiles-to-department relationship.
+  Forward700 uses a surrogate PK plus unique department/user pair. Actual profile
+  embedding returned200 again in staging and production, retaining pair UPSERT,
+  RLS and audit. No ACL/owner mass rewrite or migration ledger repair was used.
+- Real PostgreSQL17 tests cover repeated migrations, weekly Thursday16 cutoff,
+  monthly intersection, holiday/break, impossible windows, frozen snapshots,
+  transfer/revocation/inactivity, grant isolation, persisted audit and concurrent
+  delivery leases. Actual own-department delegated writes/foreign denial were
+  rehearsed against both databases with rollback only. Affected UI/security tests,
+  lint/typecheck/frontend/backend builds and high/critical audit gate passed.
+- Cloudflare production maintenance worker versiondf6b5eee-9c56-4fdc-bf41-0e5316d55f36
+  preserves bindings/control namespace/revision8/completed history. No live
+  maintenance or release-note event was created. What's New edge/component/SQL
+  coverage passed; a live completion-modal event is not claimed as accepted.
+- Tester P3 notification preferences saved and survived refresh. Actual embedded
+  browser activation reports push_provider_unsupported at persist/HTTP400;
+  safe diagnostic code retained, provider SSRF allowlist not relaxed. No test
+  notification sent; actual OS popup/background-click acceptance in a supported
+  normal browser remains unverified. No account organization was changed.
+- Production workflow42149212928 is pending final rollout verification at this
+  checkpoint. Production jobs flags are prepared in a protected host environment;
+  staging audience is Tester P3 only. No submission, approval or vendor POST/resend.
+  PROJECT_CONTEXT.md remains absent; existing shared document structure retained.
+
 ## 2026-11-05 [Codex] CAL-10 Shared Team Calendar Implementation
 
 - Claimed819 on main-based codex/calendar-team-scope-20261105. User approved
