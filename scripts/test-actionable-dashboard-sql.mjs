@@ -7,7 +7,8 @@ const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
 const notifications = process.argv.includes('--notifications');
-const receiving = process.argv.includes('--receiving');
+const weekly = process.argv.includes('--weekly');
+const receiving = process.argv.includes('--receiving') || weekly;
 const signerScope = process.argv.includes('--signer-scope') || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
 const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
@@ -185,6 +186,13 @@ try {
    +read('supabase/tests/department_receiving_periods.integration.sql'));
   if(!proof.includes('SLA02 monthly receiving and frozen clocks passed'))throw Error('Missing SLA02 assertions');
   console.log('SLA02: monthly rules, immutable stage snapshots, receiving guards, RLS and clocks passed.');
+  if(weekly){
+   const weeklyPolicy=read('supabase/migrations/20261106060000_weekly_department_sla_management.sql');
+   const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],weeklyPolicy+weeklyPolicy
+    +read('supabase/tests/weekly_department_sla.integration.sql'));
+   if(!result.includes('SLA02 weekly receiving and delegated management passed'))throw Error('Missing weekly SLA assertions');
+   console.log('SLA02: weekly windows, default off, scoped delegation, audit and frozen signer SLA passed.');
+  }
  }
  console.log('Actionable dashboard: all assertions passed (canonical business clock, real PostgreSQL, RLS, hierarchy, queue, history, SLA, authorization).');
 } finally {run(['rm','-f',container]);}

@@ -35,4 +35,37 @@ describe('self-service notification settings',()=>{
   expect(screen.queryByText('Notifikasi browser aktif')).not.toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Aktifkan notifikasi browser'})).toBeEnabled();
  });
+ it.each([
+  ['register','TypeError'],['ready','SecurityError'],['lookup','InvalidStateError'],
+  ['subscribe','NotAllowedError'],['subscribe','InvalidStateError'],
+ ])('shows sanitized %s / %s activation details',async(stage,code)=>{
+  h.subscribe.mockResolvedValue({enabled:false,reason:'activation_failed',details:{stage,code}});mount();
+  fireEvent.click(await screen.findByRole('button',{name:'Aktifkan notifikasi browser'}));
+  const status=await screen.findByRole('status');
+  expect(status).toHaveTextContent(`Tahap: ${stage}; kode: ${code}.`);
+  expect(screen.queryByText('Notifikasi browser aktif')).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Aktifkan notifikasi browser'})).toBeEnabled();
+ });
+ it.each([400,401,403,500])('shows safe persistence HTTP %s and correlation ID, then clears them on retry',async(httpStatus)=>{
+  h.subscribe.mockResolvedValueOnce({enabled:false,reason:'activation_failed',details:{stage:'persist',code:'HttpError',httpStatus,requestId:'push_req-1234'}})
+   .mockResolvedValueOnce({enabled:true});mount();
+  fireEvent.click(await screen.findByRole('button',{name:'Aktifkan notifikasi browser'}));
+  expect(await screen.findByRole('status')).toHaveTextContent(`Tahap: persist; kode: HttpError; HTTP: ${httpStatus}; ID: push_req-1234.`);
+  fireEvent.click(screen.getByRole('button',{name:'Aktifkan notifikasi browser'}));
+  expect(await screen.findByText('Notifikasi browser aktif')).toBeInTheDocument();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+ });
+ it('preserves the provider-unavailable message alongside safe details',async()=>{
+  h.subscribe.mockResolvedValue({enabled:false,reason:'provider_unavailable',details:{stage:'subscribe',code:'AbortError'}});mount();
+  fireEvent.click(await screen.findByRole('button',{name:'Aktifkan notifikasi browser'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Layanan push browser tidak dapat dihubungi.');
+  expect(screen.getByRole('status')).toHaveTextContent('Tahap: subscribe; kode: AbortError.');
+ });
+ it('never displays a raw unexpected exception',async()=>{
+  h.subscribe.mockRejectedValue(new Error('https://private.invalid/endpoint?key=private'));mount();
+  fireEvent.click(await screen.findByRole('button',{name:'Aktifkan notifikasi browser'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Notifikasi browser belum dapat diaktifkan. Coba lagi.');
+  expect(screen.getByRole('status')).not.toHaveTextContent(/private|endpoint|key=/);
+  expect(screen.getByRole('button',{name:'Aktifkan notifikasi browser'})).toBeEnabled();
+ });
 });
