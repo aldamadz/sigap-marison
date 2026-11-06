@@ -1,11 +1,27 @@
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import assert from "node:assert/strict";
 
 const migration = readFileSync("supabase/migrations/20260818170000_external_submission_decisions.sql", "utf8");
+const receiptMigration = readFileSync("supabase/migrations/20261106090000_external_submission_decision_receipts.sql", "utf8");
+const receiptRevisionMigration = readFileSync("supabase/migrations/20261106093000_external_submission_decision_revision_dispatch.sql", "utf8");
+const receiptTests = readFileSync("supabase/tests/external_submission_decision_receipts.integration.sql", "utf8");
+const receiptRevisionTests = readFileSync("supabase/tests/external_submission_decision_revision_dispatch.integration.sql", "utf8");
+const canonicalOwnerFixture = String.raw`
+create role canonical_writer;
+grant service_role to canonical_writer;
+grant usage on schema public,auth,extensions to canonical_writer;
+grant all on all tables in schema public to canonical_writer;
+grant usage,select on all sequences in schema public to canonical_writer;
+alter table public.external_submission_decision_events owner to canonical_writer;
+alter table public.surat_external_revision_history owner to canonical_writer;
+alter function public.apply_external_submission_decision(uuid,text,text,text,timestamptz,text,text) owner to canonical_writer;
+`;
 
 const schema = String.raw`
 create schema auth;
 create schema extensions;
+create extension pgcrypto with schema extensions;
 create role anon;
 create role authenticated;
 create role service_role;
@@ -54,8 +70,11 @@ create type public.marison_outbound_dispatch_status as enum('pending','processin
 create table public.marison_outbound_dispatches(
  id uuid primary key default gen_random_uuid(),surat_id uuid,environment text,generation integer,kind text,endpoint text,idempotency_key text unique,
  status public.marison_outbound_dispatch_status,replacement_of_dispatch_id uuid references public.marison_outbound_dispatches(id),post_started_at timestamptz,
- response jsonb,external_reference text,created_at timestamptz default now(),unique(surat_id,environment,generation)
+ response jsonb,external_reference text,payload jsonb,payload_body text,payload_hash text,payload_built_at timestamptz,
+ created_at timestamptz default now(),unique(surat_id,environment,generation)
 );
+create function public.marison_procurement_routing_block(p_id uuid) returns text language sql stable as
+$$select case when form_input_data->>'test_form'='KEU' then 'finance_not_connected' end from public.surat_registrasi where id=p_id$$;
 create function public.recommendation_all_items_rejected(uuid) returns boolean language sql stable as $$select false$$;
 create function public.accept_surat_process_revision(p_event_id uuid,p_note text default null) returns boolean language plpgsql security definer as $$
 begin
@@ -118,6 +137,17 @@ const run = (args, input = "") => {
   return result.stdout;
 };
 
+const runAsync = (args, input) => new Promise((resolve, reject) => {
+  const child = spawn("docker", args, { stdio: ["pipe", "pipe", "pipe"] });
+  let stdout = "", stderr = "";
+  const timer = setTimeout(() => { child.kill(); reject(new Error("Concurrent callback timed out")); }, 30_000);
+  child.stdout.on("data", value => { stdout += value; });
+  child.stderr.on("data", value => { stderr += value; });
+  child.on("error", error => { clearTimeout(timer); reject(error); });
+  child.on("close", code => { clearTimeout(timer); code === 0 ? resolve(stdout) : reject(new Error(stderr)); });
+  child.stdin.end(input);
+});
+
 const containerId = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"]).trim();
 try {
   let ready = false;
@@ -126,7 +156,29 @@ try {
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
-  process.stdout.write(run(["exec", "-i", containerId, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], `${schema}\n${tests}`));
+  process.stdout.write(run(["exec", "-i", containerId, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"], `${schema}\n${canonicalOwnerFixture}\n${tests}\n${receiptMigration}\n${receiptMigration}\n${receiptRevisionMigration}\n${receiptRevisionMigration}\n${receiptTests}\n${receiptRevisionTests}`));
+  const sqlArgs = ["exec", "-i", containerId, "psql", "-X", "-qAt", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1"];
+  run(sqlArgs, `
+    insert into auth.users values('70000000-0000-4000-8000-000000000001');
+    insert into public.profiles values('70000000-0000-4000-8000-000000000001',true);
+    insert into public.surat_registrasi(id,created_by,no_surat,status,current_step,updated_at)
+    values('70000000-0000-4000-8000-000000000002','70000000-0000-4000-8000-000000000001','FUND-CONCURRENT','DONE',1,now()-interval '2 days');
+    insert into public.surat_signatures(id,surat_id,user_id,step_order,is_signed,signed_at,status)
+    values(gen_random_uuid(),'70000000-0000-4000-8000-000000000002','70000000-0000-4000-8000-000000000001',1,true,now()-interval '2 days','APPROVED');
+    insert into public.marison_outbound_dispatches(surat_id,environment,generation,kind,endpoint,idempotency_key,status,post_started_at,payload_built_at,payload,payload_body,payload_hash)
+    values('70000000-0000-4000-8000-000000000002','staging',1,'fund','/fund-submissions','concurrent-fund','failed_terminal',now()-interval '23 hours',now()-interval '1 day',
+      '{"submission_number":"FUND-CONCURRENT"}','{"submission_number":"FUND-CONCURRENT"}',
+      encode(extensions.digest('{"submission_number":"FUND-CONCURRENT"}','sha256'),'hex'));
+  `);
+  const callback = `begin; select public.apply_external_submission_decision(
+    '70000000-0000-4000-8000-000000000003','FUND-CONCURRENT','rejected','Synthetic concurrent decision',now(),repeat('f',64),'staging');
+    select pg_sleep(0.2); commit;`;
+  const results = await Promise.all([runAsync(sqlArgs, callback), runAsync(sqlArgs, callback)]);
+  const decisions = results.map(output => JSON.parse(output.split("\n").find(line => line.startsWith("{"))));
+  assert.equal(decisions.filter(value => value.idempotent === false).length, 1);
+  assert.equal(decisions.filter(value => value.idempotent === true).length, 1);
+  assert.equal(run(sqlArgs, "select count(*) from public.external_submission_decision_receipts;").trim(), "1");
+  process.stdout.write("Concurrent external callbacks: two connections, one decision and one immutable receipt.\n");
 } finally {
   run(["rm", "-f", containerId]);
 }

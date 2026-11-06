@@ -1,5 +1,46 @@
 # Worklog
 
+## 2026-11-06 [Codex] MRN-30 Receipt-Bound Revision Completion
+
+- Forward follow-up20261106093000 is required alongside900. Final review found
+  the existing external-revision enqueue still selected succeeded predecessors
+  only; accepting a callback alone would leave later Fund reapproval unsent.
+  New evidence predicate binds the resolved current revision event/history to
+  its receipt, exact predecessor and completed approvals. Original retry and
+  unrelated replacement/identity rewrites are blocked by a database trigger.
+- Real PG17 fixture covers callback -> requester draft -> resubmit -> approval
+  completion -> exactly one fresh pending generation. Original failed payload
+  stays unchanged, unsigned/unresolved replacement and completion replay fail
+  closed. Two-connection idempotency still passes. Unit path unchanged.
+- Migration900 already applied staging after rehearsals, ledger254; app runtime
+  staging420fd01 deployed by42162774102. Source0487746 CI42162628010 passed;
+  initial staging integration PR841 completed. Production900 was NOT applied.
+  Actual010 rejected/revision_required canonical routines both passed inside
+  deliberately rolled-back subtransactions; all business fingerprints retained.
+- This new930 is never an edit of applied900. Remaining: combined rehearsal,
+  source/CI refresh, staging930 rollout and selective production promotion.
+
+## 2026-11-06 [Codex] MRN-30 Missing Fund Callback Receipt
+
+- Issue839, owned isolated codex/external-decision-receipt-20261106 from main539f200.
+  User approved the authenticated callback receipt rule, staging then production.
+  Production010 remains DONE with only an old main_document422 failed dispatch,
+  no decision event and no vendor ID. Authorized vendor GET lookup returns404;
+  no business POST or manual success was performed to invent evidence.
+- New20261106090000 patches only the exact preserved decision guard with drift
+  assertions. Latest posted terminal/unknown Fund payload must still match the
+  final document, approvals, hash, number, environment and decision chronology.
+  Append-only private receipt is committed only with a real authenticated decision.
+  Historical dispatch state/response/payload/hash and external reference remain.
+- PostgreSQL17 migration applied twice, rejected/revision/idempotency/rollback,
+  wrong environment, no POST, active/new generation, stale/changed/forged payload,
+  unsigned/newer approval, KEU/Unit exclusion and private ACL assertions pass.
+  Two independent connections produce one decision and one receipt on replay.
+- Remaining: affected gates, actual canonical-wrapper rehearsals, staging and
+  selective production migration/deployment. No real production callback will
+  be manufactured for acceptance; external must retry its own signed decision.
+  PROJECT_CONTEXT.md remains absent; no shared document structure changed.
+
 ## 2026-11-05 [Codex] CAL-10 Shared Team Calendar Implementation
 
 - Claimed819 on main-based codex/calendar-team-scope-20261105. User approved

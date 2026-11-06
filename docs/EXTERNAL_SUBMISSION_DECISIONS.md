@@ -49,7 +49,32 @@ karena menangani retry dan duplikasi keputusan pada tingkat bisnis.
 - Dokumen harus final.
 - Harus ada dispatch environment aktif berstatus `succeeded`, sudah melewati
   batas POST, dan mempunyai response atau external reference.
+- Pengecualian pemulihan Dana PGD: callback resmi yang lolos autentikasi dapat
+  mengonfirmasi penerimaan ketika generasi terakhir berstatus `failed_terminal`
+  atau `outcome_unknown`, sudah POST, dan payload beku masih cocok dengan nomor
+  serta versi final dokumen. Dokumen yang berubah setelah payload dibuat,
+  tanda tangan belum lengkap/lebih baru, keputusan sebelum POST/di masa depan,
+  pengiriman aktif, belum POST, salah environment, serta form KEU tetap ditolak.
+  Unit tetap memerlukan bukti penerimaan/ID vendor sesuai kontrak revisinya.
 - Dokumen rekomendasi anak tidak dapat diputuskan langsung; gunakan nomor induk.
+
+Pemulihan tersebut menyimpan bukti append-only di
+`external_submission_decision_receipts`, mengikat event keputusan dengan dispatch,
+environment, nomor, generasi, status lama, hash payload, dan waktu pencatatan.
+Callback, keputusan, bukti, notifikasi dan pembukaan revisi adalah satu transaksi;
+gagal di tahap berikutnya tidak meninggalkan bukti palsu. Replay identik tidak
+menggandakan audit. Tabel hanya dapat dibaca service, bukan pemohon.
+Status, response, ID vendor, serta payload/hash dispatch gagal lama tidak diubah.
+Tidak ada ID vendor rekaan, pengiriman ulang, atau pembuatan keputusan otomatis
+saat migration diterapkan. External perlu mengulangi callback resminya setelah
+rilis; penolakan final dan permintaan revisi tetap mempunyai perilaku berbeda.
+
+Setelah revisi diperbaiki dan seluruh persetujuan selesai, migration
+`20261106093000` mengizinkan generasi baru dari bukti callback tersebut. Bukti
+harus terikat ke event revisi yang sudah resolved, history dan generation aktif.
+Pengulangan completion tidak membuat generasi tambahan. Bukti callback tidak
+mengizinkan reopen/retry dispatch lama atau replacement tanpa revisi yang sah;
+guard database tetap berlaku walaupun aksi dipanggil langsung melalui RPC.
 
 ## Keputusan
 
