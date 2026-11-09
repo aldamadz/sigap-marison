@@ -1,5 +1,26 @@
 # Worklog
 
+## 2026-11-09 [Codex] AUTH-03 Password Recovery SMTP Diagnosis (Issue866)
+
+- User reports service_unavailable on production forgot-password. Read-only
+  diagnosis only; no new production deployment/config/secret mutation authorized.
+- Live SHA c73e2c8, readiness200; app, self-hosted database and Auth healthy.
+  Existing application request log confirms Password reset email failed with
+  EAUTH, AUTH PLAIN, SMTP5355.7.8. No diagnostic recovery POST/link/email was sent.
+- Required SMTP settings are present, TLS465 configured, and every SMTP runtime
+  value matches the protected operator environment file; only booleans were
+  output. This is credential/account-policy rejection, not stale container config
+  or evidence that the SIGAP account's password is wrong. Exact provider-side
+  reason still requires authorized SMTP/account verification.
+- handlePasswordResetRequest generates the recovery link before SMTP delivery;
+  send failure raises503. Maintenance edge maps origin503 to service_unavailable,
+  obscuring this dependency-specific failure. Do not bypass edge/SMTP security or
+  expose account existence, internal SMTP replies or recovery tokens to clients.
+- Pending explicit permission: repair production SMTP credentials/account access;
+  separately stage a safe reset-error message. No account/password, database,
+  environment, app container, worker, outbound or maintenance state changed.
+  PROJECT_CONTEXT.md absent; original dirty workspace untouched.
+
 ## 2026-11-09 [Codex] SLA-03 Production Authorization and Compatibility
 
 - User explicitly authorizes production after staging beeb26b and its successful
