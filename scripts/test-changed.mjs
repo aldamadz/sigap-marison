@@ -98,7 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
-  if (/signer_action_sla.*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
+  if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
   if (/department_receiving_periods.*\.sql$/u.test(file)) gates.add('department-receiving-sql');
   if (/weekly_department_sla.*\.sql$/u.test(file)) gates.add('department-weekly-sql');
