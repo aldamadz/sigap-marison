@@ -1,5 +1,21 @@
 # Worklog
 
+## 2026-11-09 [Codex] SLA-03 Production Authorization and Compatibility
+
+- User explicitly authorizes production after staging beeb26b and its successful
+  guarded deploy42561938182. PR862 selects only the main-based SLA03 branch.
+- Production252-version lineage matches the protected MRN30 baseline. Initial
+  rollback rehearsal failed closed on compact active-breach SQL formatting;
+  no committed production schema or business change occurred.
+- New forward migration20261109105900 normalizes only that known compact call
+  before immutable20261109110000. Explicit audited order is compat then clock;
+  staging already has the clock and compat is a no-op. No blind history repair.
+- Real PG17 tests cover compact formatting, unchanged semantics/owner/ACL,
+  repeated compatibility before/after clocks and the full action-clock suite.
+  Actual production rollback rehearsal now passes:153clocks,21paused candidates;
+  business fingerprints and approval/verification guards unchanged. Apply and
+  selective main/staging ancestry/production rollout still pending.
+
 ## 2026-11-09 [Codex] SLA-03 Local and Staging Rehearsal Checkpoint
 
 - Private interval accounting and existing authorized KPI metadata implemented.

@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## SLA-03 Production Promotion Addendum (2026-11-09, Issue858)
+
+- User authorizes selective production promotion after live staging beeb26b.
+  PR862 tracks only the main-based SLA03 source, not all staging features.
+- Apply new compatibility20261109105900 before immutable clock20261109110000
+  on production. The compact production active-breach SQL is normalized without
+  changing its behavior/ACL. Existing staging clock makes compatibility a no-op.
+  Catalog/ledger audit, rollback proof and live staging ancestry precede release.
+- No approval, external resend or retrospective SLA correction is authorized.
+
 ## SLA-03 Action-Ready Signer Clock (2026-11-09, Issue858)
 
 - Staging-only correction requested after read-only production diagnosis: signer
