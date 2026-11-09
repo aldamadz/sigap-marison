@@ -6,10 +6,12 @@ import { join } from 'node:path';
 process.umask(0o077);
 const mode=process.argv[2];
 if(!['preflight','rehearse','apply','verify'].includes(mode))throw Error('Choose an explicit staging operator mode.');
-const root='/home/marison/sigap-deploy/builds/sla03-20261109';
+const compat=process.argv.includes('--compat');
+const root='/home/marison/sigap-deploy/builds/'+(compat?'sla03-compat-20261109':'sla03-20261109');
 mkdirSync(root,{recursive:true,mode:0o700});
-const version='20261109110000';
-const source=readFileSync(join(root,`${version}_signer_action_sla_clock.sql`),'utf8').replaceAll('\r\n','\n');
+const version=compat?'20261109105900':'20261109110000';
+const migrationName=compat?'signer_action_sla_clock_compat':'signer_action_sla_clock';
+const source=readFileSync(join(root,`${version}_${migrationName}.sql`),'utf8').replaceAll('\r\n','\n');
 if(!source.trimEnd().endsWith('commit;')||!source.includes('\nbegin;'))throw Error('Unexpected migration boundary.');
 const inner=source.slice(source.indexOf('\nbegin;')+7).trimEnd().slice(0,-7);
 const digest=createHash('sha256').update(source).digest('hex');
@@ -37,8 +39,8 @@ const snapshot=`select jsonb_build_object('versions',(select jsonb_agg(version o
 const sameSet=(a,b)=>JSON.stringify([...new Set(a)].sort())===JSON.stringify([...new Set(b)].sort());
 if(mode==='preflight'){
  const data=await query('begin read only;set local statement_timeout=\'30s\';'+snapshot+'rollback;',true);
- const baseline=JSON.parse(readFileSync('/home/marison/sigap-deploy/builds/external-decision-final-20261106/before.json','utf8'));
- const expected=[...baseline.versions,...baseline.pending];
+ const baseline=JSON.parse(readFileSync(compat?'/home/marison/sigap-deploy/builds/sla03-20261109/apply.json':'/home/marison/sigap-deploy/builds/external-decision-final-20261106/before.json','utf8'));
+ const expected=[...baseline.versions,...(baseline.pending??[])];
  if(!sameSet(data.versions,expected))throw Error('Migration lineage drift: audit before applying; no bulk replay.');
  if(data.versions.includes(version))throw Error('Migration already applied; use verify.');
  save('before.json',{...data,digest});
@@ -57,7 +59,7 @@ if(mode==='preflight'){
   if exists(select 1 from sla_kpi_acl_before b cross join pg_proc p where p.oid='public.get_department_kpi_details(timestamptz,timestamptz,uuid,uuid,uuid,text)'::regprocedure and (b.proowner<>p.proowner or b.grants is distinct from array(select acl.grantee::text||':'||acl.privilege_type||':'||acl.is_grantable from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl order by acl.grantee,acl.privilege_type))) then raise exception 'KPI authorization owner or grants changed';end if;
   if has_schema_privilege('authenticated','sla_clock_internal','usage') or has_function_privilege('service_role','sla_clock_internal.refresh(uuid,timestamptz,boolean)','execute') then raise exception 'Private clock exposed';end if;
  end $check$;`;
- if(mode==='apply')sql+=`insert into supabase_migrations.schema_migrations(version,name,statements) values('${version}','signer_action_sla_clock',array[$sla_migration$${source}$sla_migration$]);`;
+ if(mode==='apply')sql+=`insert into supabase_migrations.schema_migrations(version,name,statements) values('${version}','${migrationName}',array[$sla_migration$${source}$sla_migration$]);`;
  sql+=`select jsonb_build_object('preserved',true,'guarded',true,'clock_count',(select count(*) from sla_clock_internal.clocks),'paused',(select count(*) from sla_clock_internal.periods where ended_at is null and phase in ('waiting','scheduled')),'versions',(select jsonb_agg(version order by version) from supabase_migrations.schema_migrations)) audit;`;
  sql+=mode==='apply'?'commit;':'rollback;';
  const result=await query(sql);
