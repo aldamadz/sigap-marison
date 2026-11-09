@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Production Promotion Authorized (2026-11-09)
+
+- User selects browser notification activation/status fixes for production.
+  Same feature branch, no whole-staging merge. Test controls and local popup
+  test execution remain exact-staging-build only; no production test send.
+- No schema/worker/provider/audience changes. Repeat focused gates and selective
+  main PR; main must enter live staging before production rollout. Final runtime
+  identities and acceptance limits belong to the forward release proof.
+
 ## NTF-07 Popup Follow-Up Released Staging (2026-11-06)
 
 - PR847/live1268e27; source CI42201443801, push CI42201791767 and official

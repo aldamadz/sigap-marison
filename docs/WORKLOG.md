@@ -1,5 +1,20 @@
 # Worklog
 
+## 2026-11-09 [Codex] NTF-07 Selected Production Promotion
+
+- User explicitly authorizes production for the browser notification fixes.
+  Reuse owned main-based branch and Issue845; historical staging-only decisions
+  above/below are superseded only for this selected promotion.
+- Release activation status restoration on remount/focus, shared control state,
+  permission revocation handling and safe retry diagnostics. Explicit popup and
+  self-delivery test controls remain gated to the exact staging public build URL;
+  neither test control is exposed or executed in production.
+- No backend/DB migration, worker source, provider allowlist, recipient audience,
+  business document or outbound change. Current live production c2e95a8; live
+  staging1268e27. Repeat affected gates, selective main PR, main ancestry sync to
+  live staging and public runtime/build/readiness verification remain required.
+- PROJECT_CONTEXT.md still absent. Primary dirty worktree/user files untouched.
+
 ## 2026-11-06 [Codex] NTF-07 Popup Follow-Up Staging Verified
 
 - Source479ec2b+e8b2fec, PR847 merged1268e27. Final source CI42201443801,
