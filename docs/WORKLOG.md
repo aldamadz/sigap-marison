@@ -2,6 +2,32 @@
 
 ## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
 
+### 2026-11-09 [Codex] AUTH-03 / SLA-03 / SUR-41 Staging Release Complete
+
+- Supersedes candidate/pending staging statuses for Issues872/873/874.
+  PR875 (AUTH), PR877 (Unit), PR876 (SLA) merged selectively into staging.
+  Public and container runtime: 4fc28a6bf9d922933ec0025d18ca0c56ee9d05a8.
+- Deploy42602662247 quality AND deploy succeeded. Exact live-base gate:
+  20 files / 204 tests, isolated real PostgreSQL authority/clock suites,
+  lint, all workspace typechecks and build passed. Public version/live/ready/root
+  smoke passed; app healthy. Cached-toolchain mismatches were not bypassed.
+- Forward migrations20261109170000/20261109171000 applied only to staging after
+  verified 257-version lineage, canonical RPC owner audit and double-apply rollback
+  rehearsal. Ledger259 and restricted RPC/INVOKER guards verified after release.
+  Business fingerprints unchanged; no retrospective SLA reconstruction.
+- Password recovery has uniform public feedback independent of account lookup
+  and delivery; bounded background delivery is best effort, not a durable queue.
+  Unit dispatch fails closed when immutable examination receipts are missing or
+  stale; it does not invent a verified flag for historical data.
+- No real recovery email, approval, vendor POST/resend, secret rotation, historical
+  payload rewrite or production deployment. Main remains978c0e1; production still
+  needs an explicitly authorized selective promotion to receive these fixes.
+- Audit high/critical gate passed;18 existing moderate advisories remain outside
+  this three-finding correction. No dependency change or broad security-pass claim.
+- Durable rule: caller-controlled flags are not lifecycle/examination authority;
+  use canonical revision events and immutable verification receipts. Applied
+  migrations remain immutable; future corrections require a new migration.
+
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
 
 
