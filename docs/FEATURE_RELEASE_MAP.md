@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+## AUTH-03 Authorized Recovery Candidate (2026-11-09, Issue866)
+
+- User authorizes restoring SMTP and selected production release after staging.
+  Safe reset feedback for5xx/rate-limit/network errors and restricted SMTP error
+  logs are implemented with synthetic UI/dispatcher tests; auth policy unchanged.
+- No-message SMTP verification still rejects both environments535; hPanel login
+  needed for mailbox/account recovery. No credentials rotated/config changed yet.
+  Candidate is not a claim of restored mail delivery or a completed deployment.
+
 ## AUTH-03 SMTP Recovery Diagnosis (2026-11-09, Issue866)
 
 - Production forgot-password currently fails at SMTP authentication5355.7.8;
