@@ -43,6 +43,7 @@ const workDuration = (minutes: number) => {
 export const DashboardSla = ({ row }: { row: DashboardRow }) => {
   if(row.receiving_at && Date.parse(row.receiving_at)>Date.now())return <ReceivingPeriodNotice availableAt={row.receiving_at} note={row.receiving_message}/>;
   if (row.bucket === 'returned') return <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"><Undo2 className="h-3.5 w-3.5" />Dijeda untuk perbaikan</span>;
+  if (row.sla_paused) return <div className="space-y-2 text-xs"><span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-2 py-1 font-medium text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />SLA dijeda</span><div className="max-w-44 break-words text-muted-foreground">{row.sla_pause_reasons?.join('; ') || 'Menunggu prasyarat'}</div></div>;
   if (row.elapsed_minutes === null) return <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{['completed', 'rejected'].includes(row.bucket) ? 'Tidak terukur' : 'Belum mulai'}</span>;
   const late = row.elapsed_minutes > row.sla_minutes;
   const difference = Math.abs(row.elapsed_minutes - row.sla_minutes);
@@ -160,7 +161,7 @@ export function ActionableDashboard({ userId }: { userId: string }) {
           </tr></thead><tbody className="block divide-y divide-border lg:table-row-group">
             {query.isPending ? <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Memuat pengajuan…</td></tr> : !data?.rows.length ?
               <tr><td colSpan={5} className="p-10 text-center text-muted-foreground"><Inbox className="mx-auto mb-3 h-7 w-7 text-muted-foreground/60" aria-hidden="true" />Tidak ada pengajuan pada kategori ini.</td></tr> : data.rows.map(row => <tr key={row.id} className="grid grid-cols-2 align-top transition-colors hover:bg-muted/30 lg:table-row">
-                <td className={cn('col-span-2 block border-l-2 px-4 py-4 lg:table-cell lg:py-5', row.elapsed_minutes !== null && row.elapsed_minutes > row.sla_minutes && row.bucket !== 'returned' ? 'border-l-red-500' : 'border-l-transparent')}>
+                <td className={cn('col-span-2 block border-l-2 px-4 py-4 lg:table-cell lg:py-5', !row.sla_paused && row.elapsed_minutes !== null && row.elapsed_minutes > row.sla_minutes && row.bucket !== 'returned' ? 'border-l-red-500' : 'border-l-transparent')}>
                   <div className="flex gap-3"><span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground"><FileText className="h-4 w-4" aria-hidden="true" /></span><div className="min-w-0">
                   <div className="mb-1.5 break-all text-xs font-medium tabular-nums text-muted-foreground">{row.no_surat || 'Nomor belum tersedia'}</div>
                   <Link className="line-clamp-2 break-words font-semibold leading-relaxed hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" to={dashboardRowLink(row, scope)}>{row.title}</Link>
@@ -173,7 +174,7 @@ export function ActionableDashboard({ userId }: { userId: string }) {
                   {row.needs_recommendation && row.bucket !== 'completed' && <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"><Clock3 className="h-3 w-3 shrink-0" />Menunggu rekomendasi</div>}
                   {row.revision_reason && <p className="mt-2 line-clamp-2 max-w-56 text-xs text-muted-foreground">{row.revision_reason}</p>}</td>
                 <td className="block min-w-0 px-4 pb-4 lg:table-cell lg:py-5"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">SLA</span><DashboardSla row={row} /></td><td className="block self-end px-4 pb-4 lg:table-cell lg:py-5"><div className="flex justify-end gap-2 lg:justify-start">
-                  {(!row.receiving_at||Date.parse(row.receiving_at)<=Date.now()) && row.can_remind !== false && row.current_signer_id !== userId && ((row.bucket === 'returned' && scope !== 'mine') || (['ready','waiting'].includes(row.bucket) && !row.needs_verification && !row.needs_recommendation)) &&
+                  {(!row.receiving_at||Date.parse(row.receiving_at)<=Date.now()) && row.can_remind !== false && row.current_signer_id !== userId && ((row.bucket === 'returned' && scope !== 'mine') || (['ready','waiting'].includes(row.bucket) && !row.sla_paused && !row.needs_verification && !row.needs_recommendation)) &&
                     <Button variant="ghost" size="icon" title="Ingatkan penanggung jawab" aria-label={`Ingatkan ${row.no_surat || row.title}`} disabled={reminding !== null} onClick={() => { void remind(row); }}><BellRing className={cn('h-4 w-4', reminding === row.id && 'animate-pulse')} /></Button>}
                   <Button asChild variant="outline" size="icon" title="Buka pengajuan" aria-label={`Buka ${row.no_surat || row.title}`}><Link to={dashboardRowLink(row, scope)}><ArrowRight className="h-4 w-4" /></Link></Button>
                 </div></td>

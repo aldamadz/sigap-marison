@@ -7,7 +7,8 @@ const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
 const notifications = process.argv.includes('--notifications');
-const weekly = process.argv.includes('--weekly');
+const actionClock = process.argv.includes('--action-clock');
+const weekly = process.argv.includes('--weekly') || actionClock;
 const receiving = process.argv.includes('--receiving') || weekly;
 const signerScope = process.argv.includes('--signer-scope') || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
@@ -190,9 +191,30 @@ try {
    const weeklyPolicy=read('supabase/migrations/20261106060000_weekly_department_sla_management.sql');
    const relationship=read('supabase/migrations/20261106070000_weekly_department_sla_profile_relationship.sql');
    const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],weeklyPolicy+weeklyPolicy+relationship+relationship
-    +read('supabase/tests/weekly_department_sla.integration.sql'));
-   if(!result.includes('SLA02 weekly receiving and delegated management passed'))throw Error('Missing weekly SLA assertions');
-   console.log('SLA02: weekly windows, default off, scoped delegation, audit and frozen signer SLA passed.');
+    +(process.argv.includes('--weekly') ? read('supabase/tests/weekly_department_sla.integration.sql') : ''));
+   if(process.argv.includes('--weekly')) {
+    if(!result.includes('SLA02 weekly receiving and delegated management passed'))throw Error('Missing weekly SLA assertions');
+    console.log('SLA02: weekly windows, default off, scoped delegation, audit and frozen signer SLA passed.');
+   }
+   if(actionClock){
+    const clockSetup=`alter table surat_linked_documents add column child_surat_id uuid,add column link_type text,add column status text default 'active';
+     alter table surat_registrasi add column policy_snapshot jsonb default '{}';
+     create function public.recommendation_pdf_is_current(p_id uuid) returns boolean language sql stable as $$
+      select coalesce((data_snapshot->>'current_pdf')::boolean,false) from public.surat_registrasi where id=p_id;
+     $$;`;
+    const clockMigration=read('supabase/migrations/20261109110000_signer_action_sla_clock.sql');
+    const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],clockSetup+clockMigration+clockMigration
+     +read('supabase/tests/signer_action_sla.integration.sql'));
+    if(!result.includes('SLA03 actionable clock assertions passed'))throw Error('Missing SLA03 assertions');
+    const refreshClock=()=>new Promise((resolve,reject)=>{
+     const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});let output='',error='';
+     child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});child.on('error',reject);child.on('close',code=>code===0?resolve(output):reject(Error(error)));
+     child.stdin.end("begin;select sla_clock_internal.refresh(tid(9002));select pg_sleep(0.1);commit;");
+    });
+    await Promise.all([refreshClock(),refreshClock()]);
+    run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],"select check_ok((select count(*)=1 from sla_clock_internal.periods where signature_id=tid(9002) and ended_at is null),'concurrent refresh keeps one open interval');");
+    console.log('SLA03: waiting, resume, accumulated work time, authorization and all SLA read surfaces passed.');
+   }
   }
  }
  console.log('Actionable dashboard: all assertions passed (canonical business clock, real PostgreSQL, RLS, hierarchy, queue, history, SLA, authorization).');

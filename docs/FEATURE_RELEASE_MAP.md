@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## SLA-03 Action-Ready Signer Clock (2026-11-09, Issue858)
+
+- Staging-only correction requested after read-only production diagnosis: signer
+  SLA currently counts while verification/recommendation prevents approval.
+  Preserve existing approval/rejection policy; include its recommendation
+  next-step prerequisite in readiness, not only the UI's current-step check.
+- Server-owned ready/waiting intervals pause for third-party prerequisites,
+  requester/checker revision and future receiving periods. Own form/attachment
+  preparation is still signer work. Resume preserves accumulated working time.
+- Private interval/history storage; no client clock controls or new public
+  endpoint. Inbox/dashboard/KPI/attention/reminders share the server clock.
+  Finished historical stages retain their existing measurement. Legacy active
+  measurements before cutover are retained, not reconstructed from missing events.
+- Forward migration, real PostgreSQL concurrency/authorization/clock tests and
+  affected UI tests precede staging rollout. No production permission, approval,
+  resend, business-history rewrite or worker change is implied.
+
 ## SUR-41 Editable Unit Examination / SUR-34 LT Promotion (2026-11-09, Issue852)
 
 - User authorizes staging then production. LT remains disabled/read-only, from

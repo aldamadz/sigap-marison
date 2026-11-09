@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   compact: null as Record<string, unknown> | null,
   currentUser: null as {id:string}|null,
   detailError: false,
+  kpi: [] as Record<string,unknown>[],
   noop: vi.fn(),
   requestRevision: vi.fn(),
   saveDraft: vi.fn(async (_signature: string, _payload: unknown, _note?: string) => ({})),
@@ -32,7 +33,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: mocks.noop }),
   useQuery: ({ queryKey }: { queryKey: unknown[] }) => ({
-    data: queryKey[0] === "surat-inbox-detail" ? queryKey[1] && !mocks.detailError ? mocks.fixture : undefined : queryKey[0] === "user-profile-inbox" ? mocks.currentUser : mocks.empty,
+    data: queryKey[0] === "surat-inbox-detail" ? queryKey[1] && !mocks.detailError ? mocks.fixture : undefined : queryKey[0] === "user-profile-inbox" ? mocks.currentUser : queryKey[0] === "surat-inbox-kpi" ? mocks.kpi : mocks.empty,
     isError: queryKey[0] === "surat-inbox-detail" && mocks.detailError,isFetching: false, isLoading: false,
   }),
 }));
@@ -80,6 +81,7 @@ const useKeu10 = (role = "verifikator") => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.compact = null;
+  mocks.kpi=[];
   mocks.currentUser=null;mocks.detailError=false;
   mocks.requestRevision.mockResolvedValue({ id: "revision" });
   mocks.prompt.mockResolvedValue(reason);
@@ -111,6 +113,14 @@ afterEach(() => {
 });
 
 describe("Inbox requester data and attachment revision", () => {
+  it('shows the server paused clock and blocks approval without blocking correction requests',async()=>{
+    mocks.fixture.step_order=2;
+    mocks.kpi=[{signature_id:'signature',elapsed_minutes:20,sla_minutes:120,is_late:false,sla_paused:true,sla_pause_reasons:['Menunggu rekomendasi']}];
+    renderInbox();
+    expect(await screen.findByText('SLA dijeda')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Setujui'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Perbaikan'})).toBeEnabled();
+  });
   it('allows examiner reference edits while LT stays external and saves edits across remount', async () => {
     const unit = {value:'2048',label:'B40',raw:{id:2048,type:'30/52',land_area:60,production_code:'001/UAI/PRC/5.2/07/10/2026'}};
     const project = {id:23,code:'TEST',name:'Proyek Uji'};
