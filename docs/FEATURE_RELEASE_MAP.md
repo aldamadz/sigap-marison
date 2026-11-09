@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## SUR-41 Editable Unit Examination / SUR-34 LT Promotion (2026-11-09, Issue852)
+
+- User authorizes staging then production. LT remains disabled/read-only, from
+  raw external land area only, absent from XLSX import. Select original SUR34
+  commit747cbfd changes only; do not promote its unrelated old staging ancestry.
+- Type, serial, design and date are seeded from external but editable by the
+  assigned examiner via existing draft/verification paths. Explicit empty edits
+  remain empty and block completion, never silently reset to external defaults.
+- Existing allocation_detail snapshots retain values and actor/time provenance.
+  Derived code, XLSX type import/export, summaries/PDF attachments and canonical
+  outbound builder use saved examination values. Raw external master identity,
+  project/unit existence and submitted/revision/availability guards remain.
+- Frozen dispatch payloads/history are not rewritten or resent. No migration,
+  new access, provider/config/worker change, or external master write. Focused
+  UI draft/remount, calendar edit, XLSX/PDF/value/transport regressions precede
+  staging validation and selective production promotion.
+
 ## NTF-07 Production Promotion Authorized (2026-11-09)
 
 - User selects browser notification activation/status fixes for production.
@@ -447,6 +464,19 @@
 - Production promotion explicitly authorized on 2026-10-19 after staging
   transition/restart acceptance, together with DASH-03. Provision independent
   production key, hostname and state; do not activate a test production schedule.
+## SUR-34 Unit Examiner External Land Area (2026-10-19, Issue #656)
+
+- Staging-only candidate: add a disabled LT (Luas Tanah), in square metres, beside
+  Tipe Unit in the selected-unit examiner table. Read only the external raw unit,
+  never imported/manual allocation details. Missing/invalid data stays empty;
+  it does not block verification or alter allocation totals, XLSX, PDF or outbound.
+- Supports numeric `land_area`, `luas_tanah` and `lt` references without changing
+  the external contract. A read-only staging GET `/unit` sample on 2026-10-19
+  returned only `id`, `code`, `production_code`, `type`, `has_submitted`: none
+  supplied LT. Digivasi must supply the area before those rows can display it;
+  alias support is not evidence that the current API already exposes these keys.
+- No database migration, worker rollout, extra external lookup, business mutation
+  or production authorization. Feature branch remains available for selective release.
 
 ## DASH-03 Actionable Role Dashboard (2026-10-19, Issue #638)
 

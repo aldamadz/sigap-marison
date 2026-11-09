@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   detailError: false,
   noop: vi.fn(),
   requestRevision: vi.fn(),
+  saveDraft: vi.fn(async (_signature: string, _payload: unknown, _note?: string) => ({})),
   prompt: vi.fn(),
   error: vi.fn(),
   empty: [],
@@ -49,11 +50,11 @@ vi.mock("@/hooks/useDocumentOpener", () => ({
   documentOperationKey: { pdf: () => "document", file: () => "file" },
 }));
 vi.mock("@/lib/supabase", () => ({
-  supabase: {channel:()=>{const channel={on:()=>channel,subscribe:()=>channel};return channel;},removeChannel:()=>undefined},
+  supabase: {auth:{getSession:async()=>({data:{session:{access_token:'fixture'}}})},channel:()=>{const channel={on:()=>channel,subscribe:()=>channel};return channel;},removeChannel:()=>undefined},
   onRealtimeReconnect:()=>({unsubscribe:()=>undefined}),
 }));
 vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({
-  suratApprovalApi: { requestProcessRevision: mocks.requestRevision },
+  suratApprovalApi: { requestProcessRevision: mocks.requestRevision, saveVerificationDraft:mocks.saveDraft },
 }));
 vi.mock("sonner", () => ({ toast: { error: mocks.error, success: mocks.noop } }));
 
@@ -110,6 +111,38 @@ afterEach(() => {
 });
 
 describe("Inbox requester data and attachment revision", () => {
+  it('allows examiner reference edits while LT stays external and saves edits across remount', async () => {
+    const unit = {value:'2048',label:'B40',raw:{id:2048,type:'30/52',land_area:60,production_code:'001/UAI/PRC/5.2/07/10/2026'}};
+    const project = {id:23,code:'TEST',name:'Proyek Uji'};
+    Object.assign(mocks.fixture,{task_type:'verification',verification_required:true,verification_status:'pending',requires_unit_allocation:true,action_type:'unit_allocation'});
+    Object.assign(mocks.fixture.surat_registrasi.form_input_data,{request_category:'unit',requested_unit_count:1,requested_project:project});
+    const snapshot = {verification_drafts:{signature:{input:{allocated_project:project,allocated_units:[unit]}}}};
+    Object.assign(mocks.fixture.surat_registrasi,{data_snapshot:snapshot});
+    vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({options:[unit]})})));
+    const first=renderInbox();
+    const type = await screen.findByRole('textbox',{name:'Tipe unit kavling B40'});
+    expect(type).toHaveValue('30/52');expect(type).not.toHaveAttribute('readonly');
+    expect(screen.getByRole('textbox',{name:'LT (Luas Tanah) kavling B40'})).toBeDisabled();
+    expect(screen.getByRole('textbox',{name:'LT (Luas Tanah) kavling B40'})).toHaveValue('60');
+    expect(screen.getByRole('button',{name:'Pilih tanggal produksi B40'})).toBeEnabled();
+    fireEvent.change(type,{target:{value:'36/72'}});
+    fireEvent.change(screen.getByRole('textbox',{name:'Nomor kode produksi kavling B40'}),{target:{value:'9'}});
+    fireEvent.blur(screen.getByRole('textbox',{name:'Nomor kode produksi kavling B40'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'Desain kode produksi kavling B40'}),{target:{value:'6.1'}});
+    fireEvent.click(screen.getByRole('button',{name:'Pilih tanggal produksi B40'}));
+    fireEvent.click(within(screen.getByRole('grid')).getByText('8',{selector:'button'}));
+    expect(type.closest('tr')).toHaveTextContent('009/UAI/PRC/6.1/08/10/2026');
+    await waitFor(()=>expect(mocks.saveDraft).toHaveBeenCalled(),{timeout:3000});
+    const payload=mocks.saveDraft.mock.lastCall![1] as any;
+    expect(payload.allocated_units[0].allocation_detail).toMatchObject({unit_type:'36/72',production_serial:'009',production_block:'6.1',production_date:'2026-10-08'});
+    expect(payload.allocated_units[0].raw).toEqual(unit.raw);
+    first.unmount();snapshot.verification_drafts.signature.input=payload;
+    renderInbox();
+    expect(await screen.findByRole('textbox',{name:'Tipe unit kavling B40'})).toHaveValue('36/72');
+    expect(screen.getByRole('textbox',{name:'Nomor kode produksi kavling B40'})).toHaveValue('009');
+    expect(screen.getByRole('textbox',{name:'Desain kode produksi kavling B40'})).toHaveValue('6.1');
+    expect(screen.getByRole('button',{name:'Pilih tanggal produksi B40'})).toHaveTextContent('08/10/2026');
+  });
   it('opens the requested canonical detail even when absent from the paginated compact queue',()=>{
     const signature='00000000-0000-4000-8000-000000000003',user='00000000-0000-4000-8000-000000000004';
     mocks.currentUser={id:user};mocks.fixture.id=signature;Object.assign(mocks.fixture,{user_id:user});

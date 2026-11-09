@@ -109,6 +109,32 @@ describe("current payload read-only orchestration", () => {
 });
 
 describe("canonical Unit builder", () => {
+  it.each([true, false])("uses saved examiner references and never overwrites external master data (external type=%s)", async hasType => {
+    const builder = source.slice(source.indexOf("const buildMarisonUnitPayload ="), source.indexOf("const normalizeMarisonItems ="));
+    const reference = { value: 2048, raw: { type: hasType ? '30' : null, production_code: '001/UAI/PRC/5.2/07/10/2026', has_submitted: false, land_area: 60 } };
+    const saved = { ...reference, allocation_detail: { unit_type: '36/72', production_serial: '009', production_block: '6.1', production_date: '2026-11-09', struktur_atas: '100', struktur_bawah: '200' } };
+    const original = structuredClone(reference);
+    const receipt = vi.fn((_project: number, refs: unknown[]) => refs);
+    const context = {
+      getMarisonRequestedProject: () => ({}), requireExternalInteger: (v: unknown) => Number(v), externalIdFrom: (v: any) => Number(v.value),
+      queryExternalDataSource: async () => ({ options: [reference] }), MARISON_UNITS_SOURCE_KEY: 'units',
+      getMarisonAllocatedUnits: () => [saved], asPlainRecord: (v: unknown) => v || {}, getExternalRaw: (v: any) => v.raw || {},
+      applyExternalUnitReference, buildProductionCode, firstString: (...values: unknown[]) => values.find(v => typeof v === 'string' && v.trim()) || '',
+      normalizeExternalDate: (v: string) => v, parseExternalMoney: Number, verifiedUnitReplacementReceipt: receipt,
+      buildMarisonDocumentLinks: async () => ({ mainDocument: link, attachments: [] }), normalizeMarisonSubmissionApprovals: () => [],
+      MARISON_OUTBOUND_CONTRACT_VERSION: 'test', assertMarisonOutboundContract: (_kind: string, value: unknown) => value,
+    };
+    const runtime = vm.runInNewContext(builder + '\n({buildMarisonUnitPayload});', context);
+    const result = await runtime.buildMarisonUnitPayload({no_surat:'TEST',created_at:'2026-11-09'}, {}, null,
+      { projectId:23, branchId:1, requireUnsubmittedUnitReferences:true });
+    expect(result.payload.units[0]).toMatchObject({ unit_id:2048,type:'36/72',production_code:'009/UAI/PRC/6.1/09/11/2026',addendum_atas_nominal:100,addendum_bawah_nominal:200 });
+    expect(receipt).toHaveBeenCalledWith(23, [{id:2048,type:'36/72',hasSubmitted:false}]);
+    expect(reference).toEqual(original);
+    saved.allocation_detail.unit_type = '';
+    await expect(runtime.buildMarisonUnitPayload({}, {}, null, {projectId:23,branchId:1})).rejects.toThrow(/Tipe kavling/);
+    context.queryExternalDataSource = async () => ({options: []});
+    await expect(runtime.buildMarisonUnitPayload({}, {}, null, {projectId:23,branchId:1})).rejects.toThrow(/tidak tersedia/);
+  });
   it("uses corrected allocation amounts and keeps submitted-unit preview separate from send eligibility", async () => {
     const builder = source.slice(source.indexOf("const buildMarisonUnitPayload ="), source.indexOf("const normalizeMarisonItems ="));
     const money = source.slice(source.indexOf("const parseExternalMoney ="), source.indexOf("const normalizeExternalDate ="));

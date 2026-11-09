@@ -74,6 +74,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatRequestCategory, formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { UnitAllocationPendingNotice, UnitAllocationSummary } from "@/components/surat/UnitAllocationSummary";
+import { UnitLandAreaField } from "@/components/surat/UnitLandAreaField";
 import { RecommendationDecisionSummary } from "@/components/surat/RecommendationDecisionSummary";
 import { Keu1SubmissionSummary } from "@/components/surat/Keu1SubmissionSummary";
 import { getKeu1FinancialSummary, normalizeKeu1SubmissionItems, parseKeu1Money, parseKeu1Quantity } from "@/components/surat/keu1-submission";
@@ -94,7 +95,7 @@ import { formatCurrencyInput, parseCurrencyInput, formatRupiah as formatRupiahCa
 import { applyRevisionToItems, getActiveRevision, formatRevisionValue } from "@/components/surat/revision-utils";
 import { excelSerialToDateInput, exportUnitAllocationTemplateToXlsx, readSpreadsheetRows } from "@/lib/excel";
 import { normalizeProductionSerial } from "@/lib/production-code";
-import { applyExternalUnitReference, getExternalUnitReference } from "@sigap/shared";
+import { applyExternalUnitReference } from "@sigap/shared";
 import { useAttention } from "@/providers/AttentionProvider";
 import { parseLocalDateInput } from "@/lib/local-date";
 import {
@@ -104,7 +105,8 @@ import {
   isFundItemChecklistComplete,
 } from "@/features/surat/inbox/lib/checker-input";
 
-const getAllocationUnitType = (unit: unknown, _detail?: unknown) => getExternalUnitReference(unit).type;
+const getAllocationUnitType = (unit: unknown, detail: Record<string, unknown> = {}) =>
+  String(applyExternalUnitReference(unit, detail).unit_type || "");
 
 const normalizeAllocationDetailForPersistence = (detail: Record<string, any> = {}) => ({
   ...detail,
@@ -671,7 +673,7 @@ const handleApprove = async (item: any) => {
         return !t;
       });
       if (unitTypeInvalid) {
-        throw new Error(`Tipe kavling ${unitTypeInvalid.label || unitTypeInvalid.value} belum tersedia di Marison. Hubungi pengelola sistem perencanaan.`);
+        throw new Error(`Isi tipe unit untuk kavling ${unitTypeInvalid.label || unitTypeInvalid.value}.`);
       }
       const nominalInvalid = selectedUnits.find((unit: any) => {
         const detail = details[unit.value] || {};
@@ -1427,6 +1429,7 @@ const handleApprove = async (item: any) => {
       const kavlingIndex = getImportColumnIndex(headers, ["Kavling", "Unit"]);
       const strukturAtasIndex = getImportColumnIndex(headers, ["Struktur Atas", "Atas"]);
       const strukturBawahIndex = getImportColumnIndex(headers, ["Struktur Bawah", "Bawah"]);
+      const typeIndex = getImportColumnIndex(headers, ["Tipe Unit", "Tipe", "Unit Type"]);
       const serialIndex = getImportColumnIndex(headers, ["Nomor Kode Produksi", "Nomor", "Serial", "Production Serial"]);
       const blockIndex = getImportColumnIndex(headers, ["Desain", "Blok", "Production Block"]);
       const dateIndex = getImportColumnIndex(headers, ["Tanggal Produksi", "Tanggal", "Production Date"]);
@@ -1453,6 +1456,7 @@ const handleApprove = async (item: any) => {
         const unitValue = unit.value || unit.label;
         importedDetails[unitValue] = {
           ...((allocationDetails[item.id] || {})[unitValue] || unit.allocation_detail || {}),
+          ...(typeIndex >= 0 ? { unit_type: String(row[typeIndex] ?? "").trim() } : {}),
           ...(strukturAtasIndex >= 0 ? { struktur_atas: (() => { const v = parseCurrencyInput(row[strukturAtasIndex] || ""); return v !== null ? String(v) : ""; })() } : {}),
           ...(strukturBawahIndex >= 0 ? { struktur_bawah: (() => { const v = parseCurrencyInput(row[strukturBawahIndex] || ""); return v !== null ? String(v) : ""; })() } : {}),
           ...(serialIndex >= 0 ? { production_serial: normalizeProductionSerial(row[serialIndex]) } : {}),
@@ -1777,12 +1781,13 @@ const handleApprove = async (item: any) => {
               <div className="flex h-28 flex-col items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"><Home className="mb-2 h-5 w-5" />Pilih kavling terlebih dahulu.</div>
             ) : (
               <div className="max-h-[520px] overflow-auto rounded-lg border border-border">
-                <table className="w-full min-w-[1240px] border-collapse text-sm">
+                <table className="w-full min-w-[1416px] border-collapse text-sm">
                   <thead className="sticky top-0 z-20 bg-muted text-xs text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
                     <tr>
                       <th className="sticky left-0 z-30 w-12 border-r border-border bg-muted px-3 py-3 text-center font-semibold">No.</th>
                       <th className="sticky left-12 z-30 w-28 border-r border-border bg-muted px-3 py-3 text-left font-semibold">Kavling</th>
                       <th className="w-32 border-r border-border px-3 py-3 text-left font-semibold">Tipe Unit</th>
+                      <th className="w-44 border-r border-border px-3 py-3 text-left font-semibold">LT (Luas Tanah)<span className="block font-normal">m²</span></th>
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Atas</th>
                       <th className="w-40 border-r border-border px-3 py-3 text-right font-semibold">Struktur Bawah</th>
                       <th className="w-36 border-r border-border px-3 py-3 text-left font-semibold">Nomor</th>
@@ -1808,12 +1813,16 @@ const handleApprove = async (item: any) => {
                         <td className="border-r border-border px-2 py-2">
                           <Input
                             value={getAllocationUnitType(unit, detail)}
-                            readOnly
-                            placeholder="Belum tersedia di Marison"
+                            onChange={(event) => updateAllocationDetail(item.id, unit.value, "unit_type", event.target.value)}
+                            maxLength={100}
+                            placeholder="Isi tipe unit"
                             aria-label={`Tipe unit kavling ${unit.label}`}
                             className="h-11 text-sm"
                           />
-                          {!getAllocationUnitType(unit) && <p className="mt-1 text-xs text-destructive">Lengkapi tipe di sistem perencanaan.</p>}
+                          {!getAllocationUnitType(unit, detail) && <p className="mt-1 text-xs text-destructive">Tipe unit wajib diisi.</p>}
+                        </td>
+                        <td className="border-r border-border px-2 py-2">
+                          <UnitLandAreaField unit={unit} label={unit.label} />
                         </td>
                         <td className="border-r border-border px-2 py-2">
                           <NominalInput
@@ -1837,7 +1846,6 @@ const handleApprove = async (item: any) => {
                           <Input
                             inputMode="numeric"
                             value={detail.production_serial || ""}
-                            readOnly={Boolean(getExternalUnitReference(unit).serial)}
                             onChange={(event) => updateAllocationDetail(
                               item.id,
                               unit.value,
@@ -1858,7 +1866,6 @@ const handleApprove = async (item: any) => {
                         <td className="border-r border-border px-2 py-2">
                           <Input
                             value={detail.production_block || ""}
-                            readOnly={Boolean(getExternalUnitReference(unit).design)}
                             onChange={(event) => updateAllocationDetail(item.id, unit.value, "production_block", event.target.value.replace(/\//g, ""))}
                             placeholder="5.2"
                             aria-label={`Desain kode produksi kavling ${unit.label}`}
@@ -1876,7 +1883,6 @@ const handleApprove = async (item: any) => {
                                 variant="outline"
                                 className="h-11 w-full justify-start font-mono text-sm"
                                 aria-label={`Pilih tanggal produksi ${unit.label}`}
-                                disabled={Boolean(getExternalUnitReference(unit).date)}
                               >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {formatDatePickerDisplay(detail.production_date || "") || "dd/mm/yyyy"}

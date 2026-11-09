@@ -156,7 +156,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       showErrorMessage: false,
       showInputMessage: true,
       promptTitle: "Tipe Unit",
-      prompt: "Tipe berasal dari external dan tidak diubah melalui impor. Format seperti 60/72 dipertahankan.",
+      prompt: "Nilai awal dari external; dapat diperbarui pemeriksa. Format seperti 60/72 dipertahankan.",
     };
     row.getCell(5).dataValidation = {
       type: "whole",
@@ -202,7 +202,7 @@ export const createUnitAllocationTemplateWorkbook = (rows: UnitAllocationTemplat
       showErrorMessage: false,
       showInputMessage: true,
       promptTitle: "Desain",
-      prompt: "Isi desain hanya bila belum disediakan external. Contoh: 5.2.",
+      prompt: "Nilai awal dari external; dapat diperbarui pemeriksa. Contoh: 5.2.",
     };
     row.getCell(9).dataValidation = {
       type: "date",

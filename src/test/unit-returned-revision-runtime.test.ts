@@ -15,10 +15,11 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.resetModules(); });
 
-async function request({ unsigned = false, foreignUnit = false, dataError = false, badToken = false, unknown = false, later = false, alreadySent = false } = {}) {
+async function request({ unsigned = false, foreignUnit = false, dataError = false, badToken = false, unknown = false, later = false, alreadySent = false, examinerType = '' } = {}) {
   const fixture = returnedUnitFixture();
   fixture.job.id = "80200000-0000-4000-8000-000000000003";
   const payload = structuredClone(fixture.previous.payload);
+  if (examinerType) payload.units[0].type = examinerType;
   const job = { ...fixture.job, status: "processing", lease_token: lease, lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
     post_started_at: null, payload_body: JSON.stringify(payload), payload_hash: "fixture-hash", endpoint: "/unit-submissions", contract_version: "fixture" };
   if (unsigned) fixture.evidence.document.surat_signatures[4].is_signed = false;
@@ -71,6 +72,12 @@ async function request({ unsigned = false, foreignUnit = false, dataError = fals
 }
 
 describe("returned Unit transport boundary", () => {
+  it('retains an approved examiner type even when fresh external type differs', async () => {
+    const {res,network,rpc}=await request({examinerType:'36/72'});
+    expect(res.statusCode,res.body).toBe(200);
+    expect(JSON.parse(JSON.parse(res.body).payloadBody).units[0].type).toBe('36/72');
+    expect(network).toHaveBeenCalledTimes(1);expect(rpc).not.toHaveBeenCalled();
+  });
   it("materializes a verified revision using the same number without a business POST or DB write", async () => {
     const { res, network, rpc } = await request();
     expect(res.statusCode, res.body).toBe(200);
