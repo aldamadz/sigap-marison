@@ -1,10 +1,5 @@
 # SIGAP Feature and Release Map
 
-## SLA-03 / Issue #873 Security Correction (2026-11-09, [Codex])
-
-- Forward migration 20261109170000 derives revision pauses solely from canonical events; overtaken unsigned stages still charge. An INVOKER trigger rejects direct lifecycle writes from authenticated/anon, including business admins; canonical definer RPC owners remain trusted. Real disposable PostgreSQL action-clock, KPI/dashboard, RLS and lifecycle assertions pass, including repeat migration and concurrent refresh. Historical intervals remain intact. Exact-lock CI and staging database preflight/rollout pending; production untouched.
-
-
 ## AUTH-03 Authorized Recovery Candidate (2026-11-09, Issue866)
 
 - User authorizes restoring SMTP and selected production release after staging.
@@ -23,6 +18,14 @@
   remain pending authorization/testing. No reset email/account mutation by agent.
 
 ## SLA-03 Production Promotion Addendum (2026-11-09, Issue858)
+
+### SLA-03 / Issue #873 Authority Correction (2026-11-09, [Codex])
+
+- Forward migration20261109170000: canonical pause authority, overtaken unsigned
+  stages keep charging, and direct client status/current_step writes are denied.
+- Hosted CI42601387617 and real PostgreSQL clock/authorization/concurrency pass.
+  Staging rollback rehearsal preserves business state. Staging apply/runtime
+  pending; production not authorized by this security correction request.
 
 - User authorizes selective production promotion after live staging beeb26b.
   PR862 tracks only the main-based SLA03 source, not all staging features.

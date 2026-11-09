@@ -1,10 +1,5 @@
 # Worklog
 
-## 2026-11-09 [Codex] SLA-03 / Issue #873 Security Correction Candidate
-
-- Forward migration 20261109170000 derives revision pauses solely from canonical events; overtaken unsigned stages still charge. An INVOKER trigger rejects direct lifecycle writes from authenticated/anon, including business admins; canonical definer RPC owners remain trusted. Real disposable PostgreSQL action-clock, KPI/dashboard, RLS and lifecycle assertions pass, including repeat migration and concurrent refresh. Historical intervals remain intact. Exact-lock CI and staging database preflight/rollout pending; production untouched.
-
-
 ## 2026-11-09 [Codex] AUTH-03 Recovery Authorized and Safe Feedback Candidate
 
 - User explicitly authorizes SMTP restoration and production release. Continue
@@ -47,6 +42,17 @@
   PROJECT_CONTEXT.md absent; original dirty workspace untouched.
 
 ## 2026-11-09 [Codex] SLA-03 Production Authorization and Compatibility
+
+### 2026-11-09 [Codex] SLA-03 / Issue #873 Security Correction Candidate
+
+- Forward migration 20261109170000 uses canonical revision events, charges
+  overtaken unsigned stages and blocks direct client lifecycle updates with an
+  INVOKER guard. Canonical definer RPC owners remain trusted; no GUC bypass.
+- Exact-lock hosted CI42601387617 passed lint/typecheck/affected SQL gates.
+  Real PostgreSQL covers direct creator/signer tampering, elapsed-time retention,
+  canonical revision pause/resume, private ACLs, repeat apply and concurrency.
+- Staging catalog/257-version lineage preflight and double-apply rollback proof
+  passed; business fingerprints unchanged. Apply/deploy pending; production untouched.
 
 - User explicitly authorizes production after staging beeb26b and its successful
   guarded deploy42561938182. PR862 selects only the main-based SLA03 branch.
