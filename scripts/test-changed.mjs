@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/signer_action_sla.*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
   if (/department_receiving_periods.*\.sql$/u.test(file)) gates.add('department-receiving-sql');
   if (/weekly_department_sla.*\.sql$/u.test(file)) gates.add('department-weekly-sql');
@@ -144,6 +145,10 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
+  if (gate === 'signer-action-sla-clock-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
+    continue;
+  }
   if (gate === 'release-notice-sql') {
     run('node', ['--test', 'ops/maintenance/release-notice-sql.test.mjs']);
     continue;
