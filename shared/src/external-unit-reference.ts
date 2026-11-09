@@ -20,9 +20,10 @@ export const applyExternalUnitReference = (unit: unknown, detail: Record<string,
   const reference = getExternalUnitReference(unit);
   return {
     ...detail,
-    unit_type: reference.type,
-    ...(reference.design ? { production_block: reference.design } : {}),
-    ...(reference.serial ? { production_serial: reference.serial } : {}),
-    ...(reference.date ? { production_date: reference.date } : {}),
+    // A persisted/explicit value (even an empty edit) wins over external defaults.
+    unit_type: Object.hasOwn(detail, 'unit_type') ? text(detail.unit_type) : reference.type,
+    production_block: Object.hasOwn(detail, 'production_block') ? text(detail.production_block) : reference.design,
+    production_serial: Object.hasOwn(detail, 'production_serial') ? text(detail.production_serial) : reference.serial,
+    production_date: Object.hasOwn(detail, 'production_date') ? text(detail.production_date) : reference.date,
   };
 };

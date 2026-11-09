@@ -1,5 +1,29 @@
 # Worklog
 
+## 2026-11-09 [Codex] SUR-41 Examiner Unit Reference Overrides / SUR-34
+
+- Issue852, isolated codex/unit-examiner-editable-reference-20261109 from
+  mainaccb8da; user explicitly authorizes staging then production. Primary dirty
+  worktree untouched. Original SUR34/LT commit747cbfd selected without its old
+  staging ancestry. No production mutation during implementation.
+- Shared reference application now seeds missing fields only; explicit edits
+  and deliberate clearing survive fresh external reads, autosave and remount.
+  Unit type/serial/design/date unlocked; LT raw external only and excluded XLSX.
+  Type import enabled and template hints aligned; production code remains derived.
+- Canonical builder uses saved examiner values while requiring fresh unit/project
+  identity and existing availability/returned-unit checks. Frozen revision
+  transport no longer treats approved type differences as foreign identities.
+  Blank/oversize/control-character types fail422. Raw references unchanged;
+  existing verification actor/time/audit snapshots retained, no new RPC/schema.
+- Focused16files172tests pass,1optional supplied-workbook test skipped; lint,
+  typecheck/build/diff check pass, audit0high/critical18moderate. Actual Inbox
+  test edits all four fields, verifies derived code/autosave/remount and disabled
+  LT. XLSX and both PDF table outputs plus canonical logical/frozen payload tests
+  retain edits and source identity. No full suite requested or run locally.
+- No vendor write, real approval, resend, historical payload/PDF rewrite or
+  worker source change. Remaining: hosted gates, staging integration /
+  acceptance, then selective production. PROJECT_CONTEXT.md remains absent.
+
 ## 2026-11-09 [Codex] NTF-07 Selected Production Promotion
 
 - User explicitly authorizes production for the browser notification fixes.

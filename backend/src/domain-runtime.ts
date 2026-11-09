@@ -9,7 +9,7 @@ import { VERIFIER_OPTIONAL_ATTACHMENT_KEY, validateVerifierOptionalUpload, hasVa
 import nodemailer from "nodemailer";
 import webpush from "web-push";
 import sharp from "sharp";
-import { hasUnavailableMarisonProjectBranch, getExternalUnitReference, applyExternalUnitReference } from "@sigap/shared";
+import { hasUnavailableMarisonProjectBranch, applyExternalUnitReference } from "@sigap/shared";
 import { createPgdPreviewData, renderPgdPdf } from "../../pgd-pdf-renderer.mjs";
 import { createKeu1PreviewData, isKeu1Document, renderKeu1Pdf } from "../../keu1-pdf-renderer.mjs";
 import { assertMarisonProcurementRoute, getMarisonProcurementRoute } from "./lib/marison-procurement-route.js";
@@ -3460,14 +3460,18 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
     const reference = references.get(externalIdFrom(record));
-    if (!reference || !getExternalUnitReference(reference).type) {
-      const error = new Error(`Tipe kavling baris ${index + 1} belum tersedia di Marison. Lengkapi referensi external sebelum pengiriman.`);
+    if (!reference) {
+      const error = new Error(`Kavling baris ${index + 1} tidak tersedia pada proyek Marison.`);
       error.status = 422;
       throw error;
     }
     const detail = applyExternalUnitReference(reference, asPlainRecord(record.allocation_detail));
+    const unitType = String(detail.unit_type || "").trim();
+    if (!unitType || unitType.length > 100 || Array.from(unitType).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
+      throw Object.assign(new Error(`Tipe kavling baris ${index + 1} belum valid. Lengkapi data pemeriksaan Unit.`), { status: 422 });
+    }
     verifiedReferences.push({ id: requireExternalInteger(externalIdFrom(record), "Unit ID"),
-      type: getExternalUnitReference(reference).type, hasSubmitted: getExternalRaw(reference).has_submitted });
+      type: unitType, hasSubmitted: getExternalRaw(reference).has_submitted });
     const productionSerial = firstString(detail.production_serial, detail.kode_produksi_nomor).padStart(3, "0");
     const productionBlock = firstString(detail.production_block, detail.kode_produksi_blok);
     const productionDate = normalizeExternalDate(firstString(detail.production_date, detail.kode_produksi_tanggal));
@@ -3479,7 +3483,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     return {
       unit_id: requireExternalInteger(externalIdFrom(record), `Unit ID baris ${index + 1}`),
       production_code: productionCode,
-      type: getExternalUnitReference(reference).type,
+      type: unitType,
       addendum_atas_label: "Struktur Atas",
       addendum_atas_nominal: parseExternalMoney(detail.struktur_atas),
       addendum_bawah_label: "Struktur Bawah",
@@ -3911,8 +3915,7 @@ const buildMarisonOutboundJob = async (req, jobId) => {
       const references = new Map(current.options.map(option => [externalIdFrom(option), option]));
       verifyUnitRevisionReferences(logicalPayload.project_id, logicalPayload.units.map(unit => {
         const reference = references.get(unit.unit_id);
-        const type = reference && getExternalUnitReference(reference).type;
-        return { id: unit.unit_id, type: type === unit.type ? type : "", hasSubmitted: reference && getExternalRaw(reference).has_submitted };
+        return { id: unit.unit_id, type: reference && typeof unit.type === "string" ? unit.type : "", hasSubmitted: reference && getExternalRaw(reference).has_submitted };
       }), unitRevisionAuthorization);
     }
     if (transport) {
