@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## SUR-41 Editable Unit Examination / SUR-34 LT Promotion (2026-11-09, Issue852)
+
+- User authorizes staging then production. LT remains disabled/read-only, from
+  raw external land area only, absent from XLSX import. Select original SUR34
+  commit747cbfd changes only; do not promote its unrelated old staging ancestry.
+- Type, serial, design and date are seeded from external but editable by the
+  assigned examiner via existing draft/verification paths. Explicit empty edits
+  remain empty and block completion, never silently reset to external defaults.
+- Existing allocation_detail snapshots retain values and actor/time provenance.
+  Derived code, XLSX type import/export, summaries/PDF attachments and canonical
+  outbound builder use saved examination values. Raw external master identity,
+  project/unit existence and submitted/revision/availability guards remain.
+- Frozen dispatch payloads/history are not rewritten or resent. No migration,
+  new access, provider/config/worker change, or external master write. Focused
+  UI draft/remount, calendar edit, XLSX/PDF/value/transport regressions precede
+  staging validation and selective production promotion.
+
 ## NTF-07 Production Promotion Authorized (2026-11-09)
 
 - User selects browser notification activation/status fixes for production.
