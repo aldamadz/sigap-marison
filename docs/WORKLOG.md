@@ -1,5 +1,10 @@
 # Worklog
 
+## 2026-11-09 [Codex] SUR-41 / Issue #874 Security Correction Candidate
+
+- Forward migration 20261109171000 strips initial allocated_* input and protects allocation/completed Unit snapshots from direct client writes. Service-only RPC verifies immutable examination history (including canonical external addendum receipts), and outbound compares its input against that authority before using examiner edits. No client-writable verified marker is trusted; missing history fails closed and requires re-examination. Editable type/serial/design/date and external LT are preserved. Real PostgreSQL production-shaped verification, immutable-history and tampering tests pass; isolated builder/reference tests pass (23 assertions). Cached UI toolchain has older React Router; exact-lock CI/acceptance and staged rollout pending. No vendor POST or production changes.
+
+
 ## 2026-11-09 [Codex] AUTH-03 Recovery Authorized and Safe Feedback Candidate
 
 - User explicitly authorizes SMTP restoration and production release. Continue

@@ -1,5 +1,10 @@
 # SIGAP Feature and Release Map
 
+## SUR-41 / Issue #874 Security Correction (2026-11-09, [Codex])
+
+- Forward migration 20261109171000 strips initial allocated_* input and protects allocation/completed Unit snapshots from direct client writes. Service-only RPC verifies immutable examination history (including canonical external addendum receipts), and outbound compares its input against that authority before using examiner edits. No client-writable verified marker is trusted; missing history fails closed and requires re-examination. Editable type/serial/design/date and external LT are preserved. Real PostgreSQL production-shaped verification, immutable-history and tampering tests pass; isolated builder/reference tests pass (23 assertions). Cached UI toolchain has older React Router; exact-lock CI/acceptance and staged rollout pending. No vendor POST or production changes.
+
+
 ## AUTH-03 Authorized Recovery Candidate (2026-11-09, Issue866)
 
 - User authorizes restoring SMTP and selected production release after staging.

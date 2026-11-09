@@ -111,6 +111,7 @@ for (const file of allChangedFiles) {
   if (/revision_recommendation_task.*\.sql$/u.test(file)) gates.add('revision-recommendation-sql');
   if (/unit_partial_readiness.*\.sql$|test-unit-revision-reallocation-sql\.mjs$/u.test(file)) gates.add('unit-partial-readiness-sql');
   if (/preserve_external_unit_addendum_review.*\.sql$|unit_external_addendum_review.*\.sql$/u.test(file)) gates.add('unit-external-addendum-sql');
+  if (/unit_allocation_authority.*\.sql$/u.test(file)) gates.add('unit-allocation-authority-sql');
     if (/registration_draft_(reservation_lifecycle|recommendation_scope|recommendation_office_guard|helper_execution).*\.sql$/u.test(file)) gates.add('draft-reservation-lifecycle-sql');
   if (/delegated_issuing_office.*\.sql$/u.test(file)) gates.add('delegated-office-sql');
   if (/external_only.*projects.*\.sql$/u.test(file)) gates.add("external-project-source-sql");
@@ -145,6 +146,11 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
+  if (gate === 'unit-allocation-authority-sql') {
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--authority']);
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--authority', '--production-shape']);
+    continue;
+  }
   if (gate === 'signer-action-sla-clock-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
     continue;

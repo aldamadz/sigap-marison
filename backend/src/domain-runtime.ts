@@ -5,6 +5,7 @@ import { mkdir } from "node:fs/promises";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { isDeepStrictEqual } from "node:util";
 import { VERIFIER_OPTIONAL_ATTACHMENT_KEY, validateVerifierOptionalUpload, hasValidOptionalFileSignature } from "./lib/verifier-optional-attachment.js";
 import nodemailer from "nodemailer";
 import webpush from "web-push";
@@ -3450,13 +3451,26 @@ const buildMarisonDocumentLinks = async (surat, actorId = null, existingFileLink
 };
 
 const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) => {
+  const { data: approvedInput, error: approvalError } = await supabase.rpc("get_verified_unit_allocation", { p_surat_id: surat.id });
+  if (approvalError || !approvedInput) {
+    throw Object.assign(new Error("Data alokasi Unit tidak sesuai bukti pemeriksaan. Ulangi pemeriksaan."), { status: 422 });
+  }
+  // Refuse a stale or altered caller snapshot after the database authority check.
+  const currentAllocation = getMarisonAllocatedUnits(surat, input);
+  if (!isDeepStrictEqual(currentAllocation, approvedInput.allocated_units)
+    || !isDeepStrictEqual(input.requested_project, approvedInput.requested_project)
+    || !isDeepStrictEqual(input.allocated_project, approvedInput.allocated_project)
+    || !isDeepStrictEqual(input.allocated_by_signature_id, approvedInput.allocated_by_signature_id)
+    || !isDeepStrictEqual(input.requested_unit_count, approvedInput.requested_unit_count)) {
+    throw Object.assign(new Error("Data alokasi Unit berubah setelah pemeriksaan."), { status: 422 });
+  }
   const requestedProject = getMarisonRequestedProject(surat, input);
    const projectId = requireExternalInteger(overrides.projectId ?? externalIdFrom(requestedProject), "Project ID");
    const branchId = requireExternalInteger(overrides.branchId ?? externalBranchIdFrom(requestedProject, input, surat.location_snapshot), "Branch ID");
   const referenceResult = await queryExternalDataSource(MARISON_UNITS_SOURCE_KEY, { project_id: projectId });
   const references = new Map(referenceResult.options.map(option => [externalIdFrom(option), option]));
   const verifiedReferences = [];
-  const units = getMarisonAllocatedUnits(surat, input).map((unit, index) => {
+  const units = approvedInput.allocated_units.map((unit, index) => {
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
     const reference = references.get(externalIdFrom(record));
