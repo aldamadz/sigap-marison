@@ -1,5 +1,40 @@
 # Worklog
 
+## 2026-11-09 [Codex] NTF-07 Production Release Verified
+
+- User explicitly promoted browser activation/status fixes to production.
+  Source66b4098 from the original main-based feature branch; PR849 merged as
+  accb8da9a3617a5494f861b8ef2b238e03d1127c. No whole-staging promotion.
+- Repeat local8files103tests, lint, typecheck, build and diff check pass.
+  Audit:18moderate,0high/critical; dependencies/lockfiles unchanged. Source hosted
+  gates42544906456/42544909244 and main push42545186210 pass. Initial production
+  run42545186189 correctly skipped quality/deploy because live staging lacked main.
+- Sync PR850 merged56d46ba7d731295b6f5c4fa209a2fc1135d6b3bd, preserving every
+  staging-only file; tree difference from prior live staging was docs only.
+  CI42545233256/42545410645 and staging deploy42545410635 pass. A transient503
+  was observed during staging container replacement, then SHA/readiness recovered.
+  Live staging contains main ancestry before production, app4877042f270e healthy.
+- Official production workflow42545759924 preflight/quality/deploy all SUCCESS.
+  Public version and running image label match accb8da; app47098dedd48f healthy,
+  restart0, image694a870bac4d. Root/live/ready and SettingsPage-FqqdD4c4.js /
+  index-DwySa5LO.js public assets return200; repeat readiness200.
+- Actual production bundle contains activation restoration/shared-state logic.
+  The Settings test-control gate embeds the production URL and returns null;
+  test labels remain as unreachable bundle strings, NOT exposed controls.
+  Initial string-presence diagnostic was too broad; exact compiled guard and
+  production-URL semantics were then verified. Existing tests prove both test
+  controls absent and testPopup inert with the production build URL.
+- All four non-app staging services and all six non-app production services
+  retained original IDs. No worker restart, migration, auth/provider allowlist,
+  audience/config/secret change, notification test send, subscription mutation
+  for acceptance, business edit, approval or vendor POST was performed.
+- No live end-to-end remote push/OS-toast claim: positive activation/remount and
+  blocked/error states covered by103 tests; IAB provider rejection/local popup
+  API acceptance previously verified staging. Native OS policy remains external.
+- CT104 root usage remains92%, approximately4.6GiB free, a pre-existing capacity
+  concern, not changed by cleanup in this task. PROJECT_CONTEXT.md absent.
+  Evidence PR848 superseded by849/850 and closed; original branches retained.
+
 ## 2026-11-09 [Codex] NTF-07 Selected Production Promotion
 
 - User explicitly authorizes production for the browser notification fixes.
