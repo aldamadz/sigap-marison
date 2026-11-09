@@ -1,10 +1,5 @@
 # Worklog
 
-## 2026-11-09 [Codex] SUR-41 / Issue #874 Security Correction Candidate
-
-- Forward migration 20261109171000 strips initial allocated_* input and protects allocation/completed Unit snapshots from direct client writes. Service-only RPC verifies immutable examination history (including canonical external addendum receipts), and outbound compares its input against that authority before using examiner edits. No client-writable verified marker is trusted; missing history fails closed and requires re-examination. Editable type/serial/design/date and external LT are preserved. Real PostgreSQL production-shaped verification, immutable-history and tampering tests pass; isolated builder/reference tests pass (23 assertions). Cached UI toolchain has older React Router; exact-lock CI/acceptance and staged rollout pending. No vendor POST or production changes.
-
-
 ## 2026-11-09 [Codex] AUTH-03 Recovery Authorized and Safe Feedback Candidate
 
 - User explicitly authorizes SMTP restoration and production release. Continue
@@ -105,6 +100,20 @@
   catalog/ledger preflight remain required; PROJECT_CONTEXT.md is absent.
 
 ## 2026-11-09 [Codex] SUR-41 Examiner Unit Reference Overrides / SUR-34
+
+### 2026-11-09 [Codex] SUR-41 / Issue #874 Security Correction Candidate
+
+- Forward migration20261109171000 strips initial allocated_* keys, guards direct
+  Unit allocation/completed snapshot updates, and verifies immutable history
+  through a service-only RPC. Outbound rejects missing/mismatched receipts and
+  stale caller input. Client examiner_verified flags confer no authority.
+- Authorized examiner edits and canonical external addendum revisions remain;
+  LT stays external. Missing historical receipts require re-examination, not
+  fabricated provenance. No business history rewrite or vendor POST.
+- Exact-lock hosted CI42601391278 passed lint/typecheck/affected tests and real
+  PostgreSQL authority suites in both schema shapes. Staging lineage preflight
+  and double-apply rollback proof preserve business data. Apply/runtime pending;
+  production untouched.
 
 - Issue852, isolated codex/unit-examiner-editable-reference-20261109 from
   mainaccb8da; user explicitly authorizes staging then production. Primary dirty

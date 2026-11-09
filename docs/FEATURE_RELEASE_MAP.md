@@ -1,10 +1,5 @@
 # SIGAP Feature and Release Map
 
-## SUR-41 / Issue #874 Security Correction (2026-11-09, [Codex])
-
-- Forward migration 20261109171000 strips initial allocated_* input and protects allocation/completed Unit snapshots from direct client writes. Service-only RPC verifies immutable examination history (including canonical external addendum receipts), and outbound compares its input against that authority before using examiner edits. No client-writable verified marker is trusted; missing history fails closed and requires re-examination. Editable type/serial/design/date and external LT are preserved. Real PostgreSQL production-shaped verification, immutable-history and tampering tests pass; isolated builder/reference tests pass (23 assertions). Cached UI toolchain has older React Router; exact-lock CI/acceptance and staged rollout pending. No vendor POST or production changes.
-
-
 ## AUTH-03 Authorized Recovery Candidate (2026-11-09, Issue866)
 
 - User authorizes restoring SMTP and selected production release after staging.
@@ -50,6 +45,16 @@
   resend, business-history rewrite or worker change is implied.
 
 ## SUR-41 Editable Unit Examination / SUR-34 LT Promotion (2026-11-09, Issue852)
+
+### SUR-41 / Issue #874 Authority Correction (2026-11-09, [Codex])
+
+- Forward migration20261109171000 strips requester allocation input, protects
+  verified Unit snapshots and provides service-only immutable-receipt validation.
+  Outbound refuses stale or unapproved examiner identity/production fields.
+- Legitimate examiner overrides and canonical external addendum revisions remain
+  supported; no client boolean grants provenance. Legacy missing receipts fail closed.
+- Hosted CI42601391278 and both PostgreSQL schema shapes pass. Staging rehearsal
+  preserves business state; apply/deploy pending. Production untouched.
 
 - User authorizes staging then production. LT remains disabled/read-only, from
   raw external land area only, absent from XLSX import. Select original SUR34
