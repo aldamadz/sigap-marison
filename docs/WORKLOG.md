@@ -1,5 +1,93 @@
 # Worklog
 
+## 2026-11-09 [Codex] NTF-07 Selected Production Promotion
+
+- User explicitly authorizes production for the browser notification fixes.
+  Reuse owned main-based branch and Issue845; historical staging-only decisions
+  above/below are superseded only for this selected promotion.
+- Release activation status restoration on remount/focus, shared control state,
+  permission revocation handling and safe retry diagnostics. Explicit popup and
+  self-delivery test controls remain gated to the exact staging public build URL;
+  neither test control is exposed or executed in production.
+- No backend/DB migration, worker source, provider allowlist, recipient audience,
+  business document or outbound change. Current live production c2e95a8; live
+  staging1268e27. Repeat affected gates, selective main PR, main ancestry sync to
+  live staging and public runtime/build/readiness verification remain required.
+- PROJECT_CONTEXT.md still absent. Primary dirty worktree/user files untouched.
+
+## 2026-11-06 [Codex] NTF-07 Popup Follow-Up Staging Verified
+
+- Source479ec2b+e8b2fec, PR847 merged1268e27. Final source CI42201443801,
+  staging push CI42201791767 and official Deploy Staging42201791834 all SUCCESS.
+  Local8files103tests/lint/typecheck/build/diff check pass. No migration or worker
+  rollout. Live1268e271285d6cb61ed9c5f07c74effd2b05715b, readiness200;
+  app952b0a37b75c healthy; PDF/sync/outbound/external API IDs unchanged.
+- Real Tester P3 browser acceptance: separate Tes popup browser / Tes pengiriman
+  SIGAP controls visible; popup click successfully awaited showNotification and
+  started cooldown without an in-app send. This verifies API acceptance, not
+  visual OS-toast delivery or remote Web Push delivery. Permission/Do Not Disturb
+  guidance is shown. Positive activation/remount/shared-control behavior is covered
+  by synthetic tests, not claimed as a live full-browser acceptance.
+- Actual IAB activation/persist returned400 push_provider_unsupported on load and
+  explicit activation; safe explanation remains and active status is NOT falsely
+  shown. Provider allowlist unchanged. Full Chrome/Edge required for supported
+  remote push acceptance; no browser subscription credentials were extracted.
+- Production remains c2e95a8f09fcb0d35d4c4d3e8a6c42d0b4e9da21 (read-only check).
+  Automatically triggered production run42202427216 cancelled because this task
+  is staging only. No production release/data/audience/secret/provider change.
+
+## 2026-11-06 [Codex] NTF-07 Explicit Popup and Activation Restoration
+
+- User clarifies testing the actual device popup, not only an in-app notice.
+  Same owned branch/Issue845, staging only. PR847 expands from evidence-only
+  into the corrective follow-up; production remains explicitly excluded.
+- Separate explicit staging controls: local ServiceWorker showNotification test
+  (no server send/email/provider subscription) and existing self delivery test.
+  Both retain click-only execution/cooldown and do not claim remote push delivery.
+- Activation button checks existing worker/subscription plus server persistence
+  on mount and visible focus. No permission prompt or new subscription from the
+  status check; no permission-only false success. Stale background results cannot
+  overwrite manual activation; status/read errors remain safe and retryable.
+- Shared activation events synchronize Settings/header with the automatic
+  provider; old in-flight checks cannot undo its completed activation.
+- Focused8files103tests, lint, typecheck and build pass. Hosted gate, staging deploy
+  and browser popup acceptance pending. No backend/schema/audience/allowlist change.
+
+## 2026-11-06 [Codex] NTF-07 Verified Staging Release
+
+- Source06d5fde; PR846 merged49d7aba. PR CI42176996328 and staging push
+  CI42177260800 passed; local affected tests28/28, lint, typecheck and build pass.
+  Deploy42177260793 quality passed, but both runner attempts timed out while
+  resolving/downloading GitHub Actions, before checkout/deploy. Run cancelled;
+  no Runner.Worker remained before the operator fallback.
+- Used an isolated exact49d7aba checkout on Ubuntu and unchanged official
+  scripts/deploy-app.sh staging, first --check-only then real deploy. All guards,
+  environment identity, image/runtime SHA and readiness/root smoke tests passed.
+  Live49d7aba10057c350a1f2c1b8eab935b53292408e, app2d1fba7f580c healthy;
+  PDF/sync/outbound/external API worker IDs unchanged. No migration/secrets change.
+- Real Tester P3 browser acceptance: button visible in Settings/Notifikasi,
+  explicit click created one self notification, disabled cooldown displayed,
+  unread bell incremented0->1, clicking test opened dashboard and marked it read.
+  No email, permission change or business/vendor action. Native OS popup was not
+  accepted as verified: this IAB has no active supported push subscription.
+- Production remains c2e95a8f09fcb0d35d4c4d3e8a6c42d0b4e9da21 (read-only check).
+  Automatic production workflows after cancelled staging attempts were skipped.
+  User explicitly excludes production for NTF-07. Operational task completed.
+
+## 2026-11-06 [Codex] NTF-07 Staging Self Notification Test
+
+- Issue845; isolated main-based codex/staging-test-notification-20261106.
+  User explicitly requests staging only. Settings button creates one fixed test
+  notice for its current account via existing authenticated notification service,
+  never email or arbitrary recipient/link/content. No new endpoint or migration.
+- Production build excludes the control; no production rollout authorized.
+  Cooldown is UI ergonomics, not a new server rate-limit guarantee. Existing
+  backend recipient authorization is retained. Popup follows browser consent and
+  configured tester audience; successful creation never claims OS delivery.
+- Affected tests28/28, lint, typecheck, build and diff check pass. Remaining:
+  PR/staging integration, live button acceptance
+  with tester and final runtime proof. No production mutation or vendor action.
+
 ## 2026-11-06 [Codex] MRN-30 Receipt-Bound Revision Completion
 
 - Forward follow-up20261106093000 is required alongside900. Final review found

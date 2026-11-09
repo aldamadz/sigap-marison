@@ -1,5 +1,57 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Production Promotion Authorized (2026-11-09)
+
+- User selects browser notification activation/status fixes for production.
+  Same feature branch, no whole-staging merge. Test controls and local popup
+  test execution remain exact-staging-build only; no production test send.
+- No schema/worker/provider/audience changes. Repeat focused gates and selective
+  main PR; main must enter live staging before production rollout. Final runtime
+  identities and acceptance limits belong to the forward release proof.
+
+## NTF-07 Popup Follow-Up Released Staging (2026-11-06)
+
+- PR847/live1268e27; source CI42201443801, push CI42201791767 and official
+  staging deploy42201791834 succeeded.103 affected tests, lint/typecheck/build pass.
+  No migration or worker restart; production unchanged and excluded.
+- Tester P3 popup API request/cooldown and separate controls verified on live UI.
+  IAB's unsupported remote push provider is correctly explained, not marked active.
+  OS toast appearance and full Chrome/Edge remote delivery not claimed verified.
+  Details and limitations are in WORKLOG.
+
+## NTF-07 Popup Test Follow-Up (2026-11-06)
+
+- Staging candidate separates device popup test from self server delivery test.
+  Device popup uses the browser's Notification API and existing service worker,
+  requires explicit click/permission, and never creates a server push subscription.
+- Activation state restores from actual existing browser subscription and backend
+  acceptance after remount/focus, without prompting. Revocation/failure are not
+  displayed as active; safe diagnostics and stale-result protection retained.
+- Shared activation events keep Settings/header/provider consistent.
+- Focused103tests/lint pass; remaining release checks recorded in WORKLOG.
+  No production release or provider/audience expansion is authorized.
+
+## NTF-07 Staging Release Evidence (2026-11-06)
+
+- PR846/source06d5fde deployed as49d7aba; live staging SHA/readiness verified.
+  Official guarded script used after cancelled Actions runner network failures;
+  no worker restart or migration.28/28 affected tests and both hosted CIs pass.
+- Tester P3 saw and used the button: one self notice, cooldown, bell unread state
+  and dashboard destination pass. Native OS popup remains unverified on this IAB.
+- Production deliberately excluded and remains c2e95a8. Details in WORKLOG.
+
+## NTF-07 Staging Notification Test Button (2026-11-06, Issue845)
+
+- Staging-only Settings control reuses the existing authenticated self-notification
+  service, fixed harmless message/dashboard destination and email:false. No new
+  endpoint, schema, role, production change or push-audience expansion.
+- Exact staging public build URL required. No automatic send/permission prompt;
+  pending/double-click protection,30second UI cooldown, generic retryable errors.
+  Creation is not claimed as OS-popup delivery. Existing browser consent/provider
+  and staging tester audience restrictions still apply.
+- Focused component/notification regressions28/28, lint, typecheck and build pass.
+  Staging PR/deployment and live tester acceptance pending.
+
 ## MRN-30 Authenticated Fund Decision Receipts (2026-11-06, Issue839)
 
 - User approves staging then production for missing-receipt Fund callback422,
