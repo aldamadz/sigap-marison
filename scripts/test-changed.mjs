@@ -146,11 +146,6 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
-  if (gate === 'unit-allocation-authority-sql') {
-    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--authority']);
-    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--authority', '--production-shape']);
-    continue;
-  }
   if (gate === 'signer-action-sla-clock-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
     continue;
@@ -198,6 +193,11 @@ for (const gate of gates) {
   if (gate === 'recommendation-office-reservation-sql') {
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs']);
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--production-shape']);
+    continue;
+  }
+  if (gate === 'unit-allocation-authority-sql') {
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--authority']);
+    run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--authority', '--production-shape']);
     continue;
   }
   if (gate === 'draft-reservation-lifecycle-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--draft-lifecycle']);
