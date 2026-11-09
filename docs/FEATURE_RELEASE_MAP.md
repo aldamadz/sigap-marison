@@ -1,5 +1,10 @@
 # SIGAP Feature and Release Map
 
+## SLA-03 / Issue #873 Security Correction (2026-11-09, [Codex])
+
+- Forward migration 20261109170000 derives revision pauses solely from canonical events; overtaken unsigned stages still charge. An INVOKER trigger rejects direct lifecycle writes from authenticated/anon, including business admins; canonical definer RPC owners remain trusted. Real disposable PostgreSQL action-clock, KPI/dashboard, RLS and lifecycle assertions pass, including repeat migration and concurrent refresh. Historical intervals remain intact. Exact-lock CI and staging database preflight/rollout pending; production untouched.
+
+
 ## AUTH-03 Authorized Recovery Candidate (2026-11-09, Issue866)
 
 - User authorizes restoring SMTP and selected production release after staging.
