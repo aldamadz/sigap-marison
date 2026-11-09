@@ -2,18 +2,28 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import uuid
+
+if not __debug__ or sys.flags.optimize:
+    raise SystemExit('Refusing Python optimisation (-O/-OO/PYTHONOPTIMIZE) for operator safety')
+
+
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
 
 os.umask(0o077)
 root = Path('/root/sigap-auth03-20261109')
-assert root.is_dir()
-assert subprocess.run(['pct', 'exec', '104', '--', 'hostname'], check=True, capture_output=True, text=True).stdout.strip() == 'sigap-app-prod-01'
+require(root.is_dir(), 'Expected operator proof directory')
+require(subprocess.run(['pct', 'exec', '104', '--', 'hostname'], check=True, capture_output=True, text=True).stdout.strip() == 'sigap-app-prod-01', 'Unexpected production app guest')
 started = root / 'self-mail-started.json'
 accepted = root / 'self-mail-accepted.json'
 if accepted.exists():
     marker = json.loads(accepted.read_text())['marker']
 else:
-    assert not started.exists(), 'Prior send outcome uncertain; do not send again'
+    require(not started.exists(), 'Prior send outcome uncertain; do not send again')
     marker = 'AUTH03-20261109-' + uuid.uuid4().hex
     with started.open('x') as file:
         json.dump({'marker': marker}, file)
@@ -25,16 +35,16 @@ console.log(JSON.stringify({marker,smtpAccepted:r.accepted.includes('noreply@mar
 catch(x){console.log(JSON.stringify({marker,smtpAccepted:false,code:x.code,responseCode:x.responseCode}));}finally{t.close();}})();"""
     result = subprocess.run(['pct', 'exec', '104', '--', 'docker', 'exec', 'agenda-flow-prod', 'node', '-e', send, marker], check=True, capture_output=True, text=True, timeout=45)
     proof = json.loads(result.stdout)
-    assert proof['smtpAccepted'] and proof['rejectedCount'] == 0, proof
+    require(proof['smtpAccepted'] and proof['rejectedCount'] == 0, 'SMTP did not accept the technical self-mail')
     accepted.write_text(json.dumps(proof))
 
 receive = """import imaplib,json,ssl,subprocess,sys,time
 x=json.loads(subprocess.run(['docker','inspect','sigap-supabase-auth'],check=True,capture_output=True,text=True).stdout)[0]
 e=dict(v.split('=',1) for v in x['Config']['Env'] if '=' in v)
-assert e['GOTRUE_SMTP_USER']=='noreply@marison.id'
+if e['GOTRUE_SMTP_USER']!='noreply@marison.id': raise RuntimeError('Unexpected mailbox sender')
 with imaplib.IMAP4_SSL('imap.hostinger.com',993,ssl_context=ssl.create_default_context(),timeout=15) as mail:
  mail.login(e['GOTRUE_SMTP_USER'],e['GOTRUE_SMTP_PASS'])
- assert mail.select('INBOX',readonly=True)[0]=='OK'
+ if mail.select('INBOX',readonly=True)[0]!='OK': raise RuntimeError('Read-only mailbox selection failed')
  found=False
  for attempt in range(6):
   status,data=mail.uid('search',None,'HEADER','X-SIGAP-SMTP-Recovery-Test',sys.argv[1])
@@ -47,4 +57,4 @@ result = subprocess.run(['pct', 'exec', '110', '--', 'python3', '-c', receive, m
 proof = json.loads(result.stdout)
 (root / 'self-mail-delivery.json').write_text(json.dumps(proof))
 print(json.dumps(proof))
-assert proof['imapReceived'], 'SMTP accepted; delivery not yet confirmed, do not resend'
+require(proof['imapReceived'], 'SMTP accepted; delivery not yet confirmed, do not resend')

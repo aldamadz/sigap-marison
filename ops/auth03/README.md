@@ -3,6 +3,9 @@
 Operator-only scripts; require explicit environment authorization. Never put a
 password in argv, logs, Git, a PR, or chat. Read a restricted local credential file
 and pipe it over SSH on stdin. Mailbox creation/password entry is a user handoff.
+Helpers refuse `-O`, `-OO` and `PYTHONOPTIMIZE` before operator work. Safety gates
+use explicit exceptions, not removable assertions; Auth drift still triggers
+the existing rollback. Offline regression tests: `python3 -B ops/auth03/test_safety_guards.py`.
 
 `smtp-recovery.py <staging|production> <check|install|verify>` asserts the exact
 host, container, deployment environment, public URL, Hostinger hostname/port/TLS

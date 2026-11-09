@@ -1,5 +1,13 @@
 # SIGAP Feature and Release Map
 
+## AUTH-03 Operator Guard Review Correction (2026-11-09, Issue871)
+
+- PR870 follow-up: explicit safety checks survive optimization and helpers refuse
+  optimized startup before side effects. Existing Auth rollback is preserved.
+- Offline synthetic regression covers optimized invocation, CLI validation and
+  pre/post-reload drift rollback. Source correction only; no production operations
+  or additional mail/recovery/deployment are authorized by this review request.
+
 ## AUTH-03 Restored Production (2026-11-09, Issue866)
 
 - User approved/recreated dedicated Hostinger noreply mailbox with password entry

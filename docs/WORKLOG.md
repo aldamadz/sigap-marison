@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-09 [Codex] AUTH-03 Operator Guard Optimization Review Fix (Issue871)
+
+- Review on PR870 correctly identifies safety asserts disappearing under optimized
+  Python. Continue owned PR branch, staging-default source fix only; no production
+  helper copy/execution, SMTP/reset email, credential change or service restart.
+- Replace every safety assert in the two recovery helpers with explicit require/
+  RuntimeError checks. Refuse optimized interpreters before operator work, validate
+  SMTP CLI arity/allowlists, retain exceptions inside Auth's rollback transaction.
+  Apply the same small fix to the adjacent self-mail helper/embedded IMAP guards.
+- Four regression groups cover12 optimized subprocess cases (-O/-OO/env1/env2
+  for3helpers), argument errors, absence of removable safety asserts and synthetic
+  pre/post-reload configuration drift rollback with optimized compilation.
+- Tests fail against original source, then pass after patch in a bounded isolated
+  container: network none, empty allowlisted env, read-only source/toolchain,
+  non-root, no host/socket/secrets mounts, scratch-only writes,1CPU/256MiB/32PIDs.
+  Cached pgAdmin Python requires NET_BIND_SERVICE in the container bounding set;
+  network remains disabled, no new image/dependency installed. No live service
+  target is exercised. CI integration uses a narrow Vitest wrapper; CI pending.
+
 ## 2026-11-09 [Codex] AUTH-03 Recovered and Released Production
 
 - Operational work complete. Production live978c0e1725227bfede5ca6207ebbfa6f09335299
