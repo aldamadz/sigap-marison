@@ -203,7 +203,15 @@ try {
       select coalesce((data_snapshot->>'current_pdf')::boolean,false) from public.surat_registrasi where id=p_id;
      $$;`;
     const clockMigration=read('supabase/migrations/20261109110000_signer_action_sla_clock.sql');
-    const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],clockSetup+clockMigration+clockMigration
+    const clockCompat=read('supabase/migrations/20261109105900_signer_action_sla_clock_compat.sql');
+    const compactSetup=`do $compact$ declare definition text;begin
+     select pg_get_functiondef('public.get_user_active_sla_breach_count(uuid)'::regprocedure) into definition;
+     execute replace(definition,E'public.calculate_business_minutes(\\n      active.started_at,','public.calculate_business_minutes(active.started_at,');
+    end $compact$;
+    create temp table breach_before as select pg_get_functiondef(oid) definition,proowner,proacl from pg_proc where oid='public.get_user_active_sla_breach_count(uuid)'::regprocedure;`;
+    const compatAssertions=`select check_ok((select replace(pg_get_functiondef(p.oid),E'public.calculate_business_minutes(\\n      active.started_at,','public.calculate_business_minutes(active.started_at,')=b.definition
+     and p.proowner=b.proowner and p.proacl is not distinct from b.proacl from breach_before b cross join pg_proc p where p.oid='public.get_user_active_sla_breach_count(uuid)'::regprocedure),'production compact compatibility changes whitespace only, preserving owner and ACL');`;
+    const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],clockSetup+compactSetup+clockCompat+clockCompat+compatAssertions+clockMigration+clockMigration+clockCompat
      +read('supabase/tests/signer_action_sla.integration.sql'));
     if(!result.includes('SLA03 actionable clock assertions passed'))throw Error('Missing SLA03 assertions');
     const refreshClock=()=>new Promise((resolve,reject)=>{
