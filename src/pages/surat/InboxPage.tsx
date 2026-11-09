@@ -1825,9 +1825,6 @@ const handleApprove = async (item: any) => {
                           <UnitLandAreaField unit={unit} label={unit.label} />
                         </td>
                         <td className="border-r border-border px-2 py-2">
-                          <UnitLandAreaField unit={unit} label={unit.label} />
-                        </td>
-                        <td className="border-r border-border px-2 py-2">
                           <NominalInput
                             value={detail.struktur_atas}
                             onCommit={(canonical) => updateAllocationDetail(item.id, unit.value, "struktur_atas", canonical)}
