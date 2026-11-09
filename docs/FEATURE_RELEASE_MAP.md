@@ -1,5 +1,24 @@
 # SIGAP Feature and Release Map
 
+## SLA-03 Released Production (2026-11-09, Issue858)
+
+- Production livec73e2c8 via guarded deploy42564789859 SUCCESS. Staging live572059e
+  contains that target. Root/ready200, application healthy/restart0; worker IDs
+  unchanged. Applied only audited compatibility105900 and clock111000.
+- Third-party waiting pauses signer SLA; resume retains accumulated work. Existing
+  authorized Inbox/dashboard/KPI/attention/reminders share the clock and reasons.
+  Post-deploy read-only role-context acceptance passes all six assertions.
+- No approval-policy change, external resend or invented historical pause data.
+
+## SLA-03 Production Database Proof (2026-11-09, Issue858)
+
+- Selected mainc73e2c8 via PR862; live staging572059e via PR863/864 and guarded
+  deploy42564421397 contains that target. Production clock/compatibility applied
+  after actual rollback rehearsal and exact ledger audit;153clocks,21paused.
+- Authorized read-only SQL-role proof confirms KPI/dashboard pause reasons,
+  active-late exclusion, frozen elapsed and private-schema denial. Application
+  rollout42564789859 pending; this checkpoint is not a claim of completed release.
+
 ## SLA-03 Production Promotion Addendum (2026-11-09, Issue858)
 
 - User authorizes selective production promotion after live staging beeb26b.

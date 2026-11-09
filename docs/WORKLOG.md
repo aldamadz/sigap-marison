@@ -1,5 +1,60 @@
 # Worklog
 
+## 2026-11-09 [Codex] SLA-03 Production Runtime Verified
+
+- Guarded Deploy Production42564789859 SUCCESS, exact target/live public SHA
+  c73e2c8f060922dcbfe301af421220932eeb43f3. Preflight verifies main ancestry in
+  source AND live staging572059e; normal quality:changed and audit high/critical
+  gates passed, no bypass. Exact migration acknowledgement105900,111000.
+- Root/ready HTTP200. Application391d45aecdc1 healthy, restart0. Tunnel57601ec6c36a,
+  PDFc3af751fdaf4, syncfc03d1194fee, outbound657fba2b5a1f, externalAPI99e7d80fd17a
+  and relay8e6d0b6c69db retained IDs; no coordinated worker rollout needed.
+- Read-only authenticated-user SQL-role acceptance rerun after deployment: all
+  six assertions pass (paused KPI/dashboard, reasons, active-late exclusion,
+  private schema denial and frozen one-hour elapsed evaluation). No real clock
+  advanced, no approval/rejection or external POST/resend. Existing active
+  baseline and completed historic SLA remain unchanged, not reconstructed.
+- Issue858 operational work complete. Tracked operator helper and README retain
+  exact digest/order/lineage/safety checks; private snapshots stay on operator host.
+  No source or runtime release blocker. Pre-existing application disk pressure
+  was93percent during build (4.1GiB free); no unrelated storage cleanup performed.
+
+## 2026-11-09 [Codex] SLA-03 Production Database Applied
+
+- User explicitly authorizes production. PR862 selects main-based source2b06468,
+  merged c73e2c8. PR863 stages compatibility; ancestry-only PR864 makes staging
+  live572059e a descendant of production targetc73e2c8. Guarded manual staging
+  deploy42564421397 and its quality gate succeeded; readiness200.
+- Original staging clock deploy42561938182 at beeb26b succeeded,22clocks/3paused.
+  Compatibility addition105900 is a no-op there, ledger256to257; protected clock
+  and compatibility preflights retain the prior MRN30 baseline. No bulk replay.
+- Production initial rollback rehearsal failed closed on compact SQL formatting.
+  Immutable111000 is unchanged; new105900 normalizes only the recognized call.
+  PG17 tests preserve compact semantics/owner/ACL and cover repeat compatibility
+  before/after the full action-clock migration and all SLA assertions/concurrency.
+- Exact source digest for clock111000:
+  d80a88bb1fed79745c0f0a4b8df456bf82263c7f592ea5bf920bc0511cb373af.
+  Compatibility105900 digest:
+  c3df930f563d612d9094b45ed79c5e054ca248bb2ff0d403a994f9ae58c43732.
+- Production252-version lineage matches the protected MRN30 baseline. Repeated
+  actual rollback rehearsal and committed ordered105900+111000 transaction pass;
+  ledger254,153private clocks,21waiting/scheduled. All guarded business-table
+  fingerprints, approval/verification function definitions/owners/ACLs and public
+  KPI caller grants/owner unchanged. No client clock/timestamp permissions.
+- Read-only existing-user authenticated SQL-role acceptance passes: paused KPI
+  and dashboard, reason metadata, excluded active-late filter, private schema
+  denial, elapsed frozen when evaluated one hour forward. No live clock is advanced.
+  Helper initially requested dashboard limit100; existing max50 correctly rejected
+  it. Corrected only the operator request to50; no application guard was weakened.
+-94 focused app tests,69 affected tests, original dashboard and action-clock PG17
+  suites passed before staging. Hosted PR862/863/864 and main/staging quality pass;
+  no full suite. Browser tester staging queues were empty, so no actual paused-row
+  browser/approval acceptance is claimed; UI states are fixture-tested. Production
+  workflow42564789859 is still running at this checkpoint; app rollout not yet done.
+- No approval, external POST/resend, historical SLA reconstruction, notification
+  test, business fixture or worker restart. Legacy active baseline and finished
+  history retained. Operator artifacts remain private; PROJECT_CONTEXT.md absent.
+
 ## 2026-11-09 [Codex] SLA-03 Production Authorization and Compatibility
 
 - User explicitly authorizes production after staging beeb26b and its successful
