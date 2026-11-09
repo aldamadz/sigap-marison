@@ -9,6 +9,8 @@ export type DashboardRow = {
   current_signer_id: string | null; current_signer_name: string | null; current_role: string | null;
   needs_verification: boolean; needs_recommendation: boolean; revision_reason: string | null;
   started_at: string | null; elapsed_minutes: number | null; sla_minutes: number;
+  sla_paused?: boolean;
+  sla_pause_reasons?: string[];
   can_remind?: boolean;
   receiving_at?: string|null;
   receiving_message?: string|null;
