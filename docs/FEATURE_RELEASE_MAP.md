@@ -1,5 +1,34 @@
 # SIGAP Feature and Release Map
 
+## AUTH-03 Guard Correction Validated (2026-11-09, Issue871)
+
+- PR870 source501500a passes hosted quality42596828716 and isolated regression.
+  Explicit guards, optimization refusal and pre/post-reload rollback verified.
+  Source-only review completion; operator copies/runtime environments unchanged.
+
+## AUTH-03 Operator Guard Review Correction (2026-11-09, Issue871)
+
+- PR870 follow-up: explicit safety checks survive optimization and helpers refuse
+  optimized startup before side effects. Existing Auth rollback is preserved.
+- Offline synthetic regression covers optimized invocation, CLI validation and
+  pre/post-reload drift rollback. Source correction only; no production operations
+  or additional mail/recovery/deployment are authorized by this review request.
+
+## AUTH-03 Restored Production (2026-11-09, Issue866)
+
+- User approved/recreated dedicated Hostinger noreply mailbox with password entry
+  performed by user. Protected app staging/production SMTP_PASS and production
+  Auth mailer password synchronized; JWT/user passwords/auth policy unchanged.
+- Source652dcb3, staging PR867, selected production868, ancestry869. Production
+  live978c0e1 and stagingacb8f1c; guarded deployments42592047883 (attempt2) and
+ 42591553001 SUCCESS, root/ready200. Actual loaded SMTP authenticated in both;
+  one technical self-mail accepted and received via read-only IMAP. No reset email
+  to employees or business/outbound mutation. Workers retained IDs.
+- Safe Indonesian reset/rate-limit/network feedback replaces raw edge/provider
+  errors. Password-reset logs retain only diagnostic codes, no provider message.
+ 147 affected/35 focused tests, lint/typecheck/builds/audit gate pass.147 is not
+  additional to35; no full-suite or actual employee recovery acceptance claimed.
+
 ## AUTH-03 Authorized Recovery Candidate (2026-11-09, Issue866)
 
 - User authorizes restoring SMTP and selected production release after staging.

@@ -1,5 +1,97 @@
 # Worklog
 
+## 2026-11-09 [Codex] AUTH-03 Guard Review Validation Complete (Issue871)
+
+- Source501500a in PR870: explicit guards and optimized-startup refusal verified.
+  Hosted Quality Gate42596828716 SUCCESS (lint/typecheck,1 Vitest integration
+  invoking4 Python regression groups, audit). Local isolated regression also pass;
+ 12 optimized startup cases plus CLI/assert-free/rollback checks covered.
+- No real SMTP, recovery/reset, credential write, host helper copy, Auth recreate,
+  production/staging runtime deployment or business action in this source review.
+  Prior installed operator copies are not claimed upgraded by this PR update.
+  The fix remains a source candidate in the existing staging-target PR870.
+
+## 2026-11-09 [Codex] AUTH-03 Operator Guard Optimization Review Fix (Issue871)
+
+- Review on PR870 correctly identifies safety asserts disappearing under optimized
+  Python. Continue owned PR branch, staging-default source fix only; no production
+  helper copy/execution, SMTP/reset email, credential change or service restart.
+- Replace every safety assert in the two recovery helpers with explicit require/
+  RuntimeError checks. Refuse optimized interpreters before operator work, validate
+  SMTP CLI arity/allowlists, retain exceptions inside Auth's rollback transaction.
+  Apply the same small fix to the adjacent self-mail helper/embedded IMAP guards.
+- Four regression groups cover12 optimized subprocess cases (-O/-OO/env1/env2
+  for3helpers), argument errors, absence of removable safety asserts and synthetic
+  pre/post-reload configuration drift rollback with optimized compilation.
+- Tests fail against original source, then pass after patch in a bounded isolated
+  container: network none, empty allowlisted env, read-only source/toolchain,
+  non-root, no host/socket/secrets mounts, scratch-only writes,1CPU/256MiB/32PIDs.
+  Cached pgAdmin Python requires NET_BIND_SERVICE in the container bounding set;
+  network remains disabled, no new image/dependency installed. No live service
+  target is exercised. CI integration uses a narrow Vitest wrapper; CI pending.
+
+## 2026-11-09 [Codex] AUTH-03 Recovered and Released Production
+
+- Operational work complete. Production live978c0e1725227bfede5ca6207ebbfa6f09335299
+  after selective PR868; ancestry PR869 makes live stagingacb8f1c contain main.
+  Guarded Deploy Staging42591553001 and Production42592047883 attempt2 SUCCESS.
+ 147 affected tests,35 focused tests, lint/typecheck/frontend+backend builds and
+  high/critical audit gate pass.18 moderate advisories unchanged, no full suite.
+- First production app attempt stopped before replacement because atomically
+  replaced root:sigap-runner environment had become0600. Restored its intended
+ 0640 (parent0750, no world access), verified runner read access, then reran only
+  failed deploy job. Operator helpers now preserve original owner/group AND0600/
+ 0640 mode. No guard bypass; previous healthy runtime stayed in service.
+- SMTP verified using the ACTUAL loaded runtime password after both deployments,
+  not candidate injection. One production technical self-mail from/to noreply was
+  accepted and found by its unique header through read-only IMAP993/EXAMINE.
+  No employee was contacted, no reset link was generated, no password was reset.
+  Self-mail started/accepted journals prevent an ambiguous outcome being resent.
+- Production app53f6f84f6821 healthy/restart0, root/ready200. Tunnel57601ec6c36a,
+  PDFc3af751fdaf4, syncfc03d1194fee, outbound657fba2b5a1f, API99e7d80fd17a and
+  relay8e6d0b6c69db unchanged. Staging appd567963ac6f9 healthy; four worker/API IDs
+  unchanged. Auth-only mailer reload healthy, same Auth image/all non-mailer
+  effective variables; DB/rest/realtime/private gateway/TLS IDs retained.
+- Public empty-email reset smoke returns canonical generic200 in both environments
+  without mail/link generation; actual compiled staging assets contain safe error
+  and rate-limit messages. Account-independent success, IP limits/cooldown and
+  security controls retained. Actual employee recovery/OTP browser test NOT claimed.
+- Secrets/backups remain in restricted operator directories, no raw credentials
+  or provider reply in repo/chat. Existing cPanel mailboxes, DNS/MX, unrelated
+  services and the mistaken star-design request were not changed. No migration,
+  business approval/outbound or maintenance-state change. No release blocker.
+
+## 2026-11-09 [Codex] AUTH-03 Mailbox Recovery and Runtime Reload Checkpoint
+
+- User authorizes SMTP restoration and production release, then explicitly
+  authorizes recreating dedicated noreply@marison.id. hPanel Hostinger Email had
+  no mailbox; cPanel had three other named mailboxes and a system account, none
+  matched the configured sender. Do not describe this as a proved deletion event.
+- User personally completed hPanel login/2FA and new mailbox/password entry.
+  UI confirms mailbox active; no paid plan, DNS change or provider-password entry
+  by agent. Random credential generated locally under restricted current-user/
+  SYSTEM ACL, never output/committed; no employee password was changed.
+- Candidate login now passes Nodemailer verification over TLS465 from BOTH
+  environments without sending email. Only SMTP_PASS atomically updated in the
+  two protected app environment files, originals backed up0600/private0700.
+  Runtime reload remains required; do not claim email delivery from verify alone.
+- Auth production also uses this sender over STARTTLS587. Its four historical
+  SMTP password entries were audited/aligned, all other effective variables and
+  Auth image unchanged. Auth-only recreate is healthy; DB/rest/realtime/gateway/
+  TLS container IDs retained. No JWT/login-policy/user/database changes.
+- Initial helper guards failed closed on the SSH alias differing from actual
+  staging hostname and on the duplicated Auth env entries, before file changes.
+  Production guest intentionally lacks host Node; final Python operator runs
+  Nodemailer only inside existing app containers. No new runtime installed.
+- PR867 merged staginga9461f6; CI42579491380 and staged deploy42579979064 SUCCESS.
+  Selective main PR868 ->978c0e1, CI42590489023 SUCCESS. Ancestry-only PR869
+  ->stagingacb8f1c; guarded deploy42591553001 in progress, then loaded runtime SMTP
+  must be verified before production. Full suite not run:147 affected/35 focused
+  tests, lint/typecheck/frontend+backend builds passed,18moderate unchanged.
+- No recovery email/link generated on real employee accounts, approval, business
+  outbound, migration, maintenance toggle or worker restart. Technical self-mail
+  acceptance/delivery and final runtime release proof still pending.
+
 ## 2026-11-09 [Codex] AUTH-03 Recovery Authorized and Safe Feedback Candidate
 
 - User explicitly authorizes SMTP restoration and production release. Continue
