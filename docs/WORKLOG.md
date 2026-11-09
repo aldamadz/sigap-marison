@@ -1,5 +1,42 @@
 # Worklog
 
+## 2026-11-09 [Codex] SUR-41 / SUR-34 Production Release Verified
+
+- User explicitly requested production LT and editable examiner type, serial,
+  design and date, then requested autonomous release without MCP form handoff.
+  GitHub CLI successfully marked PR855 Ready; no user credential was needed.
+- Original main-based source09c9dec selected SUR34/LT without old staging-only
+  ancestry. PR853 superseded by staging integration854; hosted UI regression
+  blocked an automatic merge artifact (two LT cells). Fix616441b removed only
+  the duplicate; Inbox source then exactly matched the selected source branch.
+  No affected runtime was deployed before that correction.
+- Source and corrected staging hosted gates42555145650/42555214159 SUCCESS;
+  27 related test files pass in each. Local focused16files172tests pass with one
+  optional supplied-workbook test skipped, plus integration7files79tests pass.
+  Lint/typecheck/build/diff check pass; audit0high/critical,18moderate unchanged.
+- PR854 deployed b6522dc (42555502210 SUCCESS); ready/root200 and compiled
+  app/shared/backend checks confirmed LT, editable type, saved overrides and
+  fresh external unit identity guard. PR855 selectively merged mainb0b2c05;
+  ancestry-only PR856 synchronized stagingcea1a05 with no tree change.
+- Final staging deploy42556247108 SUCCESS; public version
+  cea1a05d2bfed1c779beda405fb741b7c9c2f5aa, ready200. Main is an ancestor of
+  both staging source and live runtime. App66c2a5114a22 healthy; external API,
+  PDF/sync/outbound container IDs unchanged.
+- Production deploy42556519336 SUCCESS; public version
+  b0b2c058ab5144abed87caa391817aa91b14f4c4. Root/live/ready200; app81c2c9da59e2
+  healthy. Compiled runtime read-only fixture confirms all four saved overrides,
+  explicit clearing, unmodified raw reference, LT/edit UI, canonical saved type
+  and current-unit guard. Production tunnel/PDF/sync/outbound/external API/file
+  relay container IDs unchanged. No migration or worker rollout was required.
+- Acceptance limitation: live Tester P3 inbox has zero tasks; actual examiner
+  edit/date/autosave/remount and disabled LT are covered by UI fixtures, not a
+  real submission/approval. PDF table data is tested, not a new visual PDF review.
+  No production business data, external master, frozen payload/history/PDF, or
+  resend/approval was changed. LT remains unavailable when raw API omits area;
+  no LT Excel column or invented zero. PROJECT_CONTEXT.md remains absent.
+- Operational observation: CT104 root remains92% used,4.6GiB free before build;
+  no unrelated cleanup was attempted. Primary dirty worktree untouched.
+
 ## 2026-11-09 [Codex] SUR-41 Examiner Unit Reference Overrides / SUR-34
 
 - Issue852, isolated codex/unit-examiner-editable-reference-20261109 from

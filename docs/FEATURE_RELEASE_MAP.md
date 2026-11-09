@@ -1,5 +1,24 @@
 # SIGAP Feature and Release Map
 
+## SUR-41 / SUR-34 Released Staging and Production (2026-11-09)
+
+- Selected source09c9dec, staging PR854 and production PR855; ancestry-only
+  sync856. Live stagingcea1a05, productionb0b2c05. Official final deployments
+  42556247108/42556519336 SUCCESS; public readiness200 in both environments.
+- LT is external raw land area only, read-only/disabled, absent from XLSX.
+  Missing area stays unavailable. Examiner may edit type, serial, design and
+  date seeded from external. Saved edits survive external refresh/draft reopen,
+  and drive derived code, table/PDF data and canonical outbound construction.
+- No external identity/master overwrite, migration, worker restart, real test
+  approval, resend, historical payload/PDF rewrite or unrelated staging promotion.
+  Frozen accepted payloads remain unchanged. Current project/unit and existing
+  submitted/revision/idempotency guards stay active.
+- Focused172tests and integration79tests pass; source/integration hosted gates
+  each pass27 related files, lint/typecheck/build and high/critical audit.
+  Live Tester P3 has no examiner task: UI edit/autosave/remount and PDF table
+  data acceptance are fixture-based; no real approval/visual PDF QA is claimed.
+  Complete runtime/container evidence and limits are in WORKLOG.
+
 ## SUR-41 Editable Unit Examination / SUR-34 LT Promotion (2026-11-09, Issue852)
 
 - User authorizes staging then production. LT remains disabled/read-only, from
