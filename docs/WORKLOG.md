@@ -1,5 +1,10 @@
 # Worklog
 
+## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
+
+- Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
+
+
 ## 2026-11-09 [Codex] AUTH-03 Recovery Authorized and Safe Feedback Candidate
 
 - User explicitly authorizes SMTP restoration and production release. Continue

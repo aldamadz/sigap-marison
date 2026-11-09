@@ -9,7 +9,7 @@ import { Readable, Transform } from "node:stream";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mailCapture = vi.hoisted(() => ({ messages: [] as Array<Record<string, unknown>>, failure: null as Error | null }));
+const mailCapture = vi.hoisted(() => ({ messages: [] as Array<Record<string, unknown>>, failure: null as Error | null, pending: null as Promise<void> | null }));
 const pushCapture = vi.hoisted(() => ({ sent: [] as Array<Record<string, unknown>> }));
 
 vi.mock("nodemailer", () => ({
@@ -17,6 +17,7 @@ vi.mock("nodemailer", () => ({
     createTransport: () => ({
       sendMail: async (options: Record<string, unknown>) => {
         mailCapture.messages.push(options);
+        if (mailCapture.pending) await mailCapture.pending;
         if (mailCapture.failure) throw mailCapture.failure;
         return { messageId: "fixture" };
       },
@@ -46,6 +47,7 @@ type FakeOptions = {
   signatures?: Array<Record<string, unknown>>;
   attachments?: Array<Record<string, unknown>>;
   recoveryLinkMissing?: boolean;
+  recoveryLink?: () => Promise<unknown>;
   downloadPrimary?: (bucket: string, path: string) => Promise<unknown>;
   downloadExternal?: (bucket: string, path: string) => Promise<unknown>;
 };
@@ -143,7 +145,7 @@ const createFakeSupabase = (options: FakeOptions) => {
 
   const client: any = {
     auth: {
-      admin: { generateLink: async () => options.recoveryLinkMissing
+      admin: { generateLink: async () => options.recoveryLink ? options.recoveryLink() : options.recoveryLinkMissing
         ? { data: null, error: { message: 'Fixture user not found' } }
         : { data: { properties: { hashed_token: 'fixture-recovery-token' } }, error: null } },
       getUser: async () => options.user
@@ -264,7 +266,21 @@ afterEach(() => {
 });
 
 describe('password recovery SMTP failure privacy', () => {
-  it('retains the failure status but never logs provider replies, secrets or recovery URLs', async () => {
+  it('acknowledges a registered address while delivery is still pending', async () => {
+    let finish!: () => void;
+    mailCapture.pending = new Promise(resolve => { finish = resolve; });
+    try {
+      const { runtime } = await boot({});
+      const response = makeResponse();
+      await runtime.handleRequest(jsonRequest('POST', '/api/auth/password-reset', { email: 'tester@fixture.test' }), response);
+      expect(response.statusCode).toBe(200);
+      expect(mailCapture.messages).toHaveLength(1);
+    } finally {
+      finish();
+      mailCapture.pending = null;
+    }
+  });
+  it('acknowledges failed delivery exactly like an unknown account without disclosing diagnostics', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mailCapture.failure = Object.assign(new Error('private-provider-detail fixture-password-secret'), {
       code: 'EAUTH', command: 'AUTH PLAIN', responseCode: 535,
@@ -273,8 +289,14 @@ describe('password recovery SMTP failure privacy', () => {
     const { runtime } = await boot({});
     const response = makeResponse();
     await runtime.handleRequest(jsonRequest('POST', '/api/auth/password-reset', { email: 'tester@fixture.test' }), response);
-    expect(response.statusCode).toBe(503);
-    expect(log).toHaveBeenCalledWith('Password reset email failed:', { code: 'EAUTH', command: 'AUTH PLAIN', responseCode: 535 });
+    expect(response.statusCode).toBe(200);
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith('Password reset email failed:', { code: 'EAUTH', command: 'AUTH PLAIN', responseCode: 535 }));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const missing = await boot({ recoveryLinkMissing: true });
+    const unknown = makeResponse();
+    await missing.runtime.handleRequest(jsonRequest('POST', '/api/auth/password-reset', { email: 'unknown@fixture.test' }), unknown);
+    expect(unknown.statusCode).toBe(response.statusCode);
+    expect(unknown.body).toEqual(response.body);
     const output = JSON.stringify(log.mock.calls) + response.body.toString();
     for (const value of ['private-provider-detail', 'fixture-password-secret', 'fixture-recovery-token']) expect(output).not.toContain(value);
   });
@@ -287,7 +309,7 @@ describe('password recovery SMTP failure privacy', () => {
     await runtime.handleRequest(jsonRequest('POST', '/api/auth/password-reset', { email: 'tester@fixture.test' }), second);
     expect(first.statusCode).toBe(200);
     expect(second.body).toEqual(first.body);
-    expect(mailCapture.messages).toHaveLength(1);
+    await vi.waitFor(() => expect(mailCapture.messages).toHaveLength(1));
     expect(mailCapture.messages[0].text).toContain('https://sigap.test/reset-password?token_hash=fixture-recovery-token&type=recovery');
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const missing = await boot({ recoveryLinkMissing: true });
@@ -296,7 +318,26 @@ describe('password recovery SMTP failure privacy', () => {
     expect(unknown.statusCode).toBe(200);
     expect(unknown.body).toEqual(first.body);
     expect(mailCapture.messages).toHaveLength(1);
-    expect(warning).toHaveBeenCalled();
+    await vi.waitFor(() => expect(warning).toHaveBeenCalled());
+  });
+
+  it('responds before account lookup completes and bounds outstanding lookups', async () => {
+    let finish!: (value: unknown) => void;
+    const pending = new Promise(resolve => { finish = resolve; });
+    const lookup = vi.fn(() => pending);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { runtime } = await boot({ recoveryLink: lookup });
+    for (let n = 0; n < 34; n++) {
+      const response = makeResponse();
+      await runtime.handleRequest(jsonRequest('POST', '/api/auth/password-reset', { email: `test${n}@fixture.test` }, { 'x-forwarded-for': `192.0.2.${n}` }), response);
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body.toString())).toEqual({ ok: true, message: 'Jika email terdaftar, link reset kata sandi akan dikirim.' });
+    }
+    expect(lookup).toHaveBeenCalledTimes(32);
+    expect(mailCapture.messages).toHaveLength(0);
+    expect(warning).toHaveBeenCalledWith('Password reset background capacity reached.');
+    finish({ data: null, error: { code: 'fixture-missing' } });
+    await vi.waitFor(() => expect(warning.mock.calls.filter(call => call[0] === 'Password reset link not generated:')).toHaveLength(32));
   });
 
   it('keeps IP rate limits even for unknown recipients', async () => {
