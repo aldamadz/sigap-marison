@@ -106,6 +106,20 @@
 
 ## 2026-11-09 [Codex] SUR-41 Examiner Unit Reference Overrides / SUR-34
 
+### 2026-11-09 [Codex] SUR-41 / Issue #874 Security Correction Candidate
+
+- Forward migration20261109171000 strips initial allocated_* keys, guards direct
+  Unit allocation/completed snapshot updates, and verifies immutable history
+  through a service-only RPC. Outbound rejects missing/mismatched receipts and
+  stale caller input. Client examiner_verified flags confer no authority.
+- Authorized examiner edits and canonical external addendum revisions remain;
+  LT stays external. Missing historical receipts require re-examination, not
+  fabricated provenance. No business history rewrite or vendor POST.
+- Exact-lock hosted CI42601391278 passed lint/typecheck/affected tests and real
+  PostgreSQL authority suites in both schema shapes. Staging lineage preflight
+  and double-apply rollback proof preserve business data. Apply/runtime pending;
+  production untouched.
+
 - Issue852, isolated codex/unit-examiner-editable-reference-20261109 from
   mainaccb8da; user explicitly authorizes staging then production. Primary dirty
   worktree untouched. Original SUR34/LT commit747cbfd selected without its old

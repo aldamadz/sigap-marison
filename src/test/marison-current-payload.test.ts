@@ -6,6 +6,7 @@ import { compareCurrentPayload, currentPayloadPreview, reusableCurrentFileLinks,
 import { previewStoredMarisonPayload } from "../../backend/src/lib/marison-payload-preview";
 import { buildMarisonDocumentBundle } from "../../backend/src/lib/marison-document-links";
 import { getExternalUnitReference, applyExternalUnitReference } from "@sigap/shared";
+import { isDeepStrictEqual } from "node:util";
 import { buildProductionCode } from "../../production-code.mjs";
 
 const origin = "https://sigap.test";
@@ -114,8 +115,10 @@ describe("canonical Unit builder", () => {
     const reference = { value: 2048, raw: { type: hasType ? '30' : null, production_code: '001/UAI/PRC/5.2/07/10/2026', has_submitted: false, land_area: 60 } };
     const saved = { ...reference, allocation_detail: { unit_type: '36/72', production_serial: '009', production_block: '6.1', production_date: '2026-11-09', struktur_atas: '100', struktur_bawah: '200' } };
     const original = structuredClone(reference);
+    const approved = { allocated_units: structuredClone([saved]) };
     const receipt = vi.fn((_project: number, refs: unknown[]) => refs);
     const context = {
+      isDeepStrictEqual, supabase: { rpc: vi.fn(async () => ({ data: approved, error: null })) },
       getMarisonRequestedProject: () => ({}), requireExternalInteger: (v: unknown) => Number(v), externalIdFrom: (v: any) => Number(v.value),
       queryExternalDataSource: async () => ({ options: [reference] }), MARISON_UNITS_SOURCE_KEY: 'units',
       getMarisonAllocatedUnits: () => [saved], asPlainRecord: (v: unknown) => v || {}, getExternalRaw: (v: any) => v.raw || {},
@@ -131,7 +134,13 @@ describe("canonical Unit builder", () => {
     expect(receipt).toHaveBeenCalledWith(23, [{id:2048,type:'36/72',hasSubmitted:false}]);
     expect(reference).toEqual(original);
     saved.allocation_detail.unit_type = '';
+    await expect(runtime.buildMarisonUnitPayload({}, {}, null, {projectId:23,branchId:1})).rejects.toThrow(/berubah setelah pemeriksaan/);
+    approved.allocated_units[0].allocation_detail.unit_type = '';
     await expect(runtime.buildMarisonUnitPayload({}, {}, null, {projectId:23,branchId:1})).rejects.toThrow(/Tipe kavling/);
+    context.supabase.rpc.mockResolvedValueOnce({ data: null, error: null } as any);
+    await expect(runtime.buildMarisonUnitPayload({}, {}, null, {projectId:23,branchId:1})).rejects.toThrow(/bukti pemeriksaan/);
+    context.supabase.rpc.mockResolvedValueOnce({ data: approved, error: { code: 'fixture-error' } } as any);
+    await expect(runtime.buildMarisonUnitPayload({}, {}, null, {projectId:23,branchId:1})).rejects.toThrow(/bukti pemeriksaan/);
     context.queryExternalDataSource = async () => ({options: []});
     await expect(runtime.buildMarisonUnitPayload({}, {}, null, {projectId:23,branchId:1})).rejects.toThrow(/tidak tersedia/);
   });
@@ -143,6 +152,7 @@ describe("canonical Unit builder", () => {
       production_serial: ["001", "002", "006"][index], production_block: "5.3", production_date: "2026-08-21",
     } }));
     const context = { getMarisonRequestedProject: () => ({ id: 23 }), requireExternalInteger: (value: unknown) => Number(value),
+      isDeepStrictEqual, supabase: { rpc: async () => ({ data: { allocated_units: structuredClone(units) }, error: null }) },
       externalIdFrom: (value: any) => Number(value.value || value.id),
       queryExternalDataSource: async () => ({ options: units.map(unit => ({ value: unit.value, raw: { type: "30", has_submitted: true } })) }),
       MARISON_UNITS_SOURCE_KEY: "units", getMarisonAllocatedUnits: () => units, asPlainRecord: (v: unknown) => v || {},

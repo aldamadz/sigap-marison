@@ -492,7 +492,7 @@ export default function InboxPage() {
   const getAllocationDetailMap = (item: any) => {
     return Object.fromEntries(getSelectedAllocationUnits(item).map((unit: any) => [
       unit.value || unit.label,
-      applyExternalUnitReference(unit, allocationDetails[item.id]?.[unit.value] || unit.allocation_detail || {}),
+      applyExternalUnitReference(unit, allocationDetails[item.id]?.[unit.value] || (isVerificationTask(item) ? {} : unit.allocation_detail) || {}),
     ]));
   };
 
