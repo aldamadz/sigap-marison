@@ -496,20 +496,21 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
                           </Badge>
                           <Badge className={cn(
                             "rounded-md text-[10px]",
-                            detail.is_late
+                            detail.sla_paused ? "bg-muted text-muted-foreground hover:bg-muted" : detail.is_late
                               ? "bg-amber-500/15 text-amber-600 hover:bg-amber-500/15"
                               : "bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15"
                           )}>
-                            {detail.is_late ? "Telat" : "On-Time"}
+                            {detail.sla_paused ? "SLA dijeda" : detail.is_late ? "Telat" : "On-Time"}
                           </Badge>
                         </div>
                         <p className="truncate font-semibold text-foreground">{detail.judul_surat}</p>
                         <p className="mt-1 text-xs font-medium text-muted-foreground">
                           Tahap {detail.step_order}: {detail.role_name} oleh {detail.signer_name}
                         </p>
+                        {detail.sla_paused && <p className="mt-1 text-xs text-muted-foreground">{detail.sla_pause_reasons?.join('; ') || 'Menunggu prasyarat'}</p>}
                       </div>
                       <div className="shrink-0 rounded-lg border border-border bg-muted/20 px-4 py-3 text-right">
-                        <p className={cn("text-lg font-semibold", detail.is_late ? "text-amber-600" : "text-emerald-600")}>
+                        <p className={cn("text-lg font-semibold", detail.sla_paused ? "text-muted-foreground" : detail.is_late ? "text-amber-600" : "text-emerald-600")}>
                           {formatMinutes(detail.elapsed_minutes)}
                         </p>
                         <p className="text-xs font-medium text-muted-foreground">

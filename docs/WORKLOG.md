@@ -1,5 +1,63 @@
 # Worklog
 
+## 2026-11-09 [Codex] SLA-03 Production Authorization and Compatibility
+
+- User explicitly authorizes production after staging beeb26b and its successful
+  guarded deploy42561938182. PR862 selects only the main-based SLA03 branch.
+- Production252-version lineage matches the protected MRN30 baseline. Initial
+  rollback rehearsal failed closed on compact active-breach SQL formatting;
+  no committed production schema or business change occurred.
+- New forward migration20261109105900 normalizes only that known compact call
+  before immutable20261109110000. Explicit audited order is compat then clock;
+  staging already has the clock and compat is a no-op. No blind history repair.
+- Real PG17 tests cover compact formatting, unchanged semantics/owner/ACL,
+  repeated compatibility before/after clocks and the full action-clock suite.
+  Actual production rollback rehearsal now passes:153clocks,21paused candidates;
+  business fingerprints and approval/verification guards unchanged. Apply and
+  selective main/staging ancestry/production rollout still pending.
+
+## 2026-11-09 [Codex] SLA-03 Local and Staging Rehearsal Checkpoint
+
+- Private interval accounting and existing authorized KPI metadata implemented.
+  Readiness includes third-party verification, unfinished canonical recommendation
+  (including the deployed next-stage guard), revisions, future intake and inactive
+  signers. Own form/upload preparation does not pause. No approval policy change.
+- Ready intervals preserve fractions before rounding and accumulated work across
+  available-at/revision changes. Concurrent refresh serializes per clock; monotonic
+  server timestamps never reject a business write due to an older transaction.
+  Indexed current-state reads avoid heavy prerequisite queries on every KPI row.
+- New migration20261109110000; clock tables/controls private with RLS, original
+  public KPI caller grants/owner retained. Completed history uses legacy clock;
+  existing active elapsed is a preserved baseline, not a retrospective correction.
+-94 targeted app tests pass; affected gate69tests plus original dashboard SQL and
+  SLA03 PG17 clock tests pass. Tests cover repeated migration, waiting/resume,
+  fractional intervals, future intake, legacy baseline, authorization, rollback,
+  real dependency triggers and two-connection refresh. Lint/typecheck/build pass;
+  audit0high/critical18moderate unchanged. No full suite.
+- Staging preflight matches protected MRN30 ledger255; exact source SHA256
+  d80a88bb1fed79745c0f0a4b8df456bf82263c7f592ea5bf920bc0511cb373af.
+  Twice-applied rollback rehearsal passed against actual managed database:22clock
+  candidates,3paused; business fingerprints and approval/verification guards
+  unchanged. No committed database/runtime changes yet. Hosted CI, apply and
+  staging rollout/acceptance remain; production not authorized or changed.
+- Separate pre-existing weekly SQL fixture fails with duplicate weekly-rule key
+  at this week's boundary. --weekly coverage is retained; --action-clock loads
+  the same policy with its own clock assertions, not the unrelated weekly fixture.
+
+## 2026-11-09 [Codex] SLA-03 Action Readiness Clock Started
+
+- Issue858, isolated fix/sla-action-readiness-20261109 from mainb0b2c05.
+  User requests pause whenever a signer waits for prerequisites; default target
+  staging, no new production release authorization. Root dirty worktree untouched.
+- Read-only production diagnosis confirmed active next-step recommendation guard
+  blocks2to3 while KPI counts current2 until now. Approval policy is not silently
+  changed; all SLA consumers must share actual prerequisite readiness.
+- Implement private server interval accounting, preserve already-spent time and
+  completed history, expose paused reasons through existing authorized RPCs.
+  Initial legacy elapsed is preserved at cutover; no invented past pause events.
+  Own input/upload work remains timed. Regression/real PG tests and staged
+  catalog/ledger preflight remain required; PROJECT_CONTEXT.md is absent.
+
 ## 2026-11-09 [Codex] SUR-41 Examiner Unit Reference Overrides / SUR-34
 
 - Issue852, isolated codex/unit-examiner-editable-reference-20261109 from

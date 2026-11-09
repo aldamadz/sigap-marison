@@ -44,6 +44,8 @@ export type DepartmentKpiDetail = {
   elapsed_minutes: number;
   sla_minutes: number;
   is_late: boolean;
+  sla_paused?: boolean;
+  sla_pause_reasons?: string[];
 };
 
 export type KpiOption = {

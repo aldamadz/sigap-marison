@@ -32,6 +32,15 @@ const renderDashboard = (path='/dashboard') => {
 };
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe('actionable dashboard', () => {
+  it('shows a paused SLA and reasons instead of overdue styling or a signer reminder', async () => {
+    mocks.get.mockResolvedValue(bundle({rows:[{...row,bucket:'blocked',sla_paused:true,sla_pause_reasons:['Menunggu tim pemeriksa','Menunggu rekomendasi'],elapsed_minutes:300}]}));
+    renderDashboard();
+    await screen.findByText(row.title);
+    expect(screen.getByText('SLA dijeda')).toBeInTheDocument();
+    expect(screen.getByText('Menunggu tim pemeriksa; Menunggu rekomendasi')).toBeInTheDocument();
+    expect(screen.queryByText('Lewat 3 jam kerja')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:`Ingatkan ${row.no_surat}`})).not.toBeInTheDocument();
+  });
   it('keeps a single dashboard title inside the mobile application layout', async () => {
     vi.stubGlobal('innerWidth',390);mocks.get.mockResolvedValue(bundle());
     const client=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}});

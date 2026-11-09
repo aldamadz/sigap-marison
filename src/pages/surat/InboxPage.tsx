@@ -240,8 +240,8 @@ export default function InboxPage() {
       const kpi = kpiBySignature.get(item.id);
       const matchesKpi = kpiFilter === "all" ||
         (kpiFilter === "late" && kpi?.is_late) ||
-        (kpiFilter === "due" && kpi && !kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes <= 30) ||
-        (kpiFilter === "on_time" && (!kpi || (!kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes > 30)));
+        (kpiFilter === "due" && kpi && !kpi.sla_paused && !kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes <= 30) ||
+        (kpiFilter === "on_time" && (!kpi || (!kpi.sla_paused && !kpi.is_late && kpi.sla_minutes - kpi.elapsed_minutes > 30)));
       return matchesKpi;
     });
   }, [inbox, kpiFilter, kpiBySignature]);
@@ -2296,6 +2296,7 @@ const handleApprove = async (item: any) => {
   const getKpiPresentation = (item: any) => {
     const detail = kpiBySignature.get(item.id);
     if (!detail) return { label: "KPI belum tersedia", tone: "muted", detail: "-" };
+    if (detail.sla_paused) return { label: "SLA dijeda", tone: "paused", detail: detail.sla_pause_reasons?.join("; ") || "Menunggu prasyarat" };
     const remaining = detail.sla_minutes - detail.elapsed_minutes;
     if (detail.is_late) return { label: "Terlambat", tone: "late", detail: formatMinutes(Math.abs(remaining)) + " melewati SLA" };
     if (remaining <= 30) return { label: "Mendekati SLA", tone: "due", detail: formatMinutes(remaining) + " tersisa" };
@@ -2324,6 +2325,10 @@ const handleApprove = async (item: any) => {
 
   const getApprovalBlockers = (item: any) => {
     const blockers: string[] = [];
+    const kpi = kpiBySignature.get(item.id);
+    if (!isVerificationTask(item) && kpi?.sla_paused) {
+      blockers.push(...(kpi.sla_pause_reasons?.length ? kpi.sla_pause_reasons : ["Menunggu prasyarat pengajuan"]));
+    }
     if (!isVerificationTask(item) && isWaitingVerification(item)) {
       blockers.push(`Menunggu pemeriksaan ${getVerifierDisplayName(item)}`);
     }
@@ -2710,6 +2715,7 @@ const handleApprove = async (item: any) => {
               "mt-0.5 shrink-0",
               kpi.tone === "late" && "border-destructive/30 bg-destructive/10 text-destructive",
               kpi.tone === "due" && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              kpi.tone === "paused" && "border-border bg-muted text-muted-foreground",
               kpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
             )}
           >
@@ -2724,7 +2730,7 @@ const handleApprove = async (item: any) => {
             {item.requires_unit_allocation && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">Unit</Badge>}
             {hasRequirements && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{requirementCount > 0 ? `${requirementCount} lampiran` : "Lampiran"}</Badge>}
           </div>
-          <span className="shrink-0 text-[11px] text-muted-foreground">{kpi.detail}</span>
+          <span className="max-w-44 truncate text-[11px] text-muted-foreground" title={kpi.detail}>{kpi.detail}</span>
         </div>
       </button>
     );
