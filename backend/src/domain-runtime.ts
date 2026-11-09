@@ -718,7 +718,7 @@ const handlePasswordResetRequest = async (req) => {
     });
     passwordResetSendCooldowns.set(requestKey, Date.now() + PASSWORD_RESET_SEND_COOLDOWN_MS);
   } catch (error) {
-    console.error("Password reset email failed:", { code: error?.code, command: error?.command, response: error?.response, message: error?.message });
+    console.error("Password reset email failed:", { code: error?.code, command: error?.command, responseCode: error?.responseCode });
     const err = new Error("Email reset belum bisa dikirim. Periksa konfigurasi SMTP.");
     err.status = 503;
     throw err;
