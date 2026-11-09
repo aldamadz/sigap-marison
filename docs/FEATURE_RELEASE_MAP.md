@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## NTF-07 Production Released (2026-11-09)
+
+- Explicit user promotion completed through selective PR849 and staging ancestry
+  sync850. Live staging56d46ba contains main/live productionaccb8da. Official
+  staging42545410635 and production42545759924 workflows succeeded, public SHA /
+  image / readiness and notification assets verified.103 affected tests pass.
+- Activation status restores on remount/focus and synchronizes across controls;
+  denied/failed activation is explained, not falsely marked active. Popup and
+  self-delivery test controls remain exact-staging-only in the production bundle.
+- No DB/schema/worker/provider/audience/secret/business/outbound change or test
+  send to production. Remote browser/OS delivery remains dependent on supported
+  subscriptions and permission; full live OS toast acceptance is not claimed.
+- Full identities, hosted gates and residual CT104 capacity concern in WORKLOG.
+
 ## NTF-07 Production Promotion Authorized (2026-11-09)
 
 - User selects browser notification activation/status fixes for production.
