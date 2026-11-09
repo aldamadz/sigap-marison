@@ -1,5 +1,11 @@
 # SIGAP Feature and Release Map
 
+## AUTH-03 Guard Correction Validated (2026-11-09, Issue871)
+
+- PR870 source501500a passes hosted quality42596828716 and isolated regression.
+  Explicit guards, optimization refusal and pre/post-reload rollback verified.
+  Source-only review completion; operator copies/runtime environments unchanged.
+
 ## AUTH-03 Operator Guard Review Correction (2026-11-09, Issue871)
 
 - PR870 follow-up: explicit safety checks survive optimization and helpers refuse
