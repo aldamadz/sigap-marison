@@ -147,14 +147,19 @@ export default function LoginPage() {
       });
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error || payload?.message || 'Gagal mengirim link reset kata sandi.');
+        const message = response.status === 429
+          ? 'Terlalu banyak permintaan reset. Silakan tunggu beberapa saat sebelum mencoba lagi.'
+          : response.status >= 500
+            ? 'Layanan reset kata sandi sementara tidak tersedia. Silakan coba lagi atau hubungi admin.'
+            : 'Permintaan reset kata sandi tidak dapat diproses. Periksa email Anda lalu coba lagi.';
+        toast.error(message);
+        return;
       }
 
       toast.success('Link reset kata sandi sudah dikirim jika email terdaftar.');
       setResetOpen(false);
-    } catch (error: any) {
-      toast.error(error?.message || 'Gagal mengirim link reset kata sandi.');
+    } catch {
+      toast.error('Permintaan reset kata sandi belum dapat dikirim. Periksa koneksi Anda lalu coba lagi.');
     } finally {
       setResetLoading(false);
     }
