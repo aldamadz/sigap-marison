@@ -29,7 +29,7 @@ it.each([
 ])('shows safe recovery feedback for HTTP $status / $error', async ({ status, error }) => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error }), { status })));
   submitReset();
-  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Layanan reset kata sandi sementara tidak tersedia. Silakan coba lagi atau hubungi admin.'));
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Permintaan reset kata sandi tidak dapat diproses. Silakan coba lagi.'));
   expect(toast.success).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'Kirim Link Reset' })).toBeEnabled();
   expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -56,4 +56,5 @@ it('preserves the same success message without claiming account existence', asyn
   expect(fetch).toHaveBeenCalledWith('/api/auth/password-reset', expect.objectContaining({
     method: 'POST', body: JSON.stringify({ email: 'tester@example.test' }),
   }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 });
