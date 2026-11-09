@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+## SLA-03 Released Staging (2026-11-09)
+
+- Live beeb26b, PR860; official deployment42561938182 SUCCESS, readiness200.
+  Selected migration20261109110000 applied with unchanged business data, canonical
+  approval guards and existing KPI caller authorization.22 clocks,3paused.
+- Signer SLA pauses for verification/recommendation/revision/receiving/inactive
+  signer dependencies and resumes accumulated working time. Own stage inputs
+  remain timed. Existing Inbox/dashboard/KPI/attention/reminder paths share the
+  private server clock; clients cannot change timestamps or write interval logs.
+-94 targeted/69 affected tests, actual PG17 and double staging rehearsal pass.
+  Existing paused staging data agrees across KPI/dashboard and remains frozen
+  one hour forward in a read-only SQL-context check. Tester P3 browser loads but
+  has no tasks; actual paused-row browser/approval acceptance is not claimed.
+- Production unchangedb0b2c05; explicit production release still required.
+  Completed historical measurements and pre-cutover baseline are retained;
+  this is not a reconstruction of unrecorded historical waiting periods.
+
 ## SLA-03 Action-Ready Signer Clock (2026-11-09, Issue858)
 
 - Staging-only correction requested after read-only production diagnosis: signer

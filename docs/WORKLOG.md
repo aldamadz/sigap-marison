@@ -1,5 +1,46 @@
 # Worklog
 
+## 2026-11-09 [Codex] SLA-03 Staging Runtime Verified
+
+- Source7491c05, PR859 superseded by staging integration860 (test-gate ordering
+  conflict only). App/migration files identical to selected main-based source.
+  Hosted Quality Gate42561693510 SUCCESS; push42561898723 and guarded manual
+  Deploy Staging42561938182 SUCCESS. Source staging/live
+  beeb26b7291c51d4024225cb7eee19164f59ec1e. Root/ready200; app70b17531ec50 healthy,
+  restart0. Built Inbox/dashboard/KPI chunks contain paused-SLA presentation.
+- Applied only20261109110000 after exact digest rehearsal, ledger255to256;
+  source SHA256 d80a88bb1fed79745c0f0a4b8df456bf82263c7f592ea5bf920bc0511cb373af.
+  Protected baseline matches last MRN30 rollout, no bulk replay/repair.
+  Twice-applied rollback rehearsal and committed transaction preserve all guarded
+  business fingerprints, approval/verification definitions/owners/ACLs and public
+  KPI caller grants/owner.22 private clocks initialized,3waiting/scheduled.
+- Auto push deployment42561898846 cancelled before replacement; manual dispatch
+  explicitly acknowledged the verified migration version and ran all usual gates.
+  Four PDF/sync/outbound/external API container IDs unchanged; no worker rollout,
+  business approval, external POST/resend, fixture insertion or notification send.
+-94 targeted tests,69 affected tests, original dashboard and new action-clock PG17
+  suites pass. Private role/timestamp controls, repeated migration, fractional
+  interval sum, future receiving, legacy baseline, requester revision, rollback,
+  real dependency triggers and two-connection refresh tested. Lint/typecheck/build
+  and high-critical audit pass (18pre-existing moderate). No full suite run.
+- Actual staging read-only SQL actor-context proof: existing active paused signer
+  has reason metadata, is_latefalse, dashboardpausedtrue and unchanged elapsed
+  when the private calculator is evaluated one hour forward. This is an operator
+  SQL-context check, not a browser JWT/approval acceptance. Managed read-only API
+  role cannot SET ROLE authenticated or execute all restricted RPCs; no grants
+  were added to work around that. Final SQL proof uses ordinary authorized
+  management execution with BEGIN READ ONLY/ROLLBACK. Normal role ACL paths are
+  tested in disposable PostgreSQL; private schema remains inaccessible to clients.
+- Browser Tester P3 dashboard successfully reloads after deploy, personal/team
+  queues empty. Actual paused-row visual/live approval acceptance is not claimed;
+  paused-state display and disabled approval are tested using UI fixtures.
+- Production public SHA remainsb0b2c058ab5144abed87caa391817aa91b14f4c4. Automatic
+  production workflow42562377896 cancelled because this task is staging-only.
+  No production migration/deploy/data/secret change. Existing completed history
+  untouched; pre-cutover elapsed preserved, not retrospectively reconstructed.
+  Feature branch retained for a later explicitly selected production release.
+  PROJECT_CONTEXT.md absent, primary dirty worktree untouched.
+
 ## 2026-11-09 [Codex] SLA-03 Local and Staging Rehearsal Checkpoint
 
 - Private interval accounting and existing authorized KPI metadata implemented.
