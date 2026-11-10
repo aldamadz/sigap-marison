@@ -3,6 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 
 const read = (path) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
 const fundRabParity = process.argv.includes("--fund-rab-parity");
+const revisionRecovery = process.argv.includes("--revision-recovery");
 const stageOverlay = process.argv.includes("--stageoverlay");
 const stageRead = (file) => {
   const result = spawnSync("git", ["show", `origin/staging:supabase/migrations/${file}`], { encoding: "utf8" });
@@ -96,17 +97,33 @@ const run = (args, input = "", stdoutOnly = false) => {
   return stdoutOnly ? result.stdout : `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
 };
 // A cold CI runner emits image-download progress to stderr, not the container ID.
-const id = run(["run", "-d", "-e", "POSTGRES_PASSWORD=test", "postgres:17-alpine"], "", true).trim();
+const id = run(["run", "-d", "--init", "--network", "none", "--read-only",
+  "--label", "sigap.fixture=requester-revision",
+  "--user", "70:70", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+  "--memory", "512m", "--cpus", "1", "--pids-limit", "64",
+  "--ulimit", "nofile=1024:1024", "--ulimit", "fsize=67108864:67108864",
+  "--tmpfs", "/tmp:rw,noexec,nosuid,size=192m,mode=1777",
+  "--tmpfs", "/var/run/postgresql:rw,noexec,nosuid,size=8m,uid=70,gid=70,mode=1777",
+  "-e", "POSTGRES_PASSWORD=test", "-e", `POSTGRES_USER=${revisionRecovery ? "sigap_fixture_bootstrap" : "postgres"}`,
+  "-e", "PGDATA=/tmp/pgdata", "-e", "HOME=/tmp",
+  "postgres:17-alpine", "-c", "listen_addresses=127.0.0.1",
+  "-c", "shared_buffers=32MB",
+  "-c", "max_connections=10", "-c", "statement_timeout=15000",
+  "-c", "idle_in_transaction_session_timeout=10000"], "", true).trim();
 if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error("Docker returned an invalid disposable container ID");
 const psqlArgs = ["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-Atq"];
 try {
   let ready = false;
   for (let attempt = 0; attempt < 60 && !ready; attempt += 1) {
-    const probe = spawnSync("docker", ["exec", id, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], { encoding: "utf8" });
+    const probe = spawnSync("docker", ["exec", id, "pg_isready", "-h", "127.0.0.1", "-U", revisionRecovery ? "sigap_fixture_bootstrap" : "postgres"], { encoding: "utf8" });
     ready = probe.status === 0;
     if (!ready) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
-  if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
+  if (!ready) throw new Error("Disposable PostgreSQL did not become ready: " + run(["logs", "--tail", "20", id]));
+  if (revisionRecovery) {
+    run(["exec", "-i", id, "psql", "-h", "127.0.0.1", "-U", "sigap_fixture_bootstrap", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
+      "create role postgres login superuser;");
+  }
   run(psqlArgs, setup);
   run(psqlArgs, read(migrationRoot + "20261006164500_keu10_vendor_routing_prerequisite.sql"));
   run(psqlArgs, read(migrationRoot + "20261006170000_keu10_canonical_workflow.sql"));
@@ -164,7 +181,7 @@ try {
       throw new Error(`Additional signer submission concurrency failed: ${JSON.stringify(submitted)}`);
     }
     process.stdout.write("Additional signer concurrency: one new registration, one idempotent retry.\n");
-  } else if (process.argv.includes("--requester-edit") || process.argv.includes("--recommendation-revision") || fundRabParity) {
+  } else if (process.argv.includes("--requester-edit") || process.argv.includes("--recommendation-revision") || fundRabParity || revisionRecovery) {
     if (fundRabParity) {
       run(psqlArgs, `create publication supabase_realtime;
         create table public.activity_logs(id uuid primary key);
@@ -239,7 +256,7 @@ try {
     const revisionOutput = run(psqlArgs, read("supabase/tests/requester_data_attachment_revision.integration.sql"));
     if (!revisionOutput.includes("Requester corrections: all assertions passed")) throw new Error("Missing requester correction marker");
     process.stdout.write(revisionOutput);
-    if (process.argv.includes("--recommendation-revision") || process.argv.includes("--requester-edit")) {
+    if (process.argv.includes("--recommendation-revision") || process.argv.includes("--requester-edit") || revisionRecovery) {
       run(psqlArgs, canonical("20260810143000_rec03_recommendation_multi_detail_foundation.sql", "validate_recommendation_items"));
       run(psqlArgs, `alter table public.surat_attachments add column if not exists created_by uuid;
         alter table public.surat_recommendation_tasks add column if not exists submitted_surat_id uuid,
@@ -260,6 +277,67 @@ try {
       const photoOutput = run(psqlArgs, read("supabase/tests/recommendation_requester_revision_photos.integration.sql"));
       if (!photoOutput.includes("Recommendation revision photos: all assertions passed")) throw new Error("Missing recommendation photo marker");
       process.stdout.write(photoOutput);
+    }
+    if (revisionRecovery) {
+      run(psqlArgs, `${canonical("20261109170000_signer_clock_authority.sql", "guard_surat_lifecycle_authority")}
+        ${canonical("20261109171000_unit_allocation_authority.sql", "guard_unit_allocation_authority")}
+        create trigger guard_surat_lifecycle_authority before update of status,current_step on public.surat_registrasi
+          for each row execute function public.guard_surat_lifecycle_authority();
+        create trigger guard_unit_allocation_authority before insert or update of form_input_data,data_snapshot on public.surat_registrasi
+          for each row execute function public.guard_unit_allocation_authority();`);
+      // Match production: migration administrator differs from canonical RPC owner.
+      run(psqlArgs, `create role supabase_admin login superuser; alter role postgres nosuperuser;
+        create table keu10_test.recovery_catalog as select oid,proowner,proacl from pg_proc
+        where oid in ('public.create_external_submission_revision_draft(uuid)'::regprocedure,
+          'requester_revision_internal.resume(uuid)'::regprocedure,
+          'public.submit_external_submission_revision(uuid,uuid,jsonb,text)'::regprocedure,
+          'public.accept_surat_process_revision(uuid,text)'::regprocedure,
+          'public.accept_keu10_requester_revision(uuid,jsonb,text,uuid)'::regprocedure);`);
+      psqlArgs[psqlArgs.indexOf("-U") + 1] = "supabase_admin";
+      psqlArgs.push("-d", "postgres");
+      if (!process.argv.includes("--recovery-baseline")) {
+        const recovery = read(migrationRoot + "20261110110000_requester_revision_recovery.sql");
+        run(psqlArgs, recovery);
+        run(psqlArgs, recovery);
+      }
+      const recoveryOutput = run(psqlArgs, read("supabase/tests/requester_revision_recovery.integration.sql"));
+      if (!recoveryOutput.includes("Requester revision recovery: all assertions passed")) throw new Error("Missing recovery marker");
+      process.stdout.write(recoveryOutput);
+      // Contention runs only inside this no-network disposable database.
+      for (const lock of [
+        "select pg_advisory_xact_lock(hashtextextended('keu10:'||keu10_test.id(9801)::text,0))",
+        "select id from public.surat_registrasi where id=keu10_test.id(9801) for update",
+        "select id from public.surat_revision_events where id=(select event_id from keu10_test.results where key='recovery-lock') for update",
+        "select id from public.surat_registration_drafts where id=(select draft_id from keu10_test.results where key='recovery-lock') for update",
+      ]) {
+        const locker = spawn("docker", psqlArgs);
+        let output = "", errors = "";
+        const finished = new Promise((resolve, reject) => {
+          locker.on("error", reject);
+          locker.on("close", code => code === 0 ? resolve() : reject(new Error(`Fixture locker failed: ${errors}`)));
+        });
+        const ready = new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("Fixture locker readiness timeout")), 10000);
+          locker.stdout.on("data", chunk => {
+            output += chunk;
+            if (output.includes("LOCK_READY")) { clearTimeout(timer); resolve(); }
+          });
+          locker.on("close", () => { clearTimeout(timer); if (!output.includes("LOCK_READY")) reject(new Error("Fixture locker closed early")); });
+        });
+        locker.stderr.on("data", chunk => { errors += chunk; });
+        locker.stdin.end(`begin; ${lock}; select 'LOCK_READY'; select pg_sleep(3); rollback;`);
+        try {
+          await ready;
+          run(psqlArgs, `set role authenticated;
+            select set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+            do $$ declare started timestamptz:=clock_timestamp(); begin
+              perform keu10_test.expect_error('55P03',format('select public.create_external_submission_revision_draft(%L)',
+                (select event_id from keu10_test.results where key='recovery-lock')));
+              perform keu10_test.assert(clock_timestamp()-started<interval '1 second','Revision opening fails fast under a held lock');
+            end $$;`);
+        } finally { await finished; }
+      }
+      process.stdout.write("Revision contention: advisory/document/event/draft locks each return retryable 55P03 in under one second.\n");
     }
     if (process.argv.includes('--recommendation-enable')) {
       run(psqlArgs, `alter table public.master_offices add column code text;

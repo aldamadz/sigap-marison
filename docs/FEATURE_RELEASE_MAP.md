@@ -23,6 +23,28 @@
 - Rollback: restore the old canonical page mapping and navigation together while
   keeping both paths usable; never remove historical deep-link compatibility.
 
+## SUR-43 Revision Recovery and Material Reapproval (2026-11-10, [Codex], #897)
+
+- Candidate migration 20261110110000 renews only the current owner's expired active
+  revision draft, preserving its identity, saved edits and intentional file removals.
+  VOID, SUBMITTED and stale events remain closed. No new letter number is allocated.
+- Opening uses nonblocking advisory/row locks and a bounded secondary lock timeout.
+  An actual production deadlock has not been established by source order alone.
+- Server-owned before/after comparison restarts approval at step one for changes
+  to item/specification/value/project or document identity. Notes/attachments-only
+  keep the original asking stage. Both versions and actual restart step are audited.
+- Isolated PostgreSQL tests pass, including KEU10 threshold/director recalculation,
+  Unit reallocation, non-superuser canonical owner, private ACLs, preserved files,
+  four contention cases and exactly-one concurrent submission. Not yet deployed.
+- Target staging. Additional production authorization and separate SoD policy scope
+  are pending. Rollback must be forward-only; never restore stale signed content.
+- Verified staging release: PR899/cc7baa94955f6fe6223ddc623f270fd5412577b5,
+  applied migration20261110110000/ledger262, CI and acknowledged deployment
+  42765133025 SUCCESS, matching public SHA and readiness200. Data/ACL/owner proofs
+  preserved, non-app workers unchanged. NAV-01 is included through prior PR898;
+  real TesterP3 parent navigation and mobile390 acceptance passed. Production and
+  separate SoD policy900 remain pending; revision browser E2E is not claimed.
+
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
