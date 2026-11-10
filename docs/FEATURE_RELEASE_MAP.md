@@ -24,6 +24,20 @@
   forward migration20261110151000 uses the authoritative form identity to calculate
   quantity x unit price minus Free Cash, ignoring a stale legacy nominal value.
   Both migrations are required for production; follow-up stage promotion pending.
+- Completed release supersedes pending status above: selective main PR908/runtime
+  812535de5b677a6c6927adff1f7385b1c23d8c24, acknowledged production42779737867
+  SUCCESS. Final staging086a16a4451cab5720db53e03ed8822371d4cd96/deploy42779052556
+  contained main before cutover (PR910 ancestry-only; PR909 KEU1 follow-up).
+- Both forward migrations verified: staging264, production261. Twice-applied
+  rehearsals and application preserve business fingerprints, existing public RPC
+  owners/ACLs and private helper restrictions. Non-app worker IDs unchanged.
+- Production affected gate211/36, four actual PDF appendix assertions, canonical
+  SQL workflows/locks/concurrency, lint/typecheck/build/audit pass. Public root/live/
+  ready200 and actual production InboxPage bundle verifies new editor controls.
+  TesterP3 browser queue was empty, so live browser revision E2E is not claimed.
+- No real production approval, business repair, external POST/resend, attachment
+  deletion or history rewrite. Existing attachments remain managed by requester
+  corrections, not the new signer editor.
 
 ## NAV-01 Global Breadcrumb Hierarchy (2026-11-10, [Codex], Issue #896)
 
