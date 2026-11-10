@@ -375,6 +375,18 @@
 - Checkpoint: corrected double-apply PostgreSQL fixtures pass both normal and
   live-shaped inbox SQL. Snapshot bytes/historical policy records remain intact;
   early approval still fails. Diff check clean; hosted gates and staged preflight next.
+- Released staging: PR880 merged as d6ce10ff47bca48697c0cdf311094b851cc72447.
+  Hosted PR42734864287, push42735247234 and guarded deploy42735284991 succeeded;
+  affected PostgreSQL suites (normal/live shape), lint/typecheck/build passed.
+- Staging-only migration20261110080000 applied after audited259-version lineage
+  and double-apply rollback proof; ledger260 and authoritative function verified.
+  Actual master department columns: id,name,code,dept_index,email (no active flag).
+  Business/frozen snapshots, function owners/ACL and other report/policy/approval
+  definitions remain byte-identical. Disabled KPI is not department inactivity.
+- Public version/live/ready/root returned200 and exact d6ce10f runtime; app healthy.
+  No user approval, business fixture on the shared database, outbound, real email,
+  secret rotation, retrospective correction or production release. Main978c0e1
+  unchanged. Calendar/timezone resolvability remains separate, not claimed fixed.
 
 - Issue825 continues on its owned main-based SLA branch. User explicitly
   authorized staging then production, including the prior department package.
