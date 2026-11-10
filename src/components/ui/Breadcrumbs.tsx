@@ -1,11 +1,7 @@
 import { Link, useLocation } from 'react-router'
 import { ChevronRight, Home } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-interface BreadcrumbItem {
-  label: string
-  href?: string
-}
+import { isBreadcrumbDestination, routeBreadcrumbs, type BreadcrumbItem } from '@/lib/breadcrumb-routes'
 
 interface BreadcrumbsProps {
   items?: BreadcrumbItem[]
@@ -13,60 +9,12 @@ interface BreadcrumbsProps {
   className?: string
 }
 
-const ROUTE_LABELS: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/calendar': 'Kalender Kerja',
-  '/surat': 'Surat',
-  '/surat/registrasi': 'Registrasi Surat',
-  '/surat/rekomendasi': 'Rekomendasi',
-  '/surat/rekomendasi/registrasi': 'Registrasi Rekomendasi',
-  '/surat/inbox': 'Inbox Approval',
-  '/surat/tindak-lanjut': 'Tindak Lanjut',
-  '/status-pengajuan': 'Status Pengajuan',
-  '/surat/riwayat': 'Riwayat',
-  '/admin': 'Admin',
-  '/admin/users': 'Manajemen User',
-  '/admin/users/hierarchy': 'Hirarki Organisasi',
-  '/admin/configuration': 'Configuration',
-  '/admin/configuration/integration': 'Integrasi Marison',
-  '/admin/configuration/kpi': 'SLA Departemen',
-  '/admin/configuration/access': 'Hak Akses',
-  '/admin/settings': 'Pengaturan',
-  '/audit-logs': 'Audit Log',
-  '/settings': 'Pengaturan',
-  '/docs': 'Dokumentasi',
-  '/hierarchy': 'Struktur Organisasi',
-}
-
 export function Breadcrumbs({ items, showHome = true, className }: BreadcrumbsProps) {
   const location = useLocation()
-
-  // Generate breadcrumbs from route path
-  const generateFromRoute = (): BreadcrumbItem[] => {
-    const normalizedPath = location.pathname.replace(/\/+$/, '') || '/'
-    const pathname = normalizedPath === '/surat/monitoring' ? '/status-pengajuan' : normalizedPath
-    const segments = pathname.split('/').filter(Boolean)
-    const crumbs: BreadcrumbItem[] = []
-
-    if (showHome) {
-      crumbs.push({ label: 'Beranda', href: '/dashboard' })
-    }
-
-    let currentPath = ''
-    for (const segment of segments) {
-      currentPath += `/${segment}`
-      const label = ROUTE_LABELS[currentPath] || segment.charAt(0).toUpperCase() + segment.slice(1)
-      const isLast = currentPath === pathname
-      crumbs.push({
-        label,
-        href: isLast ? undefined : currentPath,
-      })
-    }
-
-    return crumbs
-  }
-
-  const breadcrumbs = items || generateFromRoute()
+  const breadcrumbs = (items || routeBreadcrumbs(location.pathname, showHome)).map(item => ({
+    ...item,
+    href: isBreadcrumbDestination(item.href) ? item.href : undefined,
+  }))
 
   return (
     <nav
@@ -84,7 +32,7 @@ export function Breadcrumbs({ items, showHome = true, className }: BreadcrumbsPr
             )}
 
             {/* Home icon atau breadcrumb item */}
-            {index === 0 && showHome ? (
+            {index === 0 && showHome && item.label === 'Beranda' && item.href === '/dashboard' ? (
               <Link
                 to="/dashboard"
                 className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors font-medium"
