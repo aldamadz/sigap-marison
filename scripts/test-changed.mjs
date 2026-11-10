@@ -158,6 +158,11 @@ for (const gate of gates) {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--notifications']);
     continue;
   }
+  if (gate === 'department-receiving-authority-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving-authority']);
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving-authority', '--live-shape']);
+    continue;
+  }
   if (gate === 'department-receiving-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving']);
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving', '--live-shape']);
@@ -193,11 +198,6 @@ for (const gate of gates) {
   if (gate === 'recommendation-office-reservation-sql') {
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs']);
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--production-shape']);
-    continue;
-  }
-  if (gate === 'department-receiving-authority-sql') {
-    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving-authority']);
-    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving-authority', '--live-shape']);
     continue;
   }
   if (gate === 'draft-reservation-lifecycle-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--draft-lifecycle']);
