@@ -8,7 +8,8 @@ const migration = read('supabase/migrations/20261019090000_actionable_role_dashb
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
 const notifications = process.argv.includes('--notifications');
 const actionClock = process.argv.includes('--action-clock');
-const weekly = process.argv.includes('--weekly') || actionClock;
+const receivingAuthority = process.argv.includes('--receiving-authority');
+const weekly = process.argv.includes('--weekly') || actionClock || receivingAuthority;
 const receiving = process.argv.includes('--receiving') || weekly;
 const signerScope = process.argv.includes('--signer-scope') || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
@@ -133,7 +134,12 @@ do $$begin begin perform get_actionable_dashboard();exception when insufficient_
 reset role;rollback;
 `;
 const run = (args,input='') => { const r=spawnSync('docker',args,{input,encoding:'utf8',timeout:120000});if(r.status!==0)throw Error(r.stderr+r.stdout);return r.stdout; };
-const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root','--health-cmd','pg_isready -h 127.0.0.1 -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
+const container=run(['run','-d','--network','none','--read-only','--cap-drop','ALL','--user','70:70',
+ '--security-opt','no-new-privileges','--pids-limit','64','--memory','384m','--cpus','1','--ulimit','fsize=67108864:67108864',
+ '--tmpfs','/scratch:rw,size=268435456,uid=70,gid=70','--tmpfs','/var/run/postgresql:rw,size=1048576,uid=70,gid=70',
+ '-e','PGDATA=/scratch/data','-e','HOME=/scratch','-e','TMPDIR=/scratch',
+ '-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root',
+ '--health-cmd','pg_isready -h 127.0.0.1 -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
 try {
  let ready=false;for(let i=0;i<80;i++){if(run(['inspect','--format','{{.State.Health.Status}}',container]).trim()==='healthy'){ready=true;break;}Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw Error('Disposable PostgreSQL not ready');
@@ -195,6 +201,13 @@ try {
    if(process.argv.includes('--weekly')) {
     if(!result.includes('SLA02 weekly receiving and delegated management passed'))throw Error('Missing weekly SLA assertions');
     console.log('SLA02: weekly windows, default off, scoped delegation, audit and frozen signer SLA passed.');
+   }
+   if(receivingAuthority){
+    const authority=process.argv.includes('--baseline') ? '' : read('supabase/migrations/20261110080000_department_receiving_authority.sql');
+    const proof=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+     authority+authority+read('supabase/tests/department_receiving_authority.integration.sql'));
+    if(!proof.includes('SLA02 authoritative intake department assertions passed'))throw Error('Missing intake authority assertions');
+    console.log('SLA02: authoritative profile department, missing profiles/departments, forged snapshots and frozen holds passed.');
    }
    if(actionClock){
     const clockSetup=`alter table surat_linked_documents add column child_surat_id uuid,add column link_type text,add column status text default 'active';
