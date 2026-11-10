@@ -25,6 +25,15 @@ do $$declare r record; ordinal integer:=0; incoming timestamptz:=now();begin
  end loop;
 end $$;
 
+-- KPI activation controls measurement, not whether the master department exists.
+update department_kpi_configs set is_active=false where dept_id=tid(2);
+insert into surat_signatures(id,surat_id,user_id,step_order,available_at,signer_snapshot)
+ values(tid(9909),tid(13),tid(3),2,now(),jsonb_build_object('department_id',tid(1)));
+select check_ok((select available_at>now() and sla_policy_snapshot->>'department_id'=tid(2)::text
+ and (sla_policy_snapshot#>>'{receiving,enabled}')::boolean from surat_signatures where id=tid(9909)),
+ 'disabled KPI configuration is not a disabled master department');
+update department_kpi_configs set is_active=true where dept_id=tid(2);
+
 -- A foreign department cannot impose a hold on an open authoritative department.
 insert into surat_signatures(id,surat_id,user_id,step_order,available_at,signer_snapshot)
  values(tid(9910),tid(13),tid(2),2,now(),jsonb_build_object('department_id',tid(2)));
