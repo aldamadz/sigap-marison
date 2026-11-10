@@ -1,5 +1,22 @@
 # Worklog
 
+## 2026-11-10 [Codex] NAV-01 Global Breadcrumbs / Issue #896
+
+- Follow-up to SUR-42: the earlier fix intentionally covered Status Pengajuan only.
+  New independent main-based branch fix/breadcrumb-hierarchy-20261110 covers every
+  declared route plus explicit breadcrumb items. No dirty-root changes touched.
+- Remove links to nonexistent structural parent pages; retain real nested routes,
+  aliases, same-origin query/hash destinations and accessible current-page labels.
+  An AST inventory test compares metadata with every actual App Route, preventing
+  future missing/phantom route drift.
+- 18 focused regressions passed in an isolated no-network cached Linux toolchain.
+  Cached Vitest is 3.2.6 rather than exact-lock 4.1.11; hosted exact-lock verification
+  is still required. Lint passed; first bounded typecheck exhausted its 768MB heap,
+  so validation is rerunning with a bounded 2GB heap, not a code failure claim.
+- No deployment or database/auth/secret/worker/business/outbound changes. Staging
+  release and browser acceptance pending; additional production permission pending.
+
+
 ## 2026-11-10 [Codex] SUR-42 Status Route and Breadcrumb / Issue #891
 
 - Isolated fix/submission-status-route-20261110 from mainad2d1a4. User explicitly
