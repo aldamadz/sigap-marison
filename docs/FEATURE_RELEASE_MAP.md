@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## OPS-19 CT104 Image Retention (2026-11-10, [Codex], Issue #912)
+
+- User explicitly requests production policy: post-success active plus three unique
+  rollback image IDs per service, container/reference protection, shared host lock,
+  exact removal/audit, unused cache older168h. No volume/business/config cleanup.
+- First deletion requires a presented actual plan and explicit user approval.
+  Until approval, deployment hooks only pin/record successes and emit dry-run plans.
+  First cleanup cannot expand beyond approved image IDs after another deployment.
+- Preserve all running/stopped container IDs and audited legacy rollback references,
+  even beyond four retained versions. Unknown ownership is not permission to delete.
+  Bootstrap is read-only; historical snapshots are never silently repointed.
+- Initial code/test and infrastructure audit in progress, no deletion or approval
+  marker. Target selective staging/source verification then CT104 policy release.
+  Worker rollout certification requires its own trusted health/smoke adapters.
+
 ## SUR-44 Full Signer Revision / Issue #906 (2026-11-10, [Codex])
 
 - Explicit user policy supersedes SUR-43 material-reapproval behavior: internal
