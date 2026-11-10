@@ -38,6 +38,12 @@
   four contention cases and exactly-one concurrent submission. Not yet deployed.
 - Target staging. Additional production authorization and separate SoD policy scope
   are pending. Rollback must be forward-only; never restore stale signed content.
+- Verified staging release: PR899/cc7baa94955f6fe6223ddc623f270fd5412577b5,
+  applied migration20261110110000/ledger262, CI and acknowledged deployment
+  42765133025 SUCCESS, matching public SHA and readiness200. Data/ACL/owner proofs
+  preserved, non-app workers unchanged. NAV-01 is included through prior PR898;
+  real TesterP3 parent navigation and mobile390 acceptance passed. Production and
+  separate SoD policy900 remain pending; revision browser E2E is not claimed.
 
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
