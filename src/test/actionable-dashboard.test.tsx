@@ -50,7 +50,7 @@ describe('actionable dashboard', () => {
   });
   it('removes legacy Agenda, shows distinct requester queue, SLA and responsible person with exact document drilldown', async () => {
     mocks.get.mockResolvedValue(bundle());renderDashboard();
-    expect(await screen.findByText(row.title)).toHaveAttribute('href','/surat/monitoring?document=doc-1');
+    expect(await screen.findByText(row.title)).toHaveAttribute('href','/status-pengajuan?document=doc-1');
     expect(screen.queryByText('Agenda')).not.toBeInTheDocument();
     expect(screen.getByText('Manager A')).toBeInTheDocument();
     expect(screen.getByText('75%')).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe('actionable dashboard', () => {
   });
   it('routes returned requester to follow up; never opens a future assignment as an actionable approval', () => {
     expect(dashboardRowLink({...row,bucket:'returned'},'mine')).toBe('/surat/tindak-lanjut');
-    expect(dashboardRowLink({...row,bucket:'upcoming'},'signer')).toBe('/surat/monitoring?document=doc-1');
+    expect(dashboardRowLink({...row,bucket:'upcoming'},'signer')).toBe('/status-pengajuan?document=doc-1');
   });
   it('makes SLA performance measurable and preserves category counts and filters', async () => {
     mocks.get.mockResolvedValue(bundle());renderDashboard();await screen.findByText(row.title);

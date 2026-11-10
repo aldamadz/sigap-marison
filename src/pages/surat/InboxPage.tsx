@@ -2755,7 +2755,7 @@ const handleApprove = async (item: any) => {
     <div className="sigap-page animate-in fade-in duration-300">
       {requestedTaskKey && !selectedCompactItem && <div role="status" className="space-y-2 border-y border-amber-500/40 bg-amber-500/10 p-4 text-sm">
         <p>{requestedTaskQuery.isFetching?'Memuat tugas yang dipilih...':'Tugas yang dipilih tidak tersedia untuk akun ini atau sudah berpindah tahap.'}</p>
-        {!requestedTaskQuery.isFetching && <div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>{void requestedTaskQuery.refetch();}}>Coba lagi</Button><Button asChild variant="outline" size="sm"><Link to={isNotificationUuid(searchParams.get('document'))?`/surat/monitoring?document=${searchParams.get('document')}`:'/surat/monitoring'}>Lihat status pengajuan</Link></Button></div>}
+        {!requestedTaskQuery.isFetching && <div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>{void requestedTaskQuery.refetch();}}>Coba lagi</Button><Button asChild variant="outline" size="sm"><Link to={isNotificationUuid(searchParams.get('document'))?`/status-pengajuan?document=${searchParams.get('document')}`:'/status-pengajuan'}>Lihat status pengajuan</Link></Button></div>}
       </div>}
 
       <header className="sigap-panel sigap-panel-accent flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

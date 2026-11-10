@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## SUR-42 Status Pengajuan Route Clarity (2026-11-10, [Codex], Issue #891)
+
+- User authorizes staging then selective production. Canonical /status-pengajuan
+  uses Beranda > Status Pengajuan, not the nonexistent /surat parent page.
+- Legacy /surat/monitoring remains protected and replace-redirects with original
+  query/hash/state. Dashboard, sidebar, back links and notification destinations
+  use the canonical path; old notification/SW links remain accepted, same-origin only.
+- No database migration, permission expansion, business-history rewrite, secret,
+  worker or outbound change.42 focused regressions, lint/typecheck and frontend/
+  backend builds pass. Hosted CI, staged acceptance and production rollout pending.
+- Rollback: restore the old canonical page mapping and navigation together while
+  keeping both paths usable; never remove historical deep-link compatibility.
+
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.

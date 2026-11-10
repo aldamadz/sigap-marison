@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 import { MaintenanceNotice } from "@/components/app/MaintenanceNotice";
 import { notificationReturnPath } from "@/lib/notification-target";
+import { SubmissionStatusRedirect } from "@/components/layout/SubmissionStatusRedirect";
 
 import { UserThemeSync } from "@/providers/UserThemeSync";
 import { AttentionProvider } from "@/providers/AttentionProvider";
@@ -214,7 +215,8 @@ const App = () => {
           <Route path="/surat/inbox" element={<InboxPage />} />
           <Route path="/surat/rekomendasi" element={<RecommendationTasksPage />} />
           <Route path="/surat/rekomendasi/registrasi" element={<SuratPage />} />
-          <Route path="/surat/monitoring" element={<MonitoringPage />} />
+          <Route path="/status-pengajuan" element={<MonitoringPage />} />
+          <Route path="/surat/monitoring" element={<SubmissionStatusRedirect />} />
           <Route path="/surat/tindak-lanjut" element={<TindakLanjutSuratPage />} />
           <Route path="/surat/riwayat" element={<RiwayatKeterlibatanPage />} />
 

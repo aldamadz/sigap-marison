@@ -26,7 +26,7 @@ export const dashboardRowLink = (row: DashboardRow, scope: DashboardScope) => {
     return `/surat/inbox?task=${encodeURIComponent(`approval:${row.signature_id}`)}`;
   }
   if (scope === 'mine' && row.bucket === 'returned') return '/surat/tindak-lanjut';
-  return `/surat/monitoring?document=${encodeURIComponent(row.id)}`;
+  return `/status-pengajuan?document=${encodeURIComponent(row.id)}`;
 };
 export async function getActionableDashboard(filters: {
   scope: DashboardScope; bucket: DashboardBucket; from: string; to: string;

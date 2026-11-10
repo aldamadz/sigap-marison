@@ -3,6 +3,13 @@ import {notificationOpenPath,notificationReturnPath,notificationTask,resolveNoti
 const user='00000000-0000-4000-8000-000000000001',signature='00000000-0000-4000-8000-000000000002',surat='00000000-0000-4000-8000-000000000003';
 const note={id:surat,user_id:user,link:`/surat/inbox?task=${signature}`,data:{surat_id:surat,signature_id:signature}};
 describe('canonical notification destinations',()=>{
+ it.each(['/status-pengajuan','/surat/monitoring'])('accepts %s notifications and resolves to the canonical status page',async(path)=>{
+  const getDetail=vi.fn();
+  expect(safeNotificationLink(path)?.pathname).toBe(path);
+  expect(await resolveNotificationTarget({...note,link:`${path}?document=${surat}`,data:{}},getDetail)).toBe(`/status-pengajuan?document=${surat}`);
+  expect(getDetail).not.toHaveBeenCalled();
+  expect(safeNotificationLink('/status-pengajuan-foreign')).toBeNull();
+ });
  it('retains only a validated notification route after login, with no external redirect',()=>{
   expect(notificationReturnPath(notificationOpenPath(surat))).toBe(notificationOpenPath(surat));
   for(const value of ['https://evil.example','//evil.example','/notifications/open?id=x','/dashboard?next=//evil.example',null])expect(notificationReturnPath(value)).toBe('/dashboard');
@@ -16,7 +23,7 @@ describe('canonical notification destinations',()=>{
   expect(notificationTask({...detail,user_id:'other',verifier_snapshot:[]},user)).toBeNull();
  });
  it('stale/foreign tasks open document status, never the first unrelated inbox item',async()=>{
-  expect(await resolveNotificationTarget(note,async()=>{throw Error('Task tidak aktif atau tidak ditemukan untuk user ini');})).toBe(`/surat/monitoring?document=${surat}`);
+  expect(await resolveNotificationTarget(note,async()=>{throw Error('Task tidak aktif atau tidak ditemukan untuk user ini');})).toBe(`/status-pengajuan?document=${surat}`);
   expect(await resolveNotificationTarget({...note,data:{}},async()=>{throw Error('Task tidak aktif');})).toBeNull();
   await expect(resolveNotificationTarget(note,async()=>{throw Error('Network offline');})).rejects.toThrow('Network offline');
  });
