@@ -191,6 +191,16 @@
   Runtime and browser acceptance pending. No Ticketing/broadcast/production.
 ## SLA-02 Weekly Intake And Delegated Managers (2026-11-06)
 
+### SLA-02 Intake Department Authority (2026-11-10, [Codex], Issue879)
+
+- Staging candidate: migration20261110080000 uses only the authoritative signer
+  profile and an existing master department to choose a receiving policy.
+  Missing server-side authority is no policy, never a snapshot fallback.
+- Frozen receiving decisions and report-attribution snapshots stay unchanged.
+  No department active flag exists; no schema expansion or KPI-active proxy added.
+- Isolated regression reproduced the bypass; corrected gates/PR/staging rollout
+  pending. Calendar resolvability hardening is outside this narrow correction.
+
 - User now authorizes staging then production for the department package.
   Weekly receiving windows and week-specific exceptions complement monthly
   closing rules. Exact cutoff defers to the next valid open period, not rejection.

@@ -347,6 +347,25 @@
   this notification candidate. `docs/PROJECT_CONTEXT.md` remains absent.
 ## 2026-11-06 [Codex] SLA-02 Weekly Reception / Scoped Delegation
 
+### 2026-11-10 [Codex] SLA-02 Intake Department Authority / Issue879
+
+- Main-based fix/receiving-profile-department-20261110, target staging only.
+  Forward migration20261110080000 resolves intake from profiles.department_id
+  joined to an existing master department, never caller-supplied signer_snapshot.
+  Missing profile/null/orphan department leaves no new receiving policy.
+- Existing captured holds and historical attribution remain untouched. The master
+  has no active/status column; do not repeat the nonexistent is_active-column bug
+  or equate a disabled KPI configuration with a disabled department.
+- Real network-isolated PostgreSQL regression is red on main978c0e1: a forged
+  snapshot bypasses the real department hold. Fixed/repeated migration, malformed
+  JSON, missing authority, transfer and frozen-hold assertions are being verified.
+- Calendar/timezone validation from the supplied review is a separate concern;
+  this correction does not swallow calendar errors or silently remove valid holds.
+  No production permission, approvals, outbound, secrets or history rewrites.
+- Checkpoint: corrected double-apply PostgreSQL fixtures pass both normal and
+  live-shaped inbox SQL. Snapshot bytes/historical policy records remain intact;
+  early approval still fails. Diff check clean; hosted gates and staged preflight next.
+
 - Issue825 continues on its owned main-based SLA branch. User explicitly
   authorized staging then production, including the prior department package.
 - Added forward migration20261106060000: optional default-off department policy,

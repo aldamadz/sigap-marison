@@ -101,6 +101,7 @@ for (const file of allChangedFiles) {
   if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
   if (/department_receiving_periods.*\.sql$/u.test(file)) gates.add('department-receiving-sql');
+  if (/department_receiving_authority.*\.sql$/u.test(file)) gates.add('department-receiving-authority-sql');
   if (/weekly_department_sla.*\.sql$/u.test(file)) gates.add('department-weekly-sql');
   if (/signer_organization_monitoring.*\.sql$/u.test(file)) gates.add('signer-organization-monitoring-sql');
   if (/verified_fund_outbound_replacement.*\.sql$|verified_fund_replacement.*\.sql$/u.test(file)) gates.add('fund-outbound-replacement-sql');
@@ -160,6 +161,11 @@ for (const gate of gates) {
   }
   if (gate === 'notification-delivery-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--notifications']);
+    continue;
+  }
+  if (gate === 'department-receiving-authority-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving-authority']);
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--receiving-authority', '--live-shape']);
     continue;
   }
   if (gate === 'department-receiving-sql') {

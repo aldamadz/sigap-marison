@@ -8,7 +8,8 @@ const migration = read('supabase/migrations/20261019090000_actionable_role_dashb
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
 const notifications = process.argv.includes('--notifications');
 const actionClock = process.argv.includes('--action-clock');
-const weekly = process.argv.includes('--weekly') || actionClock;
+const receivingAuthority = process.argv.includes('--receiving-authority');
+const weekly = process.argv.includes('--weekly') || actionClock || receivingAuthority;
 const receiving = process.argv.includes('--receiving') || weekly;
 const signerScope = process.argv.includes('--signer-scope') || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
@@ -200,6 +201,13 @@ try {
    if(process.argv.includes('--weekly')) {
     if(!result.includes('SLA02 weekly receiving and delegated management passed'))throw Error('Missing weekly SLA assertions');
     console.log('SLA02: weekly windows, default off, scoped delegation, audit and frozen signer SLA passed.');
+   }
+   if(receivingAuthority){
+    const authority=process.argv.includes('--baseline') ? '' : read('supabase/migrations/20261110080000_department_receiving_authority.sql');
+    const proof=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+     authority+authority+read('supabase/tests/department_receiving_authority.integration.sql'));
+    if(!proof.includes('SLA02 authoritative intake department assertions passed'))throw Error('Missing intake authority assertions');
+    console.log('SLA02: authoritative profile department, missing profiles/departments, forged snapshots and frozen holds passed.');
    }
    if(actionClock){
     const clockSetup=`alter table surat_linked_documents add column child_surat_id uuid,add column link_type text,add column status text default 'active';
