@@ -84,6 +84,29 @@
   and rolled back cleanly. Exact-lock CI b2784f2 passed; current test-only update
   awaits its own CI. No live migration applied. SoD decision tracked separately900.
 
+- Final staging correction: PR899 merged cc7baa94955f6fe6223ddc623f270fd5412577b5;
+  exact-lock PR CI42764727948, merged Quality42765132410 and acknowledged manual
+  Deploy42765133025 all SUCCESS. Migration20261110110000 applied and verified on
+  staging only (ledger262), preserving business fingerprints and function owners/
+  ACLs. Redundant auto push deploy42765132385 intentionally cancelled because it
+  lacked the applied-migration acknowledgement; manual deploy reran all gates.
+- Public staging version exactly cc7baa94955f6fe6223ddc623f270fd5412577b5 and
+  readiness200. App246b3a9ab67d/image8591e83bd995 healthy/running/restart0; PDF,
+  sync and outbound worker IDs/images/restarts unchanged. Targeted SQL, concurrency,
+  lint, typecheck, frontend/backend builds and high-level audit gate passed. No
+  full-suite or live adversarial/availability test claimed. Revision UI has not
+  been exercised end-to-end with a real staging business submission; canonical
+  RPC behavior is covered by isolated PostgreSQL fixtures.
+- NAV-01 also live staging via PR898/source3b5c886; deployment42764393814 SUCCESS
+  at4faa142 before combined revision rollout. TesterP3 browser confirms no phantom
+  Surat parent on registration, labeled Settings > Perangkat Terhubung, clickable
+  real Pengaturan parent without404, mobile390/documentWidth390. Viewport restored,
+  no number allocated, approval, device revocation or notification test submitted.
+- Additional production release and SoD policy remain pending user response.
+  No production migration, application release, business decision or resend by
+  this expanded task. Proposed SoD must preserve requester Membuat and define
+  usage coverage and explicit audited override before enforcement; tracked900.
+
 ## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
