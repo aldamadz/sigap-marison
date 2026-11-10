@@ -37,6 +37,44 @@
   Production PR908 is draft until follow-up stage acceptance; no production
   migration/runtime/business/worker changes. Rollback app image is pinned.
 
+## 2026-11-10 [Codex] SUR-44 Completed Production Release / Issue #906
+
+- Supersedes pending release status above. Sourcef56ee86, initial stagePR907,
+  KEU1 follow-upPR909, selective mainPR908, ancestry-only syncPR910.
+  Live stage086a16a4451cab5720db53e03ed8822371d4cd96 contains production target
+  812535de5b677a6c6927adff1f7385b1c23d8c24 before cutover.
+- Acknowledged stage42779052556 and production42779737867 SUCCESS, including
+  preflight/quality/build/deploy. Cancelled redundant no-ACK automatic deploy runs,
+  never bypassed guards; main push preflight initially skipped actual deployment.
+- Migrations20261110150000 and20261110151000 verified stageledger264/prod261.
+  Private operator proofs retain catalog definitions and business fingerprints;
+  no mass business/ACL update or ledger repair. Production compound source digest
+  13ff6fb57f135998719c2ba270843826e6de5531ff328fd62b03733304845201.
+- Exact production affected tests211/36files, four real PDF appendix assertions,
+  canonical Asset/Fund/KEU1/KEU10/Unit SQL workflows, authorization/duplicates,
+  locked/frozen identities, old attachments, Unit reallocation, director threshold,
+  four fail-fast locks and one concurrent submission winner pass. Lint/typecheck,
+  build/audit pass. A single existing asynchronous director UI assertion failed
+  once; exact-source rerun42777601152 passed without deleting/weakening coverage.
+- Public root/live/ready200, matching runtime SHA and production InboxPage asset
+  Duf63be9 expose full revision/reason/removal confirmation. App8b647973fbba
+  healthy/0restarts; image4139ba6781b10be3a6e0e7afb64dd571c783c64a05bb41709b0b893003f4d79f.
+  PDF/sync/outbound/externalAPI/tunnel/relay retain their original container IDs.
+- Rollback image d86643dd170286fc3b76bc70c1f512edc430d3b082837062befc8930eb0a82cb
+  pinned as agenda-flow:rollback-sur44-20261110. No image/volume/business file purge.
+- Post-build CT104 free space3.1GB/95% used. Dangling-cache-only prune (first
+  older24h, then without age filter, both keeping4GB) reclaimed0B. App remains
+  healthy/0restarts and rollback image unchanged. Do not infer that all unused
+  images are disposable; headroom/capacity remains a separate operational concern.
+- Limits: actual TesterP3 browser session is valid but approval queue empty.
+  No live browser revision E2E, real production approval, data repair, vendor POST/
+  resend, attachment deletion or old history rewrite is claimed. Signer proposals
+  apply only after requester confirmation; attachment editing remains requester-owned.
+- Durable policy: resume the asking stage even for internal material revisions,
+  per explicit user decision. Keep server-owned actor/before-after evidence and
+  canonical financial/Unit verification rules; never treat client flags as authority.
+  PROJECT_CONTEXT remains absent; shared documentation structure unchanged.
+
 ## 2026-11-10 [Codex] NAV-01 Global Breadcrumbs / Issue #896
 
 - Follow-up to SUR-42: the earlier fix intentionally covered Status Pengajuan only.
