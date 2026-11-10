@@ -2,6 +2,24 @@
 
 ## OPS-19 CT104 Image Retention (2026-11-10, [Codex], Issue #912)
 
+### Verified Production Release (2026-11-10, [Codex])
+
+- Supersedes initial in-progress status below. PR913 staging, selective PR914 main,
+  ancestry PR915; live stagingeec5b5c63b contains productioncf68ef3172. Public
+  live/ready/root smoke and deployment workflows passed in both environments.
+- User approved the one exact first candidate and future post-success policy.
+  Candidatea4af70dade1d deleted; cache older168h reclaimed0B; observed filesystem
+  delta12KiB. Audit and atomic rollback references saved under private CT104 state.
+- All8containers,19canonical rollback tag/ID references and13unique Proxmox-host
+  pins remain valid. Referenced historical versions remain extra protected images.
+  Retain active plus up to3available unique successful rollback IDs per service.
+- Future app deployments automatically invoke the verified-success hook under
+  the shared host lock. Coordinated worker releases require this same lock and
+  trusted service-specific health/smoke adapters, which are not installed by the
+  app rollout. Missing adapters fail closed; existing worker versions stay safe.
+- No worker restart, migration, business/external operation or volume/config/data
+  removal. Disk expansion to118G occurred outside this task, not from cleanup.
+
 - User explicitly requests production policy: post-success active plus three unique
   rollback image IDs per service, container/reference protection, shared host lock,
   exact removal/audit, unused cache older168h. No volume/business/config cleanup.
