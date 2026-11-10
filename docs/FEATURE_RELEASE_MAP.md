@@ -177,6 +177,10 @@
   No department active flag exists; no schema expansion or KPI-active proxy added.
 - Isolated regression reproduced the bypass; corrected gates/PR/staging rollout
   pending. Calendar resolvability hardening is outside this narrow correction.
+- Superseding release proof: PR880/live stagingd6ce10f, deploy42735284991 success.
+  Real PostgreSQL authority/hold/transfer regressions, lint/typecheck/build and
+  public smoke pass. Forward migration20261110080000 is recorded at ledger260,
+  with frozen/business state and report definitions preserved. Production unchanged.
 
 - User now authorizes staging then production for the department package.
   Weekly receiving windows and week-specific exceptions complement monthly
