@@ -50,6 +50,13 @@ export const BREADCRUMB_ALIASES: Record<string, string> = {
   '/maintenance-admin': '/admin/configuration/maintenance',
 }
 
+// Staging-only leaf pages have labels but are never emitted as parent links.
+export const BREADCRUMB_OPTIONAL_LEAVES: Record<string, string> = {
+  '/desktop/authorize': 'Persetujuan Perangkat',
+  '/settings/devices': 'Perangkat Terhubung',
+  '/admin/configuration/desktop-devices': 'Perangkat Terhubung',
+}
+
 const normalize = (path: string) => path.replace(/\/+$/, '') || '/'
 
 export function isBreadcrumbDestination(href: string | undefined): boolean {
@@ -78,7 +85,7 @@ export function routeBreadcrumbs(path: string, showHome = true): BreadcrumbItem[
     // URL grouping segments are not pages and must not become parent links.
     if (!isLast && !isBreadcrumbDestination(currentPath)) continue
     crumbs.push({
-      label: BREADCRUMB_ROUTES[currentPath] || segment.charAt(0).toUpperCase() + segment.slice(1),
+      label: BREADCRUMB_ROUTES[currentPath] || BREADCRUMB_OPTIONAL_LEAVES[currentPath] || segment.charAt(0).toUpperCase() + segment.slice(1),
       href: isLast ? undefined : currentPath,
     })
   }

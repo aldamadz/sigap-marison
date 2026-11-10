@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, matchPath } from 'react-router'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
-import { BREADCRUMB_ALIASES, BREADCRUMB_ROUTES, isBreadcrumbDestination, routeBreadcrumbs } from '@/lib/breadcrumb-routes'
+import { BREADCRUMB_ALIASES, BREADCRUMB_OPTIONAL_LEAVES, BREADCRUMB_ROUTES, isBreadcrumbDestination, routeBreadcrumbs } from '@/lib/breadcrumb-routes'
 
 afterEach(cleanup)
 
@@ -37,7 +37,8 @@ function declaredRoutes() {
 describe('application-wide breadcrumb destinations', () => {
   it('keeps labels and aliases aligned with every real App route, including nested configuration', () => {
     const actual = declaredRoutes().sort()
-    const documented = [...Object.keys(BREADCRUMB_ROUTES), ...Object.keys(BREADCRUMB_ALIASES)].sort()
+    const documented = [...Object.keys(BREADCRUMB_ROUTES), ...Object.keys(BREADCRUMB_ALIASES),
+      ...Object.keys(BREADCRUMB_OPTIONAL_LEAVES).filter(path => actual.includes(path))].sort()
     expect(documented).toEqual(actual)
     for (const target of Object.values(BREADCRUMB_ALIASES)) expect(actual).toContain(target)
   })
@@ -75,6 +76,10 @@ describe('application-wide breadcrumb destinations', () => {
     expect(isBreadcrumbDestination('/admin/configuration?view=form#main')).toBe(true)
     expect(isBreadcrumbDestination('/docs/test-topic')).toBe(true)
     expect(isBreadcrumbDestination('/surat/monitoring?status=DONE')).toBe(true)
+    for (const path of Object.keys(BREADCRUMB_OPTIONAL_LEAVES)) {
+      expect(routeBreadcrumbs(path).at(-1)).toEqual({ label: BREADCRUMB_OPTIONAL_LEAVES[path], href: undefined })
+      expect(isBreadcrumbDestination(path)).toBe(false)
+    }
   })
 
   it('does not create dead or external links from explicit breadcrumb items or replace the first label', () => {
