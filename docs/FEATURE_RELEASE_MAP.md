@@ -48,6 +48,11 @@
 
 ### SUR-41 / Issue #874 Authority Correction (2026-11-09, [Codex])
 
+- 2026-11-10 [Codex], Issue882: production promotion authorized. New forward
+  compatibility20261110100000 is required where migrations/helper owner is
+  supabase_admin and canonical registration owner is non-superuser postgres.
+  Private EXECUTE only for postgres; no client permission expansion.
+
 - Forward migration20261109171000 strips requester allocation input, protects
   verified Unit snapshots and provides service-only immutable-receipt validation.
   Outbound refuses stale or unapproved examiner identity/production fields.
