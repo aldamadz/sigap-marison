@@ -16,6 +16,14 @@
   and UI regressions pass; extended tests, exact-lock CI and runtime release pending.
 - Rollback requires a forward migration and compatible app release; never erase
   confirmation history or silently reapply the superseded material-restart policy.
+- Initial staging runtime verified01cf0d0 after acknowledged deploy42776490217;
+  migration150000 ledger263. Exact-lock CI213/36, lint/typecheck/build/audit and
+  four PDF appendix tests pass. TesterP3 session is valid but approval queue empty;
+  live browser revision E2E is not claimed.
+- Final legacy KEU1 regression is red before151000 and green after. Additional
+  forward migration20261110151000 uses the authoritative form identity to calculate
+  quantity x unit price minus Free Cash, ignoring a stale legacy nominal value.
+  Both migrations are required for production; follow-up stage promotion pending.
 
 ## NAV-01 Global Breadcrumb Hierarchy (2026-11-10, [Codex], Issue #896)
 
