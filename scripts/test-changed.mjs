@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/full_signer_revision.*\.sql$/u.test(file)) gates.add('full-signer-revision-sql');
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
   if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
@@ -148,6 +149,10 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
+  if (gate === 'full-signer-revision-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--full-signer-revision']);
+    continue;
+  }
   if (gate === 'signer-action-sla-clock-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
     continue;

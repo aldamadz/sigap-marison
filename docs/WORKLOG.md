@@ -1,5 +1,29 @@
 # Worklog
 
+## 2026-11-10 [Codex] SUR-44 Full Signer Revision / Issue #906
+
+- Isolated fix/full-signer-revision-20261110 from production a3a60f4; root dirty
+  checkout and other workers untouched. User explicitly approves asking-stage
+  resume instead of material-change step-one restart, staging then production.
+- Full item/header proposal editor reuses Fund/KEU calculators; preserves fixed
+  identities, external allocations and all existing attachments. Item removal
+  requires confirmation. Attachment editing is not added to the signer editor.
+- Private helpers behind existing revision RPCs validate current assigned signer,
+  immutable server baseline/actor, active requester and event, then reuse canonical
+  draft/submit on confirmation. Full snapshots feed existing history/PDF evidence.
+  Forward migration 20261110150000; no old migration edited or public endpoint added.
+- Real disposable PostgreSQL17 passed idempotent migration, full Asset edits,
+  decimal/add/remove/specification/status, actor spoof rejection, foreign/double
+  acceptance, preserved files and prior approvals, KEU10 threshold/director rules.
+  Advisory/document/event/draft contention returns55P03 in under1s; exactly one
+  concurrent requester submission wins. Extended Fund/Unit assertions pending.
+- Eight focused UI assertions and changed-file lint passed in cached isolated
+  Linux toolchain (Vitest3.2.6, not exact-lock hosted4.1.11). Exact CI/build,
+  database rehearsal, staged acceptance and production promotion pending.
+- Durable finding: preserve canonical confirmation and server-owned proposal
+  metadata; an editable client JSON flag is not proof of signer authority.
+  PROJECT_CONTEXT remains absent; shared document structure unchanged.
+
 ## 2026-11-10 [Codex] NAV-01 Global Breadcrumbs / Issue #896
 
 - Follow-up to SUR-42: the earlier fix intentionally covered Status Pengajuan only.

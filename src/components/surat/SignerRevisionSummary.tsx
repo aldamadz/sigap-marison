@@ -2,6 +2,7 @@ import { formatRevisionValue, getRevisionApprovedValue, getRevisionItemChanges, 
 import { useEffect, useState } from "react";
 import { getRevisionEvidence, revisionSnapshotForDisplay, revisionSubmitterName } from "@/services/revision-evidence.service";
 import { RequesterRevisionSummary } from "./RequesterRevisionSummary";
+import { revisionRecord } from "@/lib/signer-revision-form";
 
 export function SignerRevisionSummary({ revision, suratId }: { revision?: ActiveRevision | null; suratId?: string }) {
   const [evidence, setEvidence] = useState<Awaited<ReturnType<typeof getRevisionEvidence>> | null>(null);
@@ -22,9 +23,12 @@ export function SignerRevisionSummary({ revision, suratId }: { revision?: Active
   const actor = evidence?.events.find(event => event.id === revision.event_id
     && (!event.surat_id || event.surat_id === suratId))?.actor_name?.trim();
   const heading = isProposal ? "Revisi" : "Permintaan perbaikan";
+  const fullProposal = revision.changes?.signer_full_proposal === true;
   return <section className="space-y-3 border-t pt-4" aria-label="Catatan perbaikan pengajuan">
     <h3 className="text-sm font-semibold">{actor ? `${heading} oleh ${actor}` : heading}</h3>
     <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{revision.reason}</p>
+    {fullProposal && <RequesterRevisionSummary baseline={revisionSnapshotForDisplay(revisionRecord(revision.changes?.signer_proposal_before))}
+      current={revisionSnapshotForDisplay(revisionRecord(revision.changes?.signer_proposal_after))} showNoChanges />}
     {evidenceError && <p role="status" className="text-xs text-muted-foreground">Rincian riwayat revisi belum berhasil dimuat.</p>}
     {rows.length > 0 && <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
@@ -42,7 +46,7 @@ export function SignerRevisionSummary({ revision, suratId }: { revision?: Active
       const requestingActor = evidence.events.find(event => event.id === history.revision_event_id
         && event.actor_id === history.requested_by)?.actor_name?.trim();
       return <div key={history.id} className="space-y-2 border-t pt-3">
-        <h4 className="text-sm font-semibold">{requester ? `Perbaikan oleh ${requester}` : "Perbaikan pengajuan"}</h4>
+        <h4 className="text-sm font-semibold">{requester ? `${fullProposal && history.revision_event_id === revision.event_id ? 'Dikonfirmasi' : 'Perbaikan'} oleh ${requester}` : "Perbaikan pengajuan"}</h4>
         <p className="text-xs text-muted-foreground">
           {requestingActor ? `Diminta oleh ${requestingActor} · ` : ""}
           {new Date(history.submitted_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}
