@@ -14,8 +14,8 @@ const document = {
     { id: 'b', nama_barang: 'Monitor lama', jumlah: 1, sat: 'Unit', status: '2' },
   ] },
 };
-function Harness() {
-  const [value, setValue] = useState(() => signerRevisionForm(document));
+function Harness({ source = document }: { source?: unknown }) {
+  const [value, setValue] = useState(() => signerRevisionForm(source));
   return <AppDialogProvider><SignerRevisionEditor value={value} form={{}} onChange={setValue} /><output data-testid="value">{JSON.stringify(value)}</output></AppDialogProvider>;
 }
 const current = () => JSON.parse(screen.getByTestId('value').textContent || '{}');
@@ -48,6 +48,13 @@ describe('Full signer revision', () => {
     expect(signerRevisionIssue(form, {})).toBeUndefined();
     form.form_input_data.items = [{ nama_barang: 'Pasir', jumlah: '0' }];
     expect(signerRevisionIssue(form, {})).toContain('Jumlah');
+  });
+  it('also confirms removal of the last financial item before resetting its row', () => {
+    render(<Harness source={{ ...document, form_input_data: { fund_amount: 1000,
+      items: [{ id: 'fund-a', nama_barang: 'Servis', jumlah: 1, satuan: 'Unit', nominal: 1000, status: '2' }] } }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus item' }));
+    expect(screen.getByRole('heading', { name: 'Hapus item dari usulan?' })).toBeInTheDocument();
+    expect(current().form_input_data.items[0].id).toBe('fund-a');
   });
   it('reuses Fund and KEU financial calculations instead of retaining a stale amount', () => {
     const form = signerRevisionForm(document);
