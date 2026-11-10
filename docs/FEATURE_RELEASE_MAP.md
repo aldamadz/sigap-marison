@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## NAV-01 Global Breadcrumb Hierarchy (2026-11-10, [Codex], Issue #896)
+
+- All generated breadcrumb parents are validated against actual application routes;
+  structural /surat, /admin and /notifications groups no longer become dead links.
+- Genuine nested parents and legacy redirects remain. Explicit custom breadcrumb
+  destinations receive the same validation; existing authorization is unchanged.
+- Route-inventory and rendered navigation regressions cover all declared routes.
+  Initial target staging; additional production authorization is pending.
+- No migration, worker, business-data or dependency change. Rollback is UI-only.
+
 ## SUR-42 Status Pengajuan Route Clarity (2026-11-10, [Codex], Issue #891)
 
 - User authorizes staging then selective production. Canonical /status-pengajuan
