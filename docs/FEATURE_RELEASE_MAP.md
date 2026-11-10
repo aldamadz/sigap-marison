@@ -2,6 +2,19 @@
 
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
+### AUTH-03 / SLA-03 / SUR-41 Staging Release Proof (2026-11-09, [Codex])
+
+- Issues872/873/874: PR875/877/876 released to staging runtime4fc28a6b.
+  Deploy42602662247, 204 affected tests, PostgreSQL authority regressions,
+  lint/typecheck/build and public smoke passed. Migration ledger259 verified.
+- Recovery acknowledgement is account-independent; signer SLA uses canonical
+  pause authority and denies direct lifecycle updates; Unit outbound requires
+  immutable examiner authority and rejects post-verification tampering.
+- Editable examiner references, external LT and canonical addendum revisions
+  remain supported. Missing receipts fail closed instead of fabricating history.
+- Production remains main978c0e1 and has NOT received this correction.
+  Promotion is pending explicit production authorization, not a staging failure.
+
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
 
 
