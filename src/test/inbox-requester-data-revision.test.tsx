@@ -113,6 +113,18 @@ afterEach(() => {
 });
 
 describe("Inbox requester data and attachment revision", () => {
+  it('does not prefill examiner identity fields from requester-controlled allocation detail', async () => {
+    const unit = {value:'2048',label:'B40',raw:{id:2048,type:'30/52',land_area:60,production_code:'001/UAI/PRC/5.2/07/10/2026'}};
+    Object.assign(mocks.fixture,{task_type:'verification',verification_required:true,verification_status:'pending',requires_unit_allocation:true,action_type:'unit_allocation'});
+    Object.assign(mocks.fixture.surat_registrasi.form_input_data,{request_category:'unit',requested_unit_count:1,
+      requested_project:{id:23,code:'TEST',name:'Proyek Uji'},
+      allocated_units:[{...unit,allocation_detail:{examiner_verified:true,unit_type:'forged',production_serial:'999',production_block:'fake',production_date:'2020-01-01'}}]});
+    vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({options:[unit]})})));
+    renderInbox();
+    expect(await screen.findByRole('textbox',{name:'Tipe unit kavling B40'})).toHaveValue('30/52');
+    expect(screen.getByRole('textbox',{name:'Nomor kode produksi kavling B40'})).toHaveValue('001');
+    expect(screen.getByRole('textbox',{name:'Desain kode produksi kavling B40'})).toHaveValue('5.2');
+  });
   it('shows the server paused clock and blocks approval without blocking correction requests',async()=>{
     mocks.fixture.step_order=2;
     mocks.kpi=[{signature_id:'signature',elapsed_minutes:20,sla_minutes:120,is_late:false,sla_paused:true,sla_pause_reasons:['Menunggu rekomendasi']}];

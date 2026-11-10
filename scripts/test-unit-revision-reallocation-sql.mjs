@@ -5,7 +5,8 @@ const migration = readFileSync("supabase/migrations/20260811170000_unit_revision
 const statusMigration = readFileSync("supabase/migrations/20260811173000_keep_open_checker_revision_in_revision_status.sql", "utf8");
 const notificationMigration = readFileSync("supabase/migrations/20260811174500_notify_signed_users_on_checker_revision.sql", "utf8");
 const assertions = readFileSync("supabase/tests/unit_revision_reallocation.integration.sql", "utf8");
-const externalAddendum = process.argv.includes('--external-addendum');
+const authority = process.argv.includes('--authority');
+const externalAddendum = process.argv.includes('--external-addendum') || authority;
 const partial = process.argv.includes('--partial') || externalAddendum;
 
 const fixture = `
@@ -62,7 +63,13 @@ const run = (args, input = "", includeStderr = false) => {
 };
 
 const id = run([
-  "run", "-d", "-e", "POSTGRES_PASSWORD=test",
+  "run", "-d", "--network", "none", "--read-only", "--cap-drop", "ALL", "--user", "70:70",
+  "--security-opt", "no-new-privileges", "--pids-limit", "64", "--memory", "384m", "--cpus", "1",
+  "--ulimit", "fsize=67108864:67108864",
+  "--tmpfs", "/scratch:rw,size=268435456,uid=70,gid=70",
+  "--tmpfs", "/var/run/postgresql:rw,size=1048576,uid=70,gid=70",
+  "-e", "PGDATA=/scratch/data", "-e", "HOME=/scratch", "-e", "TMPDIR=/scratch",
+  "-e", "POSTGRES_PASSWORD=test",
   "-e", "POSTGRES_USER=sigap_fixture_root", "-e", "POSTGRES_DB=postgres",
   "--health-cmd", "pg_isready -h 127.0.0.1 -U sigap_fixture_root -d postgres",
   "--health-interval", "1s", "--health-timeout", "5s", "--health-retries", "30",
@@ -131,6 +138,22 @@ try {
         throw new Error('External addendum assertions did not finish');
       }
       process.stdout.write(externalOutput);
+      if (authority) {
+        // Only the registration dependency is reduced; verification/history are real migrations.
+        const registration = `create function public.create_surat_registrasi_core(p_payload jsonb,p_actor uuid)
+          returns public.surat_registrasi language plpgsql security definer set search_path='' as $$
+          declare v_actor uuid:=p_actor; row public.surat_registrasi;
+          begin
+  if v_actor is null then raise exception 'Unauthorized';end if;
+          insert into public.surat_registrasi(id,created_by,status,current_step,form_input_data,data_snapshot)
+          values((p_payload->>'id')::uuid,v_actor,'PROSES',1,p_payload->'form_input_data',p_payload->'data_snapshot') returning * into row;
+          return row;end $$;`;
+        const fix=readFileSync('supabase/migrations/20261109171000_unit_allocation_authority.sql','utf8');
+        const proof=run(['exec','-i',id,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+          registration+fix+fix+readFileSync('supabase/tests/unit_allocation_authority.integration.sql','utf8'),true);
+        if(!proof.includes('Unit allocation authority assertions passed'))throw new Error('Missing Unit authority proof');
+        console.log('Unit allocation authority assertions passed (real verification RPC, immutable history, initial injection and post-completion tampering).');
+      }
     }
   }
 } finally {

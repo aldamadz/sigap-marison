@@ -59,6 +59,16 @@
 
 ## SUR-41 Editable Unit Examination / SUR-34 LT Promotion (2026-11-09, Issue852)
 
+### SUR-41 / Issue #874 Authority Correction (2026-11-09, [Codex])
+
+- Forward migration20261109171000 strips requester allocation input, protects
+  verified Unit snapshots and provides service-only immutable-receipt validation.
+  Outbound refuses stale or unapproved examiner identity/production fields.
+- Legitimate examiner overrides and canonical external addendum revisions remain
+  supported; no client boolean grants provenance. Legacy missing receipts fail closed.
+- Hosted CI42601391278 and both PostgreSQL schema shapes pass. Staging rehearsal
+  preserves business state; apply/deploy pending. Production untouched.
+
 - User authorizes staging then production. LT remains disabled/read-only, from
   raw external land area only, absent from XLSX import. Select original SUR34
   commit747cbfd changes only; do not promote its unrelated old staging ancestry.
