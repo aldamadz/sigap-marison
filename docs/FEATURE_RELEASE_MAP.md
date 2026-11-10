@@ -1,5 +1,21 @@
 # SIGAP Feature and Release Map
 
+## SUR-43 Revision Recovery and Material Reapproval (2026-11-10, [Codex], #897)
+
+- Candidate migration 20261110110000 renews only the current owner's expired active
+  revision draft, preserving its identity, saved edits and intentional file removals.
+  VOID, SUBMITTED and stale events remain closed. No new letter number is allocated.
+- Opening uses nonblocking advisory/row locks and a bounded secondary lock timeout.
+  An actual production deadlock has not been established by source order alone.
+- Server-owned before/after comparison restarts approval at step one for changes
+  to item/specification/value/project or document identity. Notes/attachments-only
+  keep the original asking stage. Both versions and actual restart step are audited.
+- Isolated PostgreSQL tests pass, including KEU10 threshold/director recalculation,
+  Unit reallocation, non-superuser canonical owner, private ACLs, preserved files,
+  four contention cases and exactly-one concurrent submission. Not yet deployed.
+- Target staging. Additional production authorization and separate SoD policy scope
+  are pending. Rollback must be forward-only; never restore stale signed content.
+
 ## SUR-42 Status Pengajuan Route Clarity (2026-11-10, [Codex], Issue #891)
 
 - User authorizes staging then selective production. Canonical /status-pengajuan
