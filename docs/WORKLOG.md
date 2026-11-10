@@ -1,5 +1,40 @@
 # Worklog
 
+## 2026-11-10 [Codex] OPS-19 Production Retention Verified / Issue #912
+
+- Supersedes the initial pending status below. User explicitly approved only the
+  first candidate a4af70dade1de8370f62cbe6e3296c4416cc42942722ccf580263fbdf4bbd22c,
+  unused cache older168h and subsequent policy runs. Approval alone deleted nothing.
+- Source963a19f; PR913 staged826ef944, PR914 selectively promoted maincf68ef3172,
+  PR915 synchronized live stagingeec5b5c63b before production. Deploy Staging
+  42797812004 and Deploy Production42798318778 succeeded; production public SHA
+  cf68ef3172dae2d04623b94ece07f4e096b62788 with live/ready/root HTTP200.
+- Hosted exact-source checks passed lint, typecheck, affected build/tests, audit,
+  17/17 dependency-free retention cases including Linux flock, and four existing
+  deployment tests. No package/dependency/schema/business-data changes.
+- Fixed root-owned no-argument reference auditor installed; only that command
+  receives runner sudo. Private runner state and shared flock verified on CT104.
+  Production success hook verified health/public smoke before recording image
+  7cddf5150efd506f992ef79ccd03695cc5835a11276d46b9df0e357696580b95 and cleanup.
+- First approved image actually deleted without force/parent pruning. Unused
+  dangling build cache until168h reclaimed0B. Audit recorded free62898446336 ->
+  62898458624 bytes, delta12288 bytes (12KiB), NOT the image's virtual size.
+  Shared layers remain needed by other images. No additional candidate removed.
+- All eight container image IDs remain present, including stopped migration
+  candidate; non-app container IDs unchanged. All19 canonical rollback tag/ID
+  references and55 external-reference coordinates (13unique IDs) verified.
+  App/PDF retain three historic IDs; other services retain all available history
+  when fewer than three exist. Historical rollback dependencies stay pinned even
+  beyond the normal four-image budget; never silently repoint old snapshots.
+- Policy automatically runs after future successful app deployment only. Failed,
+  check-only and same-SHA paths do not clean up. Coordinated worker releases must
+  use the same lock and install service-specific health/smoke adapters before
+  registering success; no generic worker certification bypass was installed.
+- Actual disk now118G,total53Gused/about60Gavailable, after an external expansion
+  during this task. That capacity increase was NOT caused by this cleanup.
+  No volume/database/document/secret/config cleanup, business approval, outbound,
+  worker restart or historical rollback retirement. PROJECT_CONTEXT remains absent.
+
 ## 2026-11-10 [Codex] OPS-19 CT104 Image Retention / Issue #912
 
 - User explicitly authorizes persistent production retention, but requires actual
