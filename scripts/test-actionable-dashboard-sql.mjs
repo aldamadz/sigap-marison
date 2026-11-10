@@ -133,7 +133,12 @@ do $$begin begin perform get_actionable_dashboard();exception when insufficient_
 reset role;rollback;
 `;
 const run = (args,input='') => { const r=spawnSync('docker',args,{input,encoding:'utf8',timeout:120000});if(r.status!==0)throw Error(r.stderr+r.stdout);return r.stdout; };
-const container=run(['run','-d','-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root','--health-cmd','pg_isready -h 127.0.0.1 -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
+const container=run(['run','-d','--network','none','--read-only','--cap-drop','ALL','--user','70:70',
+ '--security-opt','no-new-privileges','--pids-limit','64','--memory','384m','--cpus','1','--ulimit','fsize=67108864:67108864',
+ '--tmpfs','/scratch:rw,size=268435456,uid=70,gid=70','--tmpfs','/var/run/postgresql:rw,size=1048576,uid=70,gid=70',
+ '-e','PGDATA=/scratch/data','-e','HOME=/scratch','-e','TMPDIR=/scratch',
+ '-e','POSTGRES_PASSWORD=disposable-test-only','-e','POSTGRES_USER=sigap_fixture_root',
+ '--health-cmd','pg_isready -h 127.0.0.1 -U sigap_fixture_root','--health-interval','1s','--health-retries','30','postgres:17-alpine']).trim();
 try {
  let ready=false;for(let i=0;i<80;i++){if(run(['inspect','--format','{{.State.Health.Status}}',container]).trim()==='healthy'){ready=true;break;}Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
  if(!ready)throw Error('Disposable PostgreSQL not ready');
@@ -214,6 +219,10 @@ try {
     const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],clockSetup+compactSetup+clockCompat+clockCompat+compatAssertions+clockMigration+clockMigration+clockCompat
      +read('supabase/tests/signer_action_sla.integration.sql'));
     if(!result.includes('SLA03 actionable clock assertions passed'))throw Error('Missing SLA03 assertions');
+    const authority=read('supabase/migrations/20261109170000_signer_clock_authority.sql');
+    const authorityResult=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+     authority+authority+read('supabase/tests/signer_clock_authority.integration.sql'));
+    if(!authorityResult.includes('SLA03 lifecycle authority assertions passed'))throw Error('Missing lifecycle authority assertions');
     const refreshClock=()=>new Promise((resolve,reject)=>{
      const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});let output='',error='';
      child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});child.on('error',reject);child.on('close',code=>code===0?resolve(output):reject(Error(error)));

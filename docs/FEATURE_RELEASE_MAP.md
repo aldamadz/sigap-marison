@@ -24,6 +24,14 @@
 
 ## SLA-03 Production Promotion Addendum (2026-11-09, Issue858)
 
+### SLA-03 / Issue #873 Authority Correction (2026-11-09, [Codex])
+
+- Forward migration20261109170000: canonical pause authority, overtaken unsigned
+  stages keep charging, and direct client status/current_step writes are denied.
+- Hosted CI42601387617 and real PostgreSQL clock/authorization/concurrency pass.
+  Staging rollback rehearsal preserves business state. Staging apply/runtime
+  pending; production not authorized by this security correction request.
+
 - User authorizes selective production promotion after live staging beeb26b.
   PR862 tracks only the main-based SLA03 source, not all staging features.
 - Apply new compatibility20261109105900 before immutable clock20261109110000
