@@ -148,10 +148,6 @@ for (const file of allChangedFiles) {
 }
 
 for (const gate of gates) {
-  if (gate === 'requester-revision-recovery-sql') {
-    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--revision-recovery']);
-    continue;
-  }
   if (gate === 'signer-action-sla-clock-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
     continue;
@@ -176,6 +172,10 @@ for (const gate of gates) {
   }
   if (gate === 'department-weekly-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--weekly', '--live-shape']);
+    continue;
+  }
+  if (gate === 'requester-revision-recovery-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--revision-recovery']);
     continue;
   }
   if (gate === 'signer-organization-monitoring-sql') {
