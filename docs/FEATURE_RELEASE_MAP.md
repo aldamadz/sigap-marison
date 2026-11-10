@@ -1,5 +1,31 @@
 # SIGAP Feature and Release Map
 
+## AUTH-03 / SLA-03 / SUR-41 / SLA-02 Production Checkpoint (2026-11-10, [Codex])
+
+- Issue882: user selected exactly four authority/privacy corrections for production.
+  Mainad2d1a4 contains selective PRs883-886/888, not all staging features.
+  Live staging908562e and deploy42740777495 verified before production.
+- Four forward migrations applied with rollback/idempotency/preservation proof;
+  production ledger258, staging261. The owner-compatibility grant is private to
+  canonical postgres, not a client capability. Production app rollout42741494547
+  remains in progress at this checkpoint; a completion entry must supersede it.
+- Outstanding: calendar/timezone configuration validation, department active flag
+  (schema absent), Kas Kecil legacy-history label and existing moderate advisories.
+  No business correction, email test, resend, approval or secret rotation included.
+
+### Verified Production Completion (2026-11-10, [Codex])
+
+- Supersedes the pending checkpoint: guarded run42741494547 succeeded and public
+  productionad2d1a4/staging908562e SHA, root/live/ready200 verified.
+- AUTH03 uniform bounded asynchronous recovery acknowledgement; SLA03 canonical
+  pause/lifecycle authority; SUR41 examiner-owned immutable allocation authority;
+  SLA02 authoritative profile/master department for new intake decisions.
+- Exact-SHA22 affected test files plus real PG, lint/typecheck/build and
+  high/critical audit passed. Migration ledgers258production/261staging and private
+  permissions verified. Existing history/business rows and all worker IDs preserved.
+- Separate follow-up:18 moderate advisories, invalid calendar/timezone configuration,
+  absent department-active flag, Kas Kecil legacy label and CT10494percent disk.
+
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
