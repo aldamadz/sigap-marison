@@ -18,7 +18,8 @@ const policy=JSON.parse(readFileSync(dir+'/policy.json','utf8'));
 if(policy.keepRollbackCount!==3||policy.cacheOlderThanHours!==168)throw Error('Unexpected retention policy');
 JS
 install -d -m 0755 /usr/local/lib/sigap-image-retention/scripts /usr/local/lib/sigap-image-retention/ops/docker-retention
-install -m 0644 scripts/docker-retention-inventory.mjs /usr/local/lib/sigap-image-retention/scripts/
+install -m 0644 scripts/docker-retention-inventory.mjs scripts/docker-retention-plan.mjs scripts/docker-image-retention.mjs /usr/local/lib/sigap-image-retention/scripts/
+install -m 0755 scripts/with-production-deploy-lock.sh /usr/local/lib/sigap-image-retention/scripts/
 install -m 0644 ops/docker-retention/reference-audit.mjs /usr/local/lib/sigap-image-retention/ops/docker-retention/
 install -m 0755 ops/docker-retention/reference-audit.sh /usr/local/sbin/sigap-retention-reference-audit
 install -m 0440 ops/docker-retention/sudoers /etc/sudoers.d/sigap-retention-audit
