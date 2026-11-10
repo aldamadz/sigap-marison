@@ -34,6 +34,14 @@
   preserved, non-app workers unchanged. NAV-01 is included through prior PR898;
   real TesterP3 parent navigation and mobile390 acceptance passed. Production and
   separate SoD policy900 remain pending; revision browser E2E is not claimed.
+- Subsequent authorized production release COMPLETE: main a3a60f4 via selective
+  PR902/903, live staging d37210f contains it via PR904, Production42767996937
+  SUCCESS with exact migration20261110110000 acknowledgement. Production ledger259,
+  preserved business state/function ACLs/owners, matching public SHA and health200.
+  NAV-01 global breadcrumbs released in the same package; non-app workers unchanged.
+  Additional SoD proposal900 skipped per user, existing controls retained. No
+  historical business/signature mutation or external resend. Runtime rollback image
+  pinned; forward-only database correction remains required for any future reversal.
 
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
