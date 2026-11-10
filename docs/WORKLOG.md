@@ -962,3 +962,60 @@
   builders, block their enqueue fallback and compare document state after reads.
   Previewing already-submitted Units must not issue a send/replacement receipt.
   `docs/PROJECT_CONTEXT.md` remains absent; shared structure unchanged.
+
+## 2026-11-10 [Codex] Four Security Corrections Production Checkpoint / Issue #882
+
+- User explicitly authorizes the four selected fixes after the outstanding scope
+  is explained: AUTH03 uniform recovery acknowledgement, SLA03 canonical clock
+  authority, SUR41 verified Unit allocation authority and SLA02 profile department.
+- Selective main PRs883-886 plus owner-compatibility PR888 produce mainad2d1a4.
+  Staging PR887 and ancestry PR889 produce live908562e, containing that main.
+  No application tree changes in the ancestry merge; only16 release-proof lines.
+- Actual production rehearsal exposed private helper ownership: migrations run as
+  supabase_admin, canonical registration runs as non-superuser postgres. New
+  forward migration20261110100000 grants only that canonical owner helper access.
+  Production-shaped disposable PG failed without the grant and passed with it;
+  authenticated and service_role cannot directly execute the private sanitizer.
+- Managed staging ledger260->261; guarded deploy42740777495 passed with exact
+  migration acknowledgement; public version/live/ready/root200 verified.
+- Self-hosted production ledger254->258 applies selected170000,171000,080000,
+  100000 migrations after twice-applied rollback proof. Normalized aggregate SHA256
+  45a93e44ebab0ccb2fde04ea10ef5050986f8015ed6d671d0e242ef1f0383afd.
+  Business/frozen rows, public function owners/ACL and pre-existing closed clock
+  intervals preserved;225 clocks, three authority guards and private ACL verified.
+- Production rollout42741494547 is in progress after successful hosted quality;
+  do not treat this checkpoint as application-runtime completion.
+- CT104 preflight92percent disk/4.5GB free; only unused dangling build cache older
+  than168hours pruned,977MB reclaimed/5.5GB free. No tagged image, container,
+  volume, business file, rollback image, secret or worker removed.
+- Remaining outside scope: validate resolvable calendars/timezones on config writes;
+  master_departments has no active flag (existence only); Kas Kecil legacy-history
+  label is not implemented; existing moderate dependency advisories not upgraded.
+  Recovery background jobs remain bounded/best-effort, not a durable delivery queue.
+- No test recovery email, user approval, resend, vendor POST, historical business
+  correction or secret rotation. PROJECT_CONTEXT.md absent; shared structure intact.
+
+## 2026-11-10 [Codex] Four Security Corrections Production Completed / Issue #882
+
+- Supersedes the rollout-pending checkpoint above. Guarded production run42741494547
+  succeeded: preflight, exact-SHA affected quality and app-only deployment passed.
+  Live productionad2d1a460006a4cadf6091ac18ee0139a7132f39; live staging
+  908562e6b2405f2ae06121ab944604a3cefeba02 contains that production commit.
+- Both public domains verified exact SHA, root/live/ready200 after cutover.
+  Production app container healthy; outbound657fba2b5a1f, PDFc3af751fdaf4,
+  syncfc03d1194fee, external API99e7d80fd17a, tunnel57601ec6c36a and
+  relay8e6d0b6c69db kept their original IDs/images. No worker rollout.
+- Hosted gate passed22 affected Vitest files, real disposable PostgreSQL normal
+  and production-shaped authority/receiving/action-clock regressions, lint,
+  typecheck and frontend/backend build. Audit high/critical passed;18 existing
+  moderate advisories remain. No full-suite claim and no weakened baseline tests.
+- Production verification after app rollout confirms ledger258, all three guards,
+  canonical owner access and private RPC/schema ACLs. Staging ledger261. No blind
+  migration replay, include-all, history repair, new vendor dispatch or user action.
+- Remaining operational capacity risk: CT104 ends at94percent usage/3.7GB free
+  after the new build, despite977MB old-cache recovery. Keep tagged rollback and
+  business data; disk capacity/retention needs a separate follow-up, not more
+  unreviewed deletion. Calendar/timezone validation, department-active schema and
+  legacy Kas Kecil history labeling remain outside this four-fix release.
+- Original dirty root worktree untouched. No approval/resend, actual recovery mail,
+  historical business rewrite, secret/config rotation or maintenance-state change.
