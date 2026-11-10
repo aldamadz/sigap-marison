@@ -279,6 +279,12 @@ try {
       process.stdout.write(photoOutput);
     }
     if (revisionRecovery) {
+      run(psqlArgs, `${canonical("20261109170000_signer_clock_authority.sql", "guard_surat_lifecycle_authority")}
+        ${canonical("20261109171000_unit_allocation_authority.sql", "guard_unit_allocation_authority")}
+        create trigger guard_surat_lifecycle_authority before update of status,current_step on public.surat_registrasi
+          for each row execute function public.guard_surat_lifecycle_authority();
+        create trigger guard_unit_allocation_authority before insert or update of form_input_data,data_snapshot on public.surat_registrasi
+          for each row execute function public.guard_unit_allocation_authority();`);
       // Match production: migration administrator differs from canonical RPC owner.
       run(psqlArgs, `create role supabase_admin login superuser; alter role postgres nosuperuser;
         create table keu10_test.recovery_catalog as select oid,proowner,proacl from pg_proc
