@@ -1,5 +1,30 @@
 # Worklog
 
+## 2026-11-10 [Codex] OPS-19 CT104 Image Retention / Issue #912
+
+- User explicitly authorizes persistent production retention, but requires actual
+  retained/deletion candidates and consent before the first removal. Independent
+  fix/ct104-image-retention-20261110 from main812535d; dirty root unchanged.
+- Shared host flock covers production build, verification, rollback and cleanup.
+  Pin previous ID before build; only verified successful health/public smoke hook
+  records history. Canonical rollback references verified before exact no-force,
+  no-parent image removal. First approved ID set cannot silently expand.
+- Every running/stopped container, audited rollback reference and unmanaged image
+  protected. Docker cache prune only dangling/unused older168h, no system/image/
+  volume prune. Log intent/result/protection errors and actual before/after disk.
+- Read-only CT audit:172 full image IDs including build intermediates,8containers,
+  320operational reference files. Only one initial unreferenced managed candidate:
+  a4af70dade1d (sec04-production-9f887a4e79). Other older deployment images remain
+  referenced in immutable rollout snapshots; do not silently break old rollback.
+- Proxmox-host audit222files adds13unique pinned IDs, candidate not referenced.
+  No secret values/config bodies exported. Existing app/workers are untouched.
+-16 dependency-free tests pass on Windows, real flock case awaits Linux. Hosted
+  gates, protected installation, full retained/delete report and first user approval
+  remain. No image/cache/container/volume deletion or policy approval performed.
+- PROJECT_CONTEXT/root graph absent. Durable rule: successful release chronology
+  is per service/full image ID; old tags and image creation time are not equivalent
+  to verified deployment time. Bootstrap provenance must remain explicit.
+
 ## 2026-11-10 [Codex] SUR-44 Full Signer Revision / Issue #906
 
 - Isolated fix/full-signer-revision-20261110 from production a3a60f4; root dirty
