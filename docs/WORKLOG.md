@@ -23,6 +23,13 @@
 - No database/config/secret/worker changes, business submission, approval, resend,
   real notification send or recovery email. Existing permission checks stay intact.
 
+- Pre-merge review keeps the canonical status entry in the existing SLA-tone
+  group as well as auto-expansion/seen behavior. Full affected selection passes
+  337tests/55files plus3 document-layout assertions; no full-suite run.
+- Production build preflight frees1.975GB of unused dangling cache older than24h
+  only, keeping4GB cache target; free space3.7->5.4GB. No image/container/volume/
+  rollback or business file removed. No active production rollout overlapped.
+
 ## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.

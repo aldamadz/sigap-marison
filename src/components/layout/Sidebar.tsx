@@ -193,7 +193,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   const renderNavLink = (path: string, label: string, Icon: any, isSubItem = false) => {
     const attention = getNavAttention(label)
     const badgeOnlyAttention = attention && badgeOnlyAttentionLabels.has(label)
-    const isSuratSubItem = isSubItem && path.startsWith('/surat/')
+    const isSuratSubItem = isSubItem && (path.startsWith('/surat/') || path === '/status-pengajuan')
     return (
     <NavLink to={path} end={path === '/dashboard' || path === '/admin/users' || path.includes('registrasi')} className="group block text-decoration-none" onClick={handleNavClick}>
       {({ isActive }) => (

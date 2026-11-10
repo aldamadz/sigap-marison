@@ -66,6 +66,7 @@ describe('submission status navigation', () => {
     const sidebar = readFileSync('src/components/layout/Sidebar.tsx', 'utf8');
     expect(sidebar).toContain("renderNavLink('/status-pengajuan', 'Status Pengajuan'");
     expect(sidebar).toContain("path === '/status-pengajuan'");
+    expect(sidebar).toContain("isSubItem && (path.startsWith('/surat/') || path === '/status-pengajuan')");
     expect(sidebar).toContain('creator_seen_at');
   });
 });
