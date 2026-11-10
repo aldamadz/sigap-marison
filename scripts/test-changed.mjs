@@ -81,7 +81,7 @@ if (changesGlobalTestInfrastructure) {
   const relatedFiles = allChangedFiles.filter((file) =>
     /^(src|backend|shared|server)\//u.test(file) && /\.[cm]?[jt]sx?$/u.test(file)
   );
-  if (allChangedFiles.some((file) => file.startsWith(".github/workflows/") || file === "scripts/quality-live-base.sh")) {
+  if (allChangedFiles.some((file) => file.startsWith(".github/workflows/") || file === "scripts/quality-live-base.sh" || file === "scripts/deploy-app.sh")) {
     relatedFiles.push("src/test/automatic-deployment.test.ts");
   }
   if (relatedFiles.some((file) => !/^[A-Za-z0-9_./-]+$/u.test(file))) {
@@ -97,6 +97,7 @@ if (changesGlobalTestInfrastructure) {
 }
 
 const gates = new Set();
+if (allChangedFiles.some(file => /docker.*retention|production-deploy-lock/.test(file))) gates.add('docker-image-retention');
 for (const file of allChangedFiles) {
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
   if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
@@ -150,6 +151,10 @@ for (const file of allChangedFiles) {
 if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
 
 for (const gate of gates) {
+  if (gate === 'docker-image-retention') {
+    run('node', ['--test', 'scripts/test-docker-image-retention.mjs']);
+    continue;
+  }
   if (gate === 'signer-action-sla-clock-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
     continue;

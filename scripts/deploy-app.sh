@@ -32,6 +32,10 @@ if [[ "$environment" == production ]]; then
     echo 'Production deployment requires the designated Proxmox application guest.' >&2; exit 1;
   }
   env_file=/opt/sigap/secrets/.env.production
+  if [[ "${SIGAP_PRODUCTION_LOCK:-}" != 1 ]]; then
+    exec bash scripts/with-production-deploy-lock.sh bash "$0" "$@"
+  fi
+  node --input-type=module -e 'import { assertHeldLock } from "./scripts/docker-image-retention.mjs"; assertHeldLock();'
 fi
 env_link=".env.$environment"
 compose_file="docker-compose.$([[ "$environment" == production ]] && echo prod || echo staging).yml"
@@ -96,6 +100,9 @@ if [[ "$previous_sha" == "$target_sha" ]]; then
   exit 0
 fi
 
+if [[ "$environment" == production ]]; then
+  node scripts/docker-image-retention.mjs prepare app "$previous_image"
+fi
 "${compose[@]}" build "$service"
 image_sha="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
 [[ "$image_sha" == "$target_sha" ]] || { echo 'Built image revision mismatch.' >&2; exit 1; }
@@ -127,3 +134,11 @@ curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /d
 curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/health/ready"
 curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/"
 echo "$environment app deployed at $target_sha; workers were not restarted."
+started=0
+if [[ "$environment" == production ]]; then
+  # Retention failure must not roll back a healthy app.
+  if ! node scripts/docker-image-retention.mjs success app "$(docker inspect --format '{{.Image}}' "$container")" "$target_sha"; then
+    echo 'WARNING: app is healthy, but image retention failed; inspect the retention audit.' >&2
+    exit 1
+  fi
+fi
