@@ -30,3 +30,22 @@ test('missing old attachment history is not invented as mass removals',()=>{
  assert.ok(!revisionHistoryEntries(legacy)[0].changes.some(row=>row.field==='Lampiran'));
  assert.deepEqual(revisionAppendixBlock([]),[]);
 });
+
+test('full signer proposal keeps signer, confirmer and all edited fields in PDF evidence',async()=>{
+ const old=structuredClone(before),next=structuredClone(after);
+ old.document.judul_surat='Perangkat awal';next.document.judul_surat='Perangkat direvisi';
+ Object.assign(old.document.form_input_data.items[0],{spesifikasi:'RAM 8GB',sat:'Unit',status:'2'});
+ Object.assign(next.document.form_input_data.items[0],{nama_barang:'Komputer desain',jumlah:2.5,spesifikasi:'RAM 32GB',sat:'Paket',status:'3'});
+ const doc={...source,form_input_data:next.document.form_input_data,
+   revision_history:[{revision_event_id:'full-event',reason:'Sesuaikan kebutuhan aktual',requested_by_name:'Penandatangan Contoh',
+     submitted_by_name:'Pemohon Contoh',before_snapshot:old,after_snapshot:next}]};
+ const entries=revisionHistoryEntries(doc),serialized=JSON.stringify(entries);
+ for(const expected of ['RAM 8GB','RAM 32GB','Komputer desain','2.5','Paket','Dihapus','Ditambahkan','Perangkat direvisi'])
+   assert.ok(serialized.includes(expected),expected);
+ assert.equal(entries[0].requestedBy,'Penandatangan Contoh');
+ assert.equal(entries[0].actor,'Pemohon Contoh');
+ const data=normalizePgdDocumentData(doc);
+ const rendered=JSON.stringify(buildPgdDocumentDefinition(data));
+ assert.ok(rendered.includes('Penandatangan Contoh')&&rendered.includes('Pemohon Contoh'));
+ assert.equal((await renderPgdPdf(data)).subarray(0,5).toString(),'%PDF-');
+});

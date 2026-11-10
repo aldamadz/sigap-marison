@@ -55,4 +55,11 @@ describe("KEU10 requester revision", () => {
     // No frozen candidates may be considered even if a cached directory is available.
     expect(screen.getByRole("button", { name: "Simpan perbaikan dan lanjutkan" })).toBeDisabled();
   });
+  it("labels a full signer proposal without incorrectly attributing it to Finance", () => {
+    render(<Keu10RequesterRevision eventId="full-proposal" input={{ items: items(1_000_000) }}
+      changes={{ signer_full_proposal: true, keu10_finance_proposal: true, keu10_proposed_input: { items: items(3_000_000) } }}
+      policy={policy} signatures={signatures} onSuccess={async () => {}} />);
+    expect(screen.getByRole("heading", { name: "Konfirmasi revisi penandatangan" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toHaveTextContent("Direktur Utama");
+  });
 });

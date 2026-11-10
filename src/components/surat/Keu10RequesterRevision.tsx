@@ -75,7 +75,7 @@ export function Keu10RequesterRevision({ eventId, input, changes, policy, signat
   });
   return (
     <section className="sigap-panel space-y-4" aria-label="Perbaikan KEU 10 oleh pemohon">
-      <h3 className="text-sm font-semibold">{proposal ? "Konfirmasi koreksi Verifikator" : "Perbaiki rincian pengajuan"}</h3>
+      <h3 className="text-sm font-semibold">{revision.signer_full_proposal === true ? "Konfirmasi revisi penandatangan" : proposal ? "Konfirmasi koreksi Verifikator" : "Perbaiki rincian pengajuan"}</h3>
       {proposal ? <div className="space-y-4">
         <h4 className="text-sm font-medium">Rincian semula</h4><Keu10SubmissionSummary items={originalItems} />
         <h4 className="text-sm font-medium">Usulan koreksi</h4><Keu10SubmissionSummary items={proposedItems} />

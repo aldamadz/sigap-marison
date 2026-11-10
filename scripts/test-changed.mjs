@@ -147,6 +147,8 @@ for (const file of allChangedFiles) {
   if (/work.calendar.bootstrap.*\.sql$|test-work-calendar-bootstrap-sql\.mjs$/u.test(file)) gates.add("test:work-calendar-bootstrap-sql");
 }
 
+if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
+
 for (const gate of gates) {
   if (gate === 'actionable-dashboard-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
@@ -180,6 +182,10 @@ for (const gate of gates) {
   }
   if (gate === 'requester-revision-recovery-sql') {
     run('node', ['scripts/test-keu10-workflow-sql.mjs', '--revision-recovery']);
+    continue;
+  }
+  if (gate === 'full-signer-revision-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--full-signer-revision']);
     continue;
   }
   if (gate === 'signer-organization-monitoring-sql') {
