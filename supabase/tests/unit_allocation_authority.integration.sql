@@ -1,4 +1,12 @@
 begin;
+do $$begin
+ if not has_function_privilege('postgres','unit_allocation_internal.requester_input(jsonb)','execute')
+  or has_function_privilege('authenticated','unit_allocation_internal.requester_input(jsonb)','execute')
+  or has_function_privilege('service_role','unit_allocation_internal.requester_input(jsonb)','execute') then
+  raise exception 'Sanitizer owner grant is missing or exposed to clients';end if;
+ if (select rolsuper from pg_roles where rolname='postgres') then
+  raise exception 'Canonical registration fixture must run without superuser bypass';end if;
+end $$;
 -- Creation through the registration boundary discards every reserved prefix key.
 select public.create_surat_registrasi_core(
  '{"id":"61200000-0000-4000-8000-000000000080","form_input_data":{"request_mode":"unit","requested_unit_count":1,"catatan":"retained","allocated_units":[{"value":"forged"}],"allocated_custom":"forged"},

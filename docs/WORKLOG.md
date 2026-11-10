@@ -119,6 +119,16 @@
 
 ### 2026-11-09 [Codex] SUR-41 / Issue #874 Security Correction Candidate
 
+#### 2026-11-10 [Codex] Production Owner Compatibility / Issue882
+
+- Four selected security fixes explicitly authorized for production. Preflight
+  found supabase_admin-owned private schemas/helpers versus postgres-owned,
+  non-superuser canonical registration RPC. No production apply performed.
+- Red PostgreSQL fixture reproduces permission denied for requester_input when
+  helper/registration owners differ. Forward-only20261110100000 grants just the
+  private helper/schema access to canonical postgres, never authenticated or
+  service_role. Applied171000 is untouched. Stage first, then selected production.
+
 - Forward migration20261109171000 strips initial allocated_* keys, guards direct
   Unit allocation/completed snapshot updates, and verifies immutable history
   through a service-only RPC. Outbound rejects missing/mismatched receipts and
