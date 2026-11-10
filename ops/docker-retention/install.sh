@@ -25,6 +25,7 @@ install -m 0755 ops/docker-retention/reference-audit.sh /usr/local/sbin/sigap-re
 install -m 0440 ops/docker-retention/sudoers /etc/sudoers.d/sigap-retention-audit
 visudo -cf /etc/sudoers.d/sigap-retention-audit >/dev/null
 install -d -m 0700 -o sigap-runner -g sigap-runner /opt/sigap/image-retention
+install -m 0600 -o sigap-runner -g sigap-runner /dev/null /opt/sigap/image-retention/deployment.lock
 install -m 0600 -o sigap-runner -g sigap-runner "$bootstrap/state.json" /opt/sigap/image-retention/state.json
 install -m 0640 -o root -g sigap-runner "$bootstrap/policy.json" /opt/sigap/image-retention/policy.json
 test ! -e /opt/sigap/image-retention/approval.json
