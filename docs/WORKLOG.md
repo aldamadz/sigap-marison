@@ -47,6 +47,43 @@
   only, keeping4GB cache target; free space3.7->5.4GB. No image/container/volume/
   rollback or business file removed. No active production rollout overlapped.
 
+## 2026-11-10 [Codex] SUR-43 Revision Authority / Issue #897
+
+- Independent main-based fix/requester-revision-authority-20261110, candidate
+  migration 20261110110000. Existing expired-draft exception reproduced on old SQL;
+  earlier approvals were restored without material comparison. Private fallback
+  lock order alone does not prove a deadlock: the wrapper already holds both rows
+  in the same transaction and direct public fallback execution is revoked.
+- Renew the same DRAFT/EXPIRED only for its active owner's current revision event.
+  Preserve saved payload and file edits; reject VOID/SUBMITTED/resolved/foreign
+  events. Retain installed recommendation-photo wrappers and existing function
+  owners/ACLs via guarded dynamic patches; unknown function drift aborts migration.
+- Material data changes restart step one, clearing old signature/PDF snapshots.
+  Notes/attachment-only resume the asking stage. Canonical KEU10 amount/director
+  rules and Unit checker reallocation remain in force; immutable old versions and
+  actual history restart steps retained. No fabricated admin approval bypass.
+- Actual canonical RPCs pass in PostgreSQL17 with no network/ports/host mounts,
+  read-only filesystem, tmpfs-only data and resource/time caps. Reapplied migration
+  twice, tested non-superuser postgres owner versus supabase_admin migration role,
+  foreign owner, expired reopening, saved attachment deletions, cancelled/submitted
+  drafts, stale events, RAM change, notes-only, KEU10 crossing2M and changed director,
+  Unit full restart without a verification loop, private helper ACL/owner preservation.
+- Advisory/document/event/draft contention each returns retryable55P03 in under1s
+  measured inside PostgreSQL. Two concurrent submissions yield exactly one winner.
+  Existing requester/SLA/recommendation-photo baselines remain covered unchanged.
+- No live migration, business-data repair, approval, vendor POST or production
+  deployment. Staging catalog/ledger rehearsal, hosted CI and rollout pending.
+  SoD policy coverage and additional production release await user clarification;
+  requester signing Membuat must not accidentally become forbidden. Cross-table
+  CHECK examples in the report cannot directly express this policy in PostgreSQL.
+
+- Subsequent validation: lifecycle and Unit allocation authority guards are now
+  loaded verbatim alongside the new fixture, with all recovery/reapproval tests
+  still passing. Staging rollback-only rehearsal against261 migration versions
+  applied twice, proved business-table fingerprints/function owners/ACL unchanged,
+  and rolled back cleanly. Exact-lock CI b2784f2 passed; current test-only update
+  awaits its own CI. No live migration applied. SoD decision tracked separately900.
+
 ## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.

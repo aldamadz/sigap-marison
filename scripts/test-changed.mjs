@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 for (const file of allChangedFiles) {
+  if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
   if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
   if (/department_receiving_periods.*\.sql$/u.test(file)) gates.add('department-receiving-sql');
@@ -175,6 +176,10 @@ for (const gate of gates) {
   }
   if (gate === 'department-weekly-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--weekly', '--live-shape']);
+    continue;
+  }
+  if (gate === 'requester-revision-recovery-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--revision-recovery']);
     continue;
   }
   if (gate === 'signer-organization-monitoring-sql') {
