@@ -107,6 +107,42 @@
   this expanded task. Proposed SoD must preserve requester Membuat and define
   usage coverage and explicit audited override before enforcement; tracked900.
 
+- Production authorization subsequently received: user skips the proposed additional
+  SoD rule and explicitly approves staging then production for the four tested
+  NAV-01/SUR-43 fixes. Issue900 closed not planned; no existing RLS, lifecycle,
+  allocation, signature or authorization guard was disabled.
+- Production COMPLETE: selective PR902/903 merged main
+  a3a60f497fea5a57a085d16015a6ca3f5c7051b9. PR904 synchronized this ancestry into
+  staging; live staging d37210f37aef9f90b16dd6791f36695ab92c5404 verified before
+  production. Exact-lock PR902/903 and merged-main quality all passed; staging
+  Deploy42767552269 and acknowledged Production42767996937 SUCCESS. Auto production
+  42767924738 cancelled as redundant because it lacked migration acknowledgement;
+  official manual workflow repeated exact-SHA quality and live-stage ancestry.
+- Production migration20261110110000: preflight ledger258 matches prior protected
+  apply proof; twice-applied rollback rehearsal and authorized apply/verify pass,
+  final ledger259. Eleven business table fingerprints and five canonical function
+  owners/ACLs unchanged; installed recovery/reapproval markers and private helper
+  permissions independently verified. Original definitions/proofs retained privately
+  on Proxmox. No approval, cancellation, number allocation, historical document
+  rewrite or external resend performed for acceptance.
+- Production app2ece2e2f91c7/image d86643dd170286fc3b76bc70c1f512edc430d3b082837062befc8930eb0a82cb
+  healthy, restart0. Six non-app services retain original IDs/images/restarts:
+  tunnel57601ec6c36a, outbound657fba2b5a1f, PDFc3af751fdaf4, syncfc03d1194fee,
+  external API99e7d80fd17a, relay8e6d0b6c69db. Public version exact main SHA,
+  root/live/ready/auth-session/maintenance/canonical+legacy status paths200;
+  maintenance phase none. Public index-BXCvH9OH.js contains the new breadcrumb helper.
+  Initial operator probe mistakenly used nonexistent /api/session; corrected
+  /api/auth/session200, not an application regression or reason to add an endpoint.
+- CT104 cleanup only inactive build cache:643.3MB older24h, then1.287GB dangling
+  cache and2.667GB unused cache; final retention target1GB. Disk briefly97% during
+  build, final91%/5.5GB free. No image, business file or volume deleted; old app
+  image f1579b06bb4528605634fbff5c09e34bf6e890940134480b679584419ef93ca4 pinned
+  as agenda-flow:rollback-nav-sur43-20261110 and independently verified after prune.
+- Remaining: no functional release blocker for these four fixes. SoD addition
+  deliberately omitted, not silently implemented. Authenticated production business
+  revision E2E is not claimed; canonical synthetic PostgreSQL and staged navigation
+  acceptance are the proof, with read-only production deployment smoke checks.
+
 ## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
