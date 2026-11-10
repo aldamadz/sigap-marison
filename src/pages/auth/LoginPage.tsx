@@ -149,9 +149,7 @@ export default function LoginPage() {
       if (!response.ok) {
         const message = response.status === 429
           ? 'Terlalu banyak permintaan reset. Silakan tunggu beberapa saat sebelum mencoba lagi.'
-          : response.status >= 500
-            ? 'Layanan reset kata sandi sementara tidak tersedia. Silakan coba lagi atau hubungi admin.'
-            : 'Permintaan reset kata sandi tidak dapat diproses. Periksa email Anda lalu coba lagi.';
+          : 'Permintaan reset kata sandi tidak dapat diproses. Silakan coba lagi.';
         toast.error(message);
         return;
       }

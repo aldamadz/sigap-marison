@@ -173,6 +173,8 @@ const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024
 const templatePreviewTokens = new Map();
 const templatePreviewRateLimits = new Map();
 const passwordResetSendCooldowns = new Map();
+const passwordResetDeliveries = new Set();
+const PASSWORD_RESET_MAX_DELIVERIES = 32;
 const passwordResetIpRateLimits = new Map();
 const loginIdentityRateLimits = new Map();
 const loginIpRateLimits = new Map();
@@ -644,32 +646,7 @@ const buildPasswordResetEmailHtml = ({ resetUrl }) => {
 </table>`;
 };
 
-const handlePasswordResetRequest = async (req) => {
-  if (!supabase) {
-    const err = new Error("Supabase server credentials are not configured.");
-    err.status = 503;
-    throw err;
-  }
-
-  const payload = await readJsonBody(req, 4096);
-  const email = String(payload?.email || "").trim().toLowerCase();
-  const ipKey = clientIp(req) || "unknown";
-  const requestKey = `${ipKey}:${sha256Hex(email).slice(0, 16)}`;
-  const publicResult = {
-    ok: true,
-    message: "Jika email terdaftar, link reset kata sandi akan dikirim.",
-  };
-
-  if (!isEmail(email)) return publicResult;
-
-  enforceRateLimit(passwordResetIpRateLimits, ipKey, PASSWORD_RESET_MAX_PER_WINDOW);
-  recordRateLimit(passwordResetIpRateLimits, ipKey, AUTH_RATE_LIMIT_WINDOW_MS);
-
-  const recentSendUntil = passwordResetSendCooldowns.get(requestKey);
-  if (recentSendUntil && recentSendUntil > Date.now()) {
-    return publicResult;
-  }
-
+const deliverPasswordReset = async (email) => {
   let linkResult;
   try {
     linkResult = await supabase.auth.admin.generateLink({
@@ -680,13 +657,13 @@ const handlePasswordResetRequest = async (req) => {
       },
     });
   } catch (error) {
-    console.error("Password reset link generation failed:", { message: error?.message });
-    return publicResult;
+    console.error("Password reset link generation failed:", { code: error?.code });
+    return;
   }
 
   if (linkResult.error || !linkResult.data?.properties) {
-    console.warn("Password reset link not generated:", { message: linkResult.error?.message });
-    return publicResult;
+    console.warn("Password reset link not generated:", { code: linkResult.error?.code });
+    return;
   }
 
   const appUrl = String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || defaultEmailSettings.app_url).replace(/\/+$/, "");
@@ -697,7 +674,7 @@ const handlePasswordResetRequest = async (req) => {
 
   if (!resetUrl) {
     console.warn("Password reset link missing action url.");
-    return publicResult;
+    return;
   }
 
   try {
@@ -716,12 +693,34 @@ const handlePasswordResetRequest = async (req) => {
           }]
         : [],
     });
-    passwordResetSendCooldowns.set(requestKey, Date.now() + PASSWORD_RESET_SEND_COOLDOWN_MS);
   } catch (error) {
     console.error("Password reset email failed:", { code: error?.code, command: error?.command, responseCode: error?.responseCode });
-    const err = new Error("Email reset belum bisa dikirim. Periksa konfigurasi SMTP.");
-    err.status = 503;
-    throw err;
+  }
+};
+
+const handlePasswordResetRequest = async (req) => {
+  const payload = await readJsonBody(req, 4096);
+  const email = String(payload?.email || "").trim().toLowerCase();
+  const ipKey = clientIp(req) || "unknown";
+  const requestKey = `${ipKey}:${sha256Hex(email).slice(0, 16)}`;
+  const publicResult = {
+    ok: true,
+    message: "Jika email terdaftar, link reset kata sandi akan dikirim.",
+  };
+  if (!isEmail(email)) return publicResult;
+  enforceRateLimit(passwordResetIpRateLimits, ipKey, PASSWORD_RESET_MAX_PER_WINDOW);
+  recordRateLimit(passwordResetIpRateLimits, ipKey, AUTH_RATE_LIMIT_WINDOW_MS);
+  if (passwordResetSendCooldowns.get(requestKey) > Date.now()) return publicResult;
+  passwordResetSendCooldowns.set(requestKey, Date.now() + PASSWORD_RESET_SEND_COOLDOWN_MS);
+
+  // Neither account lookup nor mail delivery participates in the public response.
+  if (passwordResetDeliveries.size < PASSWORD_RESET_MAX_DELIVERIES) {
+    const delivery = Promise.resolve().then(() => deliverPasswordReset(email))
+      .catch(() => console.error("Password reset background delivery failed."))
+      .finally(() => passwordResetDeliveries.delete(delivery));
+    passwordResetDeliveries.add(delivery);
+  } else {
+    console.warn("Password reset background capacity reached.");
   }
 
   return publicResult;
