@@ -34,11 +34,11 @@ describe('Full signer revision', () => {
   });
   it('adds items and confirms deletion before including it in a proposal', async () => {
     render(<Harness />);
-    fireEvent.click(screen.getByRole('button', { name: 'Tambah item', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tambah item' }));
     expect(current().form_input_data.items).toHaveLength(3);
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus item 2', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus item 2' }));
     expect(current().form_input_data.items).toHaveLength(3);
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus item', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus item' }));
     await waitFor(() => expect(current().form_input_data.items).toHaveLength(2));
   });
   it('normalizes decimals and rejects invalid quantities', () => {
