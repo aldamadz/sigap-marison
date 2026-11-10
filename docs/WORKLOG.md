@@ -24,6 +24,19 @@
   metadata; an editable client JSON flag is not proof of signer authority.
   PROJECT_CONTEXT remains absent; shared document structure unchanged.
 
+- SUR-44 continuation: initial staging PR907/runtime01cf0d0 verified after deploy
+  42776490217 SUCCESS. Stage migration150000 ledger263 preserves data/public
+  owners/ACLs. Exact CI42776054703:213 tests/36files, SQL fixtures/concurrency and
+  four actual PDF appendix tests; lint/typecheck/build/audit pass.
+- Compatibility review reproduced mixed-field KEU1 failure before the additional
+  forward migration20261110151000. Afterward canonical price2000 x quantity2.5
+  yields5000 minus Free Cash1000 =4000 despite stale nominal500. Full Asset/Fund/
+  KEU10/Unit and lock/concurrency baselines remain green. No applied migration edited.
+- Follow-up rehearsal for staging ledger263 is twice-applied/rolled-back and keeps
+  business hashes, existing function owners/ACLs and private helper restrictions.
+  Production PR908 is draft until follow-up stage acceptance; no production
+  migration/runtime/business/worker changes. Rollback app image is pinned.
+
 ## 2026-11-10 [Codex] NAV-01 Global Breadcrumbs / Issue #896
 
 - Follow-up to SUR-42: the earlier fix intentionally covered Status Pengajuan only.

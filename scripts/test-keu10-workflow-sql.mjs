@@ -311,6 +311,12 @@ try {
         const fullOutput = run(psqlArgs, read("supabase/tests/full_signer_revision.integration.sql"));
         if (!fullOutput.includes("Full signer revision: all assertions passed")) throw new Error("Missing full signer revision marker");
         process.stdout.write(fullOutput);
+        if (!process.argv.includes('--before-keu1-totals')) {
+          const keu1Totals = read(migrationRoot + '20261110151000_full_signer_revision_keu1_totals.sql');
+          run(psqlArgs, keu1Totals);
+          run(psqlArgs, keu1Totals);
+        }
+        process.stdout.write(run(psqlArgs, read('supabase/tests/full_signer_revision_keu1_totals.integration.sql')));
       }
       // Contention runs only inside this no-network disposable database.
       for (const lock of [
