@@ -3,7 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 
 const read = (path) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
 const fundRabParity = process.argv.includes("--fund-rab-parity");
-const revisionRecovery = process.argv.includes("--revision-recovery");
+const fullSignerRevision = process.argv.includes("--full-signer-revision");
+const revisionRecovery = process.argv.includes("--revision-recovery") || fullSignerRevision;
 const stageOverlay = process.argv.includes("--stageoverlay");
 const stageRead = (file) => {
   const result = spawnSync("git", ["show", `origin/staging:supabase/migrations/${file}`], { encoding: "utf8" });
@@ -303,6 +304,20 @@ try {
       const recoveryOutput = run(psqlArgs, read("supabase/tests/requester_revision_recovery.integration.sql"));
       if (!recoveryOutput.includes("Requester revision recovery: all assertions passed")) throw new Error("Missing recovery marker");
       process.stdout.write(recoveryOutput);
+      if (fullSignerRevision) {
+        const full = read(migrationRoot + "20261110150000_resumable_full_signer_revision.sql");
+        run(psqlArgs, full);
+        run(psqlArgs, full);
+        const fullOutput = run(psqlArgs, read("supabase/tests/full_signer_revision.integration.sql"));
+        if (!fullOutput.includes("Full signer revision: all assertions passed")) throw new Error("Missing full signer revision marker");
+        process.stdout.write(fullOutput);
+        if (!process.argv.includes('--before-keu1-totals')) {
+          const keu1Totals = read(migrationRoot + '20261110151000_full_signer_revision_keu1_totals.sql');
+          run(psqlArgs, keu1Totals);
+          run(psqlArgs, keu1Totals);
+        }
+        process.stdout.write(run(psqlArgs, read('supabase/tests/full_signer_revision_keu1_totals.integration.sql')));
+      }
       // Contention runs only inside this no-network disposable database.
       for (const lock of [
         "select pg_advisory_xact_lock(hashtextextended('keu10:'||keu10_test.id(9801)::text,0))",
@@ -325,7 +340,7 @@ try {
           locker.on("close", () => { clearTimeout(timer); if (!output.includes("LOCK_READY")) reject(new Error("Fixture locker closed early")); });
         });
         locker.stderr.on("data", chunk => { errors += chunk; });
-        locker.stdin.end(`begin; ${lock}; select 'LOCK_READY'; select pg_sleep(3); rollback;`);
+        locker.stdin.write(`begin; ${lock}; select 'LOCK_READY';\n`);
         try {
           await ready;
           run(psqlArgs, `set role authenticated;
@@ -335,7 +350,7 @@ try {
                 (select event_id from keu10_test.results where key='recovery-lock')));
               perform keu10_test.assert(clock_timestamp()-started<interval '1 second','Revision opening fails fast under a held lock');
             end $$;`);
-        } finally { await finished; }
+        } finally { if (!locker.stdin.destroyed) locker.stdin.end('rollback;\n'); await finished; }
       }
       process.stdout.write("Revision contention: advisory/document/event/draft locks each return retryable 55P03 in under one second.\n");
     }

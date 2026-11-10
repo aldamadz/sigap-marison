@@ -232,34 +232,38 @@ describe("Inbox requester data and attachment revision", () => {
     expect(mocks.error).toHaveBeenCalledWith("Catatan revisi minimal 5 karakter.");
   });
 
-  it("preserves suggested item validation and payload", async () => {
+  it("validates full signer proposals and sends all edited fields without applying them", async () => {
     renderInbox();
     const dialog = openRevision();
     fireEvent.click(dialog.getByRole("radio", { name: "Revisi oleh Penandatangan" }));
-    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
+    fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "0" } });
+    fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: reason } });
+    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
-    expect(mocks.error).toHaveBeenCalledWith(expect.stringContaining("Pilih minimal satu item"));
-    chooseOption(dialog.getByRole("combobox"), "Tidak disetujui");
-    fireEvent.change(dialog.getByRole("textbox"), { target: { value: "abcd" } });
-    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
+    expect(mocks.error).toHaveBeenCalledWith(expect.stringContaining("Jumlah"));
+    fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2.5" } });
+    fireEvent.change(dialog.getByLabelText("Nama Barang"), { target: { value: "Laptop revisi" } });
+    fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: "abcd" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
-    fireEvent.change(dialog.getByRole("textbox"), { target: { value: reason } });
-    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
+    fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: reason } });
+    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
     await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
     const payload = mocks.requestRevision.mock.calls[0][0];
     expect(payload).toMatchObject({ targetType: "requester", reason, changes: {
-      requires_resign: true, restart_step: 3, item_revisions: [{ index: 0, action: "reject", nama_barang: "Laptop", alasan: reason }],
+      requires_resign: true, restart_step: 3, signer_revision_required: true,
+      signer_proposed_form: { form_input_data: { items: [{ nama_barang: "Laptop revisi", jumlah: 2.5 }] } },
     } });
     expect(payload.changes).not.toHaveProperty("requester_edit_required");
     expect(payload.changes).not.toHaveProperty("external_submission_revision");
+    expect(mocks.fixture.surat_registrasi.form_input_data.items[0]).toEqual({ nama_barang: "Laptop", jumlah: "3" });
   });
 
   it("does not send hidden item changes or use their reasons in general mode", async () => {
     renderInbox();
     const dialog = openRevision();
     fireEvent.click(dialog.getByRole("radio", { name: "Revisi oleh Penandatangan" }));
-    chooseOption(dialog.getByRole("combobox"), "Tidak disetujui");
-    fireEvent.change(dialog.getByRole("textbox"), { target: { value: "Usulan item sebelumnya" } });
+    fireEvent.change(dialog.getByLabelText("Nama Barang"), { target: { value: "Usulan item sebelumnya" } });
     fireEvent.click(dialog.getByRole("radio", { name: "Minta Perbaikan Pemohon" }));
     fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
@@ -308,7 +312,7 @@ describe("Inbox requester data and attachment revision", () => {
     renderInbox();
     const dialog = openRevision();
     expect(dialog.queryByLabelText("Keterangan")).not.toBeInTheDocument();
-    if (role !== "verifikator") expect(dialog.queryByRole("radio", { name: "Revisi oleh Penandatangan" })).not.toBeInTheDocument();
+    expect(dialog.getByRole("radio", { name: "Revisi oleh Penandatangan" })).toBeEnabled();
     fireEvent.change(dialog.getByLabelText("Alasan pengembalian"), { target: { value: reason } });
     fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
     await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledExactlyOnceWith({
@@ -323,15 +327,17 @@ describe("Inbox requester data and attachment revision", () => {
     const dialog = openRevision();
     fireEvent.click(dialog.getByRole("radio", { name: "Revisi oleh Penandatangan" }));
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "0" } });
-    fireEvent.change(dialog.getByLabelText("Alasan pengembalian / koreksi"), { target: { value: reason } });
-    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
+    fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: reason } });
+    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2" } });
-    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
+    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
     await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
     const payload = mocks.requestRevision.mock.calls[0][0];
     expect(payload.changes).toMatchObject({ requires_resign: true, restart_step: 3,
-      keu10_proposed_input: { items: [expect.objectContaining({ jumlah: "2", total: 300_000 })] },
+      signer_revision_required: true, signer_proposed_form: { form_input_data: {
+        items: [expect.objectContaining({ jumlah: "2", total: 300_000 })], fund_amount: 300_000,
+      } },
     });
     expect(payload.changes).not.toHaveProperty("requester_edit_required");
     expect(mocks.fixture.surat_registrasi.form_input_data.items[0].jumlah).toBe(3);

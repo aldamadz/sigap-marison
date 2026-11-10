@@ -115,7 +115,7 @@ describe("KEU 10 inbox display and summary export", () => {
     { role: "pemohon", label: "Branch Manager", step: 1 },
     { role: "memeriksa", label: "Manager", step: 2 },
     { role: "menyetujui", label: "Director", step: 5 },
-  ])("$label can return KEU 10 with a reason, but cannot edit or propose values", async ({ role, step }) => {
+  ])("$label defaults to a general KEU 10 return without requiring item changes", async ({ role, step }) => {
     mocks.fixture.role_name = role;
     mocks.fixture.step_order = step;
     mocks.fixture.surat_registrasi.form_input_data.items[0].jumlah = 0;
@@ -136,7 +136,7 @@ describe("KEU 10 inbox display and summary export", () => {
       changes: { note: "Perbaiki rincian dan lampiran.", requested_by: "approval_inbox", requires_resign: true, restart_step: step, requester_edit_required: true },
     }));
   });
-  it("only the formal Finance verifier can propose validated items for requester confirmation", async () => {
+  it("the formal Finance verifier proposes validated full form data for requester confirmation", async () => {
     mocks.fixture.role_name = "verifikator";
     mocks.fixture.step_order = 4;
     render(<MemoryRouter><InboxPage /></MemoryRouter>);
@@ -146,15 +146,19 @@ describe("KEU 10 inbox display and summary export", () => {
     expect(dialog.getByLabelText("Keterangan")).toBeInTheDocument();
     expect(dialog.queryByRole("combobox")).not.toBeInTheDocument();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "0" } });
-    fireEvent.change(dialog.getByLabelText("Alasan pengembalian / koreksi"), { target: { value: "Koreksi jumlah menjadi dua dokumen." } });
-    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
+    fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: "Koreksi jumlah menjadi dua dokumen." } });
+    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2" } });
-    fireEvent.click(dialog.getByRole("button", { name: /Minta perbaikan|Kirim revisi/ }));
+    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
     await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
     expect(mocks.requestRevision).toHaveBeenCalledWith(expect.objectContaining({
       targetType: "requester", targetStep: null,
-      changes: expect.objectContaining({ requires_resign: true, restart_step: 4, signer_revision_required: true, keu10_proposed_input: { items: [expect.objectContaining({ jumlah: "2", total: 300_000 })] } }),
+      changes: expect.objectContaining({ requires_resign: true, restart_step: 4, signer_revision_required: true,
+        signer_proposed_form: expect.objectContaining({ form_input_data: expect.objectContaining({
+          items: [expect.objectContaining({ jumlah: "2", total: 300_000 })], fund_amount: 300_000,
+        }) }),
+      }),
     }));
     expect(mocks.fixture.surat_registrasi.form_input_data.items[0].jumlah).toBe(3);
   });
