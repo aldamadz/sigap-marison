@@ -151,10 +151,6 @@ for (const file of allChangedFiles) {
 if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
 
 for (const gate of gates) {
-  if (gate === 'docker-image-retention') {
-    run('node', ['--test', 'scripts/test-docker-image-retention.mjs']);
-    continue;
-  }
   if (gate === 'signer-action-sla-clock-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
     continue;
@@ -187,6 +183,10 @@ for (const gate of gates) {
   }
   if (gate === 'full-signer-revision-sql') {
     run('node', ['scripts/test-keu10-workflow-sql.mjs', '--full-signer-revision']);
+    continue;
+  }
+  if (gate === 'docker-image-retention') {
+    run('node', ['--test', 'scripts/test-docker-image-retention.mjs']);
     continue;
   }
   if (gate === 'signer-organization-monitoring-sql') {
