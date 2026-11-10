@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## SUR-42 Status Pengajuan Route Clarity (2026-11-10, [Codex], Issue #891)
+
+- User authorizes staging then selective production. Canonical /status-pengajuan
+  uses Beranda > Status Pengajuan, not the nonexistent /surat parent page.
+- Legacy /surat/monitoring remains protected and replace-redirects with original
+  query/hash/state. Dashboard, sidebar, back links and notification destinations
+  use the canonical path; old notification/SW links remain accepted, same-origin only.
+- No database migration, permission expansion, business-history rewrite, secret,
+  worker or outbound change.42 focused regressions, lint/typecheck and frontend/
+  backend builds pass. Hosted CI, staged acceptance and production rollout pending.
+- Rollback: restore the old canonical page mapping and navigation together while
+  keeping both paths usable; never remove historical deep-link compatibility.
+
 ## SUR-43 Revision Recovery and Material Reapproval (2026-11-10, [Codex], #897)
 
 - Candidate migration 20261110110000 renews only the current owner's expired active
@@ -15,19 +28,6 @@
   four contention cases and exactly-one concurrent submission. Not yet deployed.
 - Target staging. Additional production authorization and separate SoD policy scope
   are pending. Rollback must be forward-only; never restore stale signed content.
-
-## SUR-42 Status Pengajuan Route Clarity (2026-11-10, [Codex], Issue #891)
-
-- User authorizes staging then selective production. Canonical /status-pengajuan
-  uses Beranda > Status Pengajuan, not the nonexistent /surat parent page.
-- Legacy /surat/monitoring remains protected and replace-redirects with original
-  query/hash/state. Dashboard, sidebar, back links and notification destinations
-  use the canonical path; old notification/SW links remain accepted, same-origin only.
-- No database migration, permission expansion, business-history rewrite, secret,
-  worker or outbound change.42 focused regressions, lint/typecheck and frontend/
-  backend builds pass. Hosted CI, staged acceptance and production rollout pending.
-- Rollback: restore the old canonical page mapping and navigation together while
-  keeping both paths usable; never remove historical deep-link compatibility.
 
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
