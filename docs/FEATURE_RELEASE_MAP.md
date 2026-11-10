@@ -13,6 +13,12 @@
 - Rollback: restore the old canonical page mapping and navigation together while
   keeping both paths usable; never remove historical deep-link compatibility.
 
+- Verified completion2026-11-10 [Codex]: PR892/893/894, productiond5ae0c0 and
+  staging60409fa live; guarded production42747287492 success. Actual staged
+  tester desktop/mobile390 breadcrumb/redirect/menu acceptance, exact public
+  versions/live/ready/both paths200 and served production bundle/SW verified.
+  Original worker IDs and permission boundaries preserved; no migration/outbound.
+
 ## AUTH-03 / Issue #872 Security Correction (2026-11-09, [Codex])
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.

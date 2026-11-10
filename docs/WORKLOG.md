@@ -30,6 +30,35 @@
   only, keeping4GB cache target; free space3.7->5.4GB. No image/container/volume/
   rollback or business file removed. No active production rollout overlapped.
 
+### 2026-11-10 [Codex] SUR-42 Verified Release Completion
+
+- Supersedes the pending rollout above. PR892 staged source4f86ee1 as51b74ba;
+  PR893 selectively promotes it to maind5ae0c0; zero-tree-diff ancestry PR894
+  produces final staging60409faa969eda294f4f1541ebffda8b68d7fcb0.
+- Hosted PR gates42745147551/42745831533, first staged rollout42745824279,
+  ancestry gate42746558021/final staged rollout42746842878 and guarded production
+  run42747287492 all succeeded. Live production
+  d5ae0c0ac8770e31f3bcee2d9d55bacff25bc2cf was contained by live staging before
+  cutover. Both domains exact SHA/live/ready/canonical and legacy URLs200 verified.
+- Actual browser TesterP3 staging desktop/dark/mobile390 acceptance passes:
+  /surat/monitoring?status=DONE#approval becomes /status-pengajuan with original
+  query/hash, only Beranda link then current Status Pengajuan, sidebar active and
+  SLA tone retained, no viewport overflow. Temporary viewport reset.
+- Production served entry bundle index-TrKZ_Ap4.js contains the new route;
+  actual served SW accepts both canonical and historical status URLs. Anonymous
+  production route still goes to login. Authenticated production UI was not
+  repeated (no IAB session); functional UI accepted with staging tester and exact
+  production artifact/version verified. No password or live notification test used.
+- App healthy; PDF/outbound/sync/API/tunnel/relay kept original IDs and uptime.
+  No migration, permission/config/secret change, worker restart, approval, resend,
+  real push/recovery email or historical-link rewrite. Existing moderate audit
+  advisories remain outside scope; high/critical gate passed.
+- Capacity follow-up remains: CT104 ends94percent/3.6GB free after build even
+  after1.975GB cache recovery; no tagged rollback, volume or business file pruned.
+- Repository canonical name now aldamadz/sigap-marison; old frontend alias still
+  resolves same repository. No unrelated git remote/config update. Dirty root left
+  untouched; no remaining functional SUR42 blocker.
+
 ## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.
