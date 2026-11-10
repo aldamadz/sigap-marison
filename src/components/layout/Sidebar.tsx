@@ -116,7 +116,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
   }
 
   useEffect(() => {
-    if (location.pathname.startsWith('/surat/monitoring') && user?.id) {
+    const path = location.pathname.replace(/\/+$/, '')
+    if ((path === '/status-pengajuan' || path === '/surat/monitoring') && user?.id) {
       const t = setTimeout(async () => {
         await supabase
           .from('surat_registrasi')
@@ -131,8 +132,8 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
 
   useEffect(() => {
     if (collapsed) return
-    const path = location.pathname
-    if (path.startsWith('/surat')) setIsSuratOpen(true)
+    const path = location.pathname.replace(/\/+$/, '')
+    if (path.startsWith('/surat') || path === '/status-pengajuan') setIsSuratOpen(true)
     const masterDataPaths = ['/admin/users', '/admin/departments', '/admin/entities', '/admin/letter-types', '/admin/offices', '/admin/master-projects']
     if (masterDataPaths.some(p => path.startsWith(p))) setIsMasterOpen(true)
   }, [location.pathname, collapsed])
@@ -373,7 +374,7 @@ export const Sidebar = ({ collapsed, onToggle, isMobile = false, onNavigate }: S
                   {renderNavLink('/surat/inbox', 'Persetujuan', Inbox, true)}
                   {canAccessRecommendation && renderNavLink('/surat/rekomendasi', 'Rekomendasi', FileCheck2, true)}
                   {renderNavLink('/surat/tindak-lanjut', 'Tindak Lanjut', ClipboardCheck, true)}
-                  {renderNavLink('/surat/monitoring', 'Status Pengajuan', SearchCheck, true)}
+                  {renderNavLink('/status-pengajuan', 'Status Pengajuan', SearchCheck, true)}
                   {renderNavLink('/surat/riwayat', 'Riwayat Terlibat', History, true)}
                 </motion.div>
               )}

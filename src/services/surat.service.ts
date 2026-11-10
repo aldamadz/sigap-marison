@@ -1591,7 +1591,7 @@ export const suratService = {
           [updatedSurat.created_by],
           'Surat Ditandatangani',
           `Surat "${updatedSurat.judul_surat}" telah ditandatangani oleh ${userName}`,
-          "/surat/monitoring",
+          "/status-pengajuan",
           { surat_id: suratId, event_type: "signed", type: "success" }
         );
       }
@@ -1635,7 +1635,7 @@ export const suratService = {
          [suratInfo.created_by],
          'Surat Ditolak',
          `Surat "${suratInfo.judul_surat}" telah ditolak. Catatan: ${note}`,
-         "/surat/monitoring",
+         "/status-pengajuan",
          { surat_id: suratId, event_type: "rejected", type: "error" }
        );
     }

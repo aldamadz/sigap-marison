@@ -31,6 +31,6 @@ describe('owned notification landing',()=>{
   await waitFor(()=>expect(h.navigate).toHaveBeenCalled());
  });
  it('stale tasks return to the known document without claiming a different task',async()=>{
-  h.detail.mockRejectedValue(Error('Task tidak aktif'));mount();await waitFor(()=>expect(h.navigate).toHaveBeenCalledWith(`/surat/monitoring?document=${surat}`,{replace:true}));
+  h.detail.mockRejectedValue(Error('Task tidak aktif'));mount();await waitFor(()=>expect(h.navigate).toHaveBeenCalledWith(`/status-pengajuan?document=${surat}`,{replace:true}));
  });
 });
