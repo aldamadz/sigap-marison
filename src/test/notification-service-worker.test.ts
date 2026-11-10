@@ -10,6 +10,11 @@ function boot() {
  return {self,clients,fire:async(name:string,event:Record<string,unknown>={})=>{let done:Promise<unknown>|undefined;handlers[name]({...event,waitUntil:(value:Promise<unknown>)=>{done=value;}});await done;}};
 }
 describe('browser popup service worker',()=>{
+ it.each(['/status-pengajuan','/surat/monitoring'])('opens same-origin %s links without losing document filters',async(path)=>{
+  const h=boot();
+  await h.fire('notificationclick',{notification:{close:vi.fn(),data:{link:`${path}?document=fixture&status=DONE#approval`}}});
+  expect(h.clients.openWindow).toHaveBeenCalledWith(`https://sigap.test${path}?document=fixture&status=DONE#approval`);
+ });
  it('activates without caching personalized requests and handles background push with a stable tag',async()=>{
   const h=boot();await h.fire('install');await h.fire('activate');
   expect(h.self.skipWaiting).toHaveBeenCalled();expect(h.clients.claim).toHaveBeenCalled();

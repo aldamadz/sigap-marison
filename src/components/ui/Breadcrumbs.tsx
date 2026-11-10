@@ -22,7 +22,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/surat/rekomendasi/registrasi': 'Registrasi Rekomendasi',
   '/surat/inbox': 'Inbox Approval',
   '/surat/tindak-lanjut': 'Tindak Lanjut',
-  '/surat/monitoring': 'Monitoring Surat',
+  '/status-pengajuan': 'Status Pengajuan',
   '/surat/riwayat': 'Riwayat',
   '/admin': 'Admin',
   '/admin/users': 'Manajemen User',
@@ -43,7 +43,9 @@ export function Breadcrumbs({ items, showHome = true, className }: BreadcrumbsPr
 
   // Generate breadcrumbs from route path
   const generateFromRoute = (): BreadcrumbItem[] => {
-    const segments = location.pathname.split('/').filter(Boolean)
+    const normalizedPath = location.pathname.replace(/\/+$/, '') || '/'
+    const pathname = normalizedPath === '/surat/monitoring' ? '/status-pengajuan' : normalizedPath
+    const segments = pathname.split('/').filter(Boolean)
     const crumbs: BreadcrumbItem[] = []
 
     if (showHome) {
@@ -54,7 +56,7 @@ export function Breadcrumbs({ items, showHome = true, className }: BreadcrumbsPr
     for (const segment of segments) {
       currentPath += `/${segment}`
       const label = ROUTE_LABELS[currentPath] || segment.charAt(0).toUpperCase() + segment.slice(1)
-      const isLast = currentPath === location.pathname
+      const isLast = currentPath === pathname
       crumbs.push({
         label,
         href: isLast ? undefined : currentPath,
@@ -99,6 +101,7 @@ export function Breadcrumbs({ items, showHome = true, className }: BreadcrumbsPr
               </Link>
             ) : (
               <span
+                aria-current={isLast ? 'page' : undefined}
                 className={cn(
                   isLast ? 'text-foreground font-semibold whitespace-nowrap' : 'text-muted-foreground'
                 )}

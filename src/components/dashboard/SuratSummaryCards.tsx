@@ -98,8 +98,8 @@ export const SuratSummaryCards = ({ dateFrom, dateTo }: SuratSummaryCardsProps =
             transition={{ delay: i * 0.08, type: 'spring', stiffness: 260, damping: 22 }}
             onClick={() => navigate(
               card.statusParam
-                ? `/surat/monitoring?status=${card.statusParam}`
-                : '/surat/monitoring'
+                ? `/status-pengajuan?status=${card.statusParam}`
+                : '/status-pengajuan'
             )}
             className={cn(
               'group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-lg border bg-card p-5 text-left',

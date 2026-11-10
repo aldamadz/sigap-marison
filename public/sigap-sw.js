@@ -29,7 +29,7 @@ self.addEventListener("notificationclick", (event) => {
   let targetUrl = new URL('/dashboard',self.location.origin).href;
   try {
     const candidate=new URL(event.notification.data?.link || '/dashboard',self.location.origin);
-    if(candidate.origin===self.location.origin && ['/notifications/open','/dashboard','/calendar','/surat/inbox','/surat/monitoring','/surat/tindak-lanjut','/surat/rekomendasi'].includes(candidate.pathname))targetUrl=candidate.href;
+    if(candidate.origin===self.location.origin && ['/notifications/open','/dashboard','/calendar','/surat/inbox','/status-pengajuan','/surat/monitoring','/surat/tindak-lanjut','/surat/rekomendasi'].includes(candidate.pathname))targetUrl=candidate.href;
   }catch{/* Invalid legacy links never open an external destination. */}
 
   event.waitUntil((async () => {

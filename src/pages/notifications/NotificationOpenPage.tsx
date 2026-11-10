@@ -20,5 +20,5 @@ export default function NotificationOpenPage() {
   useEffect(()=>{if(!query.isFetching&&!query.isError&&query.data)navigate(query.data,{replace:true});},[query.data,query.isFetching,query.isError,navigate]);
   if(query.isFetching || !query.isError&&query.data)return <div role="status" className="flex items-center gap-2 py-8"><Loader2 className="h-5 w-5 animate-spin" />Membuka pengajuan...</div>;
   return <section className="space-y-4 border-y py-8"><h1 className="text-xl font-semibold">Notifikasi tidak tersedia</h1><p className="text-sm text-muted-foreground">Tugas mungkin sudah berubah, dihapus, atau tidak tersedia untuk akun ini.</p>
-    <div className="flex flex-wrap gap-2">{query.isError && <Button variant="outline" onClick={()=>{void query.refetch();}}>Coba lagi</Button>}<Button asChild variant="outline"><Link to="/surat/monitoring">Status Pengajuan</Link></Button></div></section>;
+    <div className="flex flex-wrap gap-2">{query.isError && <Button variant="outline" onClick={()=>{void query.refetch();}}>Coba lagi</Button>}<Button asChild variant="outline"><Link to="/status-pengajuan">Status Pengajuan</Link></Button></div></section>;
 }

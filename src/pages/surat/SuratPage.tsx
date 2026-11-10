@@ -57,7 +57,7 @@ export default function SuratPage() {
       >
         <Button
           variant="outline"
-          onClick={() => navigate(isRecommendationRoute ? "/surat/rekomendasi" : "/surat/monitoring")}
+          onClick={() => navigate(isRecommendationRoute ? "/surat/rekomendasi" : "/status-pengajuan")}
           className="gap-2"
         >
           <History className="w-4 h-4" />

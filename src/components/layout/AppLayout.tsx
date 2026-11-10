@@ -16,7 +16,7 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/surat/rekomendasi/registrasi': { title: 'Registrasi Rekomendasi', subtitle: 'Lengkapi dokumen rekomendasi berdasarkan pengajuan induk' },
   '/surat/inbox': { title: 'Inbox Approval', subtitle: 'Daftar surat yang memerlukan persetujuan' },
   '/surat/tindak-lanjut': { title: 'Tindak Lanjut', subtitle: 'Keputusan pemohon setelah pengajuan dikembalikan' },
-  '/surat/monitoring': { title: 'Monitoring Surat', subtitle: 'Lacak status dan alur distribusi surat' },
+  '/status-pengajuan': { title: 'Status Pengajuan', subtitle: 'Pantau progres dan persetujuan pengajuan' },
   '/surat/riwayat': { title: 'Riwayat Keterlibatan', subtitle: 'Riwayat pengajuan untuk pihak yang terlibat' },
   '/admin/users/hierarchy': { title: 'Hirarki Organisasi', subtitle: 'Tree list dan chart node struktur karyawan' },
   '/admin/kpi-departments': { title: 'SLA Departemen', subtitle: 'Evaluasi approval berdasarkan jam kerja efektif' },

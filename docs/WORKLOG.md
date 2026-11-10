@@ -1,5 +1,35 @@
 # Worklog
 
+## 2026-11-10 [Codex] SUR-42 Status Route and Breadcrumb / Issue #891
+
+- Isolated fix/submission-status-route-20261110 from mainad2d1a4. User explicitly
+  authorizes staging then production. Original dirty root untouched; no active
+  route/breadcrumb work overlaps. PROJECT_CONTEXT and root knowledge graph absent.
+- Existing generic breadcrumb made /surat a clickable parent even though App has
+  no such page. Move only Status Pengajuan to /status-pengajuan; normalize breadcrumb
+  trailing slashes and label consistently, including accessible current-page marker.
+- Legacy protected route replace-redirects with query/hash/state and normal Back
+  behavior. Update sidebar auto-expansion/seen behavior, dashboard cards, form-back,
+  stale-inbox fallback and notification targets. Keep old SW/notification allowlist
+  entries for immutable historical links; reject external/unapproved paths as before.
+-42 focused tests in6files pass, including real MemoryRouter redirects/Back,
+  document/filter/hash/state, trailing slashes, breadcrumb, explicit items/hidden
+  home, protected wiring, sidebar contracts and SW canonical/legacy links.
+  Lint/typecheck/frontend/backend builds pass; no dependencies or lockfile changed.
+  Existing Zod Rollup annotation warnings do not fail build.
+- Staging browser TesterP3 session confirmed; old breadcrumb visibly reproduces
+  Beranda > Surat > Monitoring Surat. Hosted gates, staged UI/mobile acceptance,
+  selective main promotion and production public/runtime verification remain.
+- No database/config/secret/worker changes, business submission, approval, resend,
+  real notification send or recovery email. Existing permission checks stay intact.
+
+- Pre-merge review keeps the canonical status entry in the existing SLA-tone
+  group as well as auto-expansion/seen behavior. Full affected selection passes
+  337tests/55files plus3 document-layout assertions; no full-suite run.
+- Production build preflight frees1.975GB of unused dangling cache older than24h
+  only, keeping4GB cache target; free space3.7->5.4GB. No image/container/volume/
+  rollback or business file removed. No active production rollout overlapped.
+
 ## 2026-11-09 [Codex] AUTH-03 / Issue #872 Security Correction Candidate
 
 - Uniform password recovery acknowledgement; lookup and SMTP execute outside the public response in a bounded in-process queue (32 outstanding). Existing per-IP limit and cooldown remain. Delivery/configuration failures log private codes, never provider text or links. UI keeps only account-independent transport/rate-limit failures. Five synthetic recovery regressions and six UI assertions pass in the isolated cached Linux toolchain; its unrelated push test lacks AbortSignal.timeout. Exact-lock CI and staging rollout pending. No real recovery email or production changes.

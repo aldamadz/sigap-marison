@@ -9,7 +9,7 @@ const record=(value:unknown):Record<string,unknown> => value && typeof value==='
 export function safeNotificationLink(value:unknown):URL|null {
   if(typeof value!=='string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\'))return null;
   const url=new URL(value,'https://sigap.invalid');
-  return url.origin==='https://sigap.invalid' && ['/dashboard','/calendar','/surat/inbox','/surat/monitoring','/surat/tindak-lanjut','/surat/rekomendasi'].includes(url.pathname)?url:null;
+  return url.origin==='https://sigap.invalid' && ['/dashboard','/calendar','/surat/inbox','/status-pengajuan','/surat/monitoring','/surat/tindak-lanjut','/surat/rekomendasi'].includes(url.pathname)?url:null;
 }
 export function notificationTask(detail:unknown,userId:string,requestedType?:string|null) {
   const data=record(detail);
@@ -25,7 +25,7 @@ export type StoredNotificationTarget = {id:string;user_id:string;link?:string|nu
 export async function resolveNotificationTarget(notification:StoredNotificationTarget,getDetail:(id:string)=>Promise<unknown>):Promise<string|null> {
   const data=record(notification.data),link=safeNotificationLink(notification.link);
   const suratId=isNotificationUuid(data.surat_id)?data.surat_id:link?.searchParams.get('document');
-  const fallback=isNotificationUuid(suratId)?`/surat/monitoring?document=${suratId}`:null;
+  const fallback=isNotificationUuid(suratId)?`/status-pengajuan?document=${suratId}`:null;
   if(data.category==='team_digest')return '/dashboard?scope=team';
   if(link?.pathname==='/surat/inbox' || isNotificationUuid(data.signature_id)) {
     const key=link?.searchParams.get('task') || '';
