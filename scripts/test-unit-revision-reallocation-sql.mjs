@@ -147,10 +147,13 @@ try {
   if v_actor is null then raise exception 'Unauthorized';end if;
           insert into public.surat_registrasi(id,created_by,status,current_step,form_input_data,data_snapshot)
           values((p_payload->>'id')::uuid,v_actor,'PROSES',1,p_payload->'form_input_data',p_payload->'data_snapshot') returning * into row;
-          return row;end $$;`;
+          return row;end $$;
+          alter function public.create_surat_registrasi_core(jsonb,uuid) owner to postgres;`;
         const fix=readFileSync('supabase/migrations/20261109171000_unit_allocation_authority.sql','utf8');
+        const ownerGrant=process.argv.includes('--owner-baseline') ? '' :
+          readFileSync('supabase/migrations/20261110100000_unit_allocation_authority_owner_grant.sql','utf8');
         const proof=run(['exec','-i',id,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
-          registration+fix+fix+readFileSync('supabase/tests/unit_allocation_authority.integration.sql','utf8'),true);
+          registration+fix+fix+ownerGrant+ownerGrant+readFileSync('supabase/tests/unit_allocation_authority.integration.sql','utf8'),true);
         if(!proof.includes('Unit allocation authority assertions passed'))throw new Error('Missing Unit authority proof');
         console.log('Unit allocation authority assertions passed (real verification RPC, immutable history, initial injection and post-completion tampering).');
       }
