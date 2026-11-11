@@ -1,3 +1,5 @@
+import { normalizeHrdGaReviewConfig, type HrdGaReviewConfig } from "@/lib/hrd-ga-review";
+
 export const CHECKER_INPUT_TYPES = ["text", "textarea", "money", "number"] as const;
 
 export type CheckerInputType = (typeof CHECKER_INPUT_TYPES)[number];
@@ -13,6 +15,7 @@ export type CheckerInputField = {
 };
 
 export type CheckerInputSchema = {
+  hrd_ga_review?: HrdGaReviewConfig;
   review_mode?: "fund_item_checklist";
   title?: string;
   description?: string;
@@ -52,6 +55,7 @@ export const normalizeCheckerInputSchema = (value: unknown): CheckerInputSchema 
   });
 
   return {
+    ...(normalizeHrdGaReviewConfig(value.hrd_ga_review) ? { hrd_ga_review: normalizeHrdGaReviewConfig(value.hrd_ga_review)! } : {}),
     ...(value.review_mode === "fund_item_checklist" ? { review_mode: "fund_item_checklist" as const } : {}),
     ...(String(value.title || "").trim() ? { title: String(value.title).trim() } : {}),
     ...(String(value.description || "").trim() ? { description: String(value.description).trim() } : {}),

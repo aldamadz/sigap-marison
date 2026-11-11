@@ -1,4 +1,5 @@
 import type { RegistrationSummaryData, RegistrationSummaryField } from "@/components/surat/RegistrationSummaryDialog";
+import { hrdGaReviewerSummary } from "@/lib/hrd-ga-review";
 import { formatSummaryValue, humanizeInputKey } from "@/components/surat/request-summary";
 import { getUnitAllocationData } from "@/components/surat/unit-allocation-data";
 import { applyRevisionToItems, getActiveRevision } from "@/components/surat/revision-utils";
@@ -145,6 +146,9 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
       fields.splice(financialIndex, 0, notes);
     }
   }
+
+  const reviewerSummary = hrdGaReviewerSummary(null, mergedInput.items, policy);
+  if (reviewerSummary) fields.push({ key: "hrd_ga_review", label: "Pemeriksaan HRD & GA", value: reviewerSummary });
 
   if (unitAllocation.units.length > 0 && !fields.some((field) => field.key === "allocated_units")) {
     if (unitAllocation.project && !fields.some((field) => field.key === "allocated_project")) {

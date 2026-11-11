@@ -155,7 +155,7 @@ try {
         'Original config RPC remains private');`);
     process.stdout.write("Related branch officers: canonical KEU10 wrapper preserved; private configuration guard updated.\n");
   }
-  if (process.argv.includes("--additional-signers") || process.argv.includes("--configured-signer-removal")) {
+  if (process.argv.includes("--additional-signers") || process.argv.includes("--configured-signer-removal") || process.argv.includes("--hrd-ga-review")) {
     run(psqlArgs, `alter table public.surat_recommendation_tasks add column if not exists required_before_step integer;
       alter table public.surat_linked_documents add column if not exists required_before_step integer;`);
     const migration = read(migrationRoot + "20261026030000_requester_additional_signers.sql");
@@ -182,6 +182,11 @@ try {
       throw new Error(`Additional signer submission concurrency failed: ${JSON.stringify(submitted)}`);
     }
     process.stdout.write("Additional signer concurrency: one new registration, one idempotent retry.\n");
+    if (process.argv.includes("--hrd-ga-review")) {
+      const routing = read(migrationRoot + "20261111150000_hrd_ga_review_assignment.sql");
+      run(psqlArgs, routing + routing);
+      process.stdout.write(run(psqlArgs, read("supabase/tests/hrd_ga_review.integration.sql")));
+    }
     if (process.argv.includes("--configured-signer-removal")) {
       const removal = process.argv.includes("--removal-baseline") ? "" : read(migrationRoot + "20261111110000_requester_configured_signer_removal.sql");
       run(psqlArgs, removal + removal);

@@ -1,5 +1,30 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-48 Implementation / Mixed Requests Confirmed
+
+- User confirms mixed GA and HRD needs must be two submissions, including Kas
+  Kecil. New HRD manager routes classify each item, with bulk category selection;
+  GA -> Usman Huda; HRD -> Tri Sulistyanto. No title/free-text inference.
+- Server freezes the single authoritative examiner from active configured staff;
+  rejects missing/mixed categories and forged assignment snapshots. Revision
+  additions retain the original category; old documents retain their old team.
+- Examiner completion has no mandatory checklist/input/file; revision/return
+  stays available. Manager approval still waits for examiner completion.
+- New private migration 20261111150000 installs controls without activating
+  configuration. Activation is operator-only AFTER the new app is live, expected
+  staging12 (seven normal plus five UJI usages), production7; no document backfill.
+- Focused UI tests387/387 (58 files), lint, tsc and build pass. One asynchronous
+  KEU10 UI assertion was transient under simultaneous build load; isolated17/17
+  and full impacted rerun387/387 passed without changing assertions.
+- Disposable PostgreSQL actual registration/verification/approval/revision RPCs
+  pass: exact routing, split enforcement, wrong actor denial, manager gate,
+  completion without input, attributed return reason, immutable snapshots,
+  revision additions, inactive examiner denial and legacy snapshot preservation.
+  Migration applied twice. Existing additional-signer concurrency also passes.
+- Actual panel Playwright desktop1440/mobile390 light/dark: category bulk-select
+  and names render, no horizontal overflow; synthetic local fixture only.
+- Status: local/source complete, release/preflight in progress; NOT yet live.
+
 ## 2026-11-11 [Codex] SUR-48 Audit Count Correction
 
 - Corrects the manually counted eight in the prior SUR48 entry: a dedicated

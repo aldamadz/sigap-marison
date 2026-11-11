@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-11 [Codex] SUR-48 Implemented / Awaiting Runtime Release
+
+User confirms mixed requests must be split. Per-item GA/HRD categories, bulk
+selection, authoritative single-examiner snapshot, no mandatory checker input,
+unchanged manager approval, and old-route preservation implemented. Private
+migration20261111150000 is inactive until post-app configuration activation.
+Expected staging12 including UJI fixtures, production7; no business backfill.
+Impacted387 tests, actual PostgreSQL RPC assertions, lint/tsc/build and responsive
+panel QA pass. Staging then selective production release remains in progress.
+
 ### 2026-11-11 [Codex] SUR-48 Audit Correction
 
 Dedicated read-only aggregate confirms seven affected active HRD stages/usages,

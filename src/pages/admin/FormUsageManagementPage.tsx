@@ -730,6 +730,11 @@ export default function FormUsageManagementPage() {
       if (step.action_type === "configured_input" && normalizeCheckerInputSchema(step.input_schema).fields.length === 0) {
         missing.push("schema input pemeriksa");
       }
+      const routing = normalizeCheckerInputSchema(step.input_schema).hrd_ga_review;
+      if (routing && (step.action_type !== "approval" || !step.verifier_team_enabled
+        || !Object.values(routing.reviewers).every(reviewer => step.verifier_user_ids.includes(reviewer.user_id)))) {
+        missing.push("tim kategori HRD & GA yang lengkap (tanpa input wajib)");
+      }
       if (missing.length > 0) return `Tahap ${step.step_order} belum memiliki ${missing.join(", ")}.`;
     }
     const attachmentKeys = new Set<string>();
@@ -1444,6 +1449,28 @@ export default function FormUsageManagementPage() {
                               <p className="text-xs text-muted-foreground">
                                 Terpilih {step.verifier_user_ids.length} operator pemeriksa.
                               </p>
+                              {(() => {
+                                const schema = normalizeCheckerInputSchema(step.input_schema);
+                                const routing = schema.hrd_ga_review;
+                                if (!routing) return null;
+                                return <div className="grid gap-3 sm:grid-cols-2">
+                                  {(["ga", "hrd"] as const).map(group => <div key={group} className="space-y-2">
+                                    <Label>{group === "ga" ? "ATK / rumah tangga" : "BPJS / tenaga harian / dinas"}</Label>
+                                    <Select value={routing.reviewers[group].user_id} onValueChange={id => {
+                                      const profile = getVerifierCandidates(step).find(candidate => candidate.id === id);
+                                      if (!profile) return;
+                                      updateStep(index, { input_schema: { ...schema, hrd_ga_review: {
+                                        ...routing, reviewers: { ...routing.reviewers, [group]: { user_id: profile.id, full_name: profile.full_name } },
+                                      } } });
+                                    }}>
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                      <SelectContent>{getVerifierCandidates(step).filter(profile => step.verifier_user_ids.includes(profile.id)
+                                        && profile.id !== routing.reviewers[group === "ga" ? "hrd" : "ga"].user_id)
+                                        .map(profile => <SelectItem key={profile.id} value={profile.id}>{profile.full_name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                  </div>)}
+                                </div>;
+                              })()}
                             </div>
                           );
                         })()}
