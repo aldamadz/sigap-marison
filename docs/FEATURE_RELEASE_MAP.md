@@ -1,5 +1,32 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-11 [Codex] SUR-48 Implemented / Awaiting Runtime Release
+
+User confirms mixed requests must be split. Per-item GA/HRD categories, bulk
+selection, authoritative single-examiner snapshot, no mandatory checker input,
+unchanged manager approval, and old-route preservation implemented. Private
+migration20261111150000 is inactive until post-app configuration activation.
+Expected staging12 including UJI fixtures, production7; no business backfill.
+Impacted387 tests, actual PostgreSQL RPC assertions, lint/tsc/build and responsive
+panel QA pass. Staging then selective production release remains in progress.
+
+### 2026-11-11 [Codex] SUR-48 Audit Correction
+
+Dedicated read-only aggregate confirms seven affected active HRD stages/usages,
+not the initial manually counted eight below; two currently have examiners.
+
+## SUR-48 HRD/GA Reviewer Routing (2026-11-11, [Codex], Issue #933)
+
+- Requested production behavior, not released: ATK/household -> Usman Huda;
+  BPJS/daily labor/business travel -> Tri Sulistyanto. Examiner completes checking
+  or requests revision, with no mandatory checklist/input/attachment; Manager HRD
+  & GA retains approval. User confirmed identity and completion behavior.
+- Eight existing active generic HRD stages identified read-only. Explicit category
+  choice and authoritative server routing proposed; mixed-purpose policy pending
+  user clarification. Do not guess from free text or mutate frozen old routes.
+- No executable/configuration/database changes or rollout yet. Validate on staging
+  before any authorized production configuration/application release.
+
 ## SUR-47 Approval Queue Continuation (2026-11-11, [Codex], Issue #928)
 
 - User authorizes staging then selective production. Successful approval/rejection/
