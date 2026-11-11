@@ -18,6 +18,7 @@ import { createKeu10PreviewData, isKeu10Document, renderKeu10Pdf } from "../../k
 import { resolveRecommendationSource } from "../../recommendation-pdf.mjs";
 import { normalizeRecommendationDocumentData, renderRecommendationPdf } from "../../recommendation-native-pdf.mjs";
 import { buildProductionCode } from "../../production-code.mjs";
+import { verifiedUnitTitle, verifiedUnitDescription } from "./lib/unit-submission-presentation.js";
 import {
   assertRequestSize,
   buildDocumentFilename,
@@ -3469,6 +3470,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
   const referenceResult = await queryExternalDataSource(MARISON_UNITS_SOURCE_KEY, { project_id: projectId });
   const references = new Map(referenceResult.options.map(option => [externalIdFrom(option), option]));
   const verifiedReferences = [];
+  const effectiveTitle = verifiedUnitTitle(surat?.judul_surat, approvedInput.allocated_units.length);
   const units = approvedInput.allocated_units.map((unit, index) => {
     const record = asPlainRecord(unit);
     const raw = getExternalRaw(record);
@@ -3504,7 +3506,7 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
       // planning_notes bersifat opsional pada OpenAPI vendor; diisi sebagai
       // keterangan perencanaan unit bila tersedia di sumber data. Keterangan
       // pengajuan yang wajib adalah field top-level `description`.
-      planning_notes: firstString(detail.planning_notes, detail.catatan, input.catatan, surat?.judul_surat),
+      planning_notes: firstString(detail.planning_notes, detail.catatan, approvedInput.catatan, effectiveTitle),
     };
   });
   if (units.length === 0) {
@@ -3520,10 +3522,9 @@ const buildMarisonUnitPayload = async (surat, input, actorId, overrides = {}) =>
     submission_number: surat.no_surat,
     project_id: projectId,
     branch_id: branchId,
-    // Vendor mewajibkan "Keterangan pengajuan" (description) — dipakai vendor
-    // untuk penamaan dokumen SPK dan BAP. Form tidak selalu menangkap catatan,
-    // jadi judul surat dipakai sebagai keterangan akhir.
-    description: firstString(input.catatan, asPlainRecord(surat?.data_snapshot)?.catatan, surat?.judul_surat),
+    // The vendor names SPK/BAP from this field; use verified quantity, not the request title.
+    description: verifiedUnitDescription(surat?.judul_surat, units.length, approvedInput.requested_unit_count,
+      firstString(approvedInput.catatan, asPlainRecord(surat?.data_snapshot)?.catatan), approvedInput.allocated_review),
      submitted_by: overrides.nik,
     submitted_at: new Date(surat.created_at || Date.now()).toISOString(),
     units,

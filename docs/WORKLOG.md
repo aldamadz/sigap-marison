@@ -1,5 +1,46 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-45 Staging Verified / Issue #918
+
+- Supersedes pending status below. Source422ac13, PR919 merged stagingc2835f820c710f6a6c34b8ac793fd91a8f2b45cf.
+  Exact-source hosted CI42943186709 and acknowledged staging deploy42943652649
+  SUCCESS.25 direct assertions,165 related tests/18files, lint/typecheck/build and
+  audit high gate pass. Existing moderate dependency findings were not upgraded.
+- PostgreSQL baseline fails on stale30-unit title, corrected staging and production
+  schema shapes pass idempotent migration, official verification,30/3/27 evidence,
+  immutable earlier signature/PDF reference, owner/ACL and forged-review rejection.
+  Reopened corrections retain valid3-unit title; invalidated allocation returns30.
+- Audited stage ledger264 against prior verified lineage. New migration090000
+  applied as ledger265, normalized SHA256
+  492d943c10baf9803b3f053ec8756dbf2fc9d99881885f7da81c191dfe7630c7.
+  Rehearsal/application preserve all12 business-table fingerprints and getter
+  owner/ACL. One actual stage allocation passed normalization in ROLLBACK before
+  and after migration and after rollout. No persistent test business rows/edits.
+- Public staging SHA/live/ready/root200; healthy app57a8d83f6ce4. Installed compiled
+  formatter returns verified3/requested30/remaining27 and both labelled notes.
+  Four non-app container IDs unchanged; outbound builds via BFF, no worker rollout.
+- Old unacknowledged auto run42943599893 canceled before deployment in favor of
+  explicit migration-acknowledged workflow; no guard bypass. No browser E2E claim.
+- Production remainscf68ef3172, unchanged; promotion not requested. No historical
+  backfill, stored payload/PDF rewrite, business approval or vendor POST. Existing
+  production051 remains unchanged; Generate Payload Terbaru will use new description
+  only after this feature is separately promoted. Feature branch retained for release.
+
+## 2026-11-11 [Codex] SUR-45 Verified Unit Title and Description / Issue #918
+
+- Active main-based fix/unit-verified-title-20261111, target staging only. User
+  requests active SPK Unit title and external description follow verified units,
+  e.g.30 requested,3ready,27remaining. No production or vendor POST authorized.
+- Canonical verification history triggers a title-only update. Original requested
+  count, review evidence, number, earlier signatures and stored archives remain.
+  No historical backfill or rewrite of frozen dispatch payloads/PDFs.
+- Outbound description uses service-only verified allocation, leads with ready
+  quantity, and preserves labelled request counts/requester/examiner notes. Getter
+  replaces any row-supplied review marker with immutable server-owned evidence.
+- New forward migration20261111090000, private trigger/helpers, existing getter
+  owner/ACL preserved. Changed tests, PostgreSQL rehearsal and staging rollout
+  pending. PROJECT_CONTEXT absent; dirty root/other worktrees unchanged.
+
 ## 2026-11-10 [Codex] OPS-19 CT104 Image Retention / Issue #912
 
 - User explicitly authorizes persistent production retention, but requires actual
