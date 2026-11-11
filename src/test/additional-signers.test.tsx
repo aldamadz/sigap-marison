@@ -3,7 +3,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SignerPlanEditor } from "@/components/surat/SignerPlanEditor";
 import type { SignerAssignment } from "@/components/surat/form/surat-form-types";
-import { addSigner, mergeAdditionalSigners, moveSigner, removeAdditionalSigner } from "@/features/surat/registration/lib/additional-signers";
+import { addSigner, clearExcludedSignerSteps, excludedSignerSteps, mergeAdditionalSigners, moveSigner, protectedSignerSteps, removeAdditionalSigner, removeSigner, signerPlanIssue } from "@/features/surat/registration/lib/additional-signers";
+import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 
 const base: SignerAssignment[] = [
   { step_order: 1, role_name: "membuat", label_jabatan: "Pemohon", user_id: "requester", form_usage_step_id: "maker" },
@@ -43,31 +44,58 @@ describe("additional signer plan", () => {
     expect(mergeAdditionalSigners(base, base)).toEqual(base);
     expect(mergeAdditionalSigners(base, [...base, { ...base[0], is_additional: true, client_id: uuid }])).toEqual(base);
   });
+  it("keeps configured omissions on refresh, add and move, but restores new configuration steps", () => {
+    const reduced = removeSigner(base, 1);
+    expect(reduced.map(s => s.form_usage_step_id)).toEqual(["maker", "approver"]);
+    expect(excludedSignerSteps(reduced)).toEqual(["checker"]);
+    const restored = mergeAdditionalSigners(base, JSON.parse(JSON.stringify(reduced)));
+    expect(restored).toEqual(reduced);
+    const extra = addSigner(restored, "membuat", uuid);
+    expect(excludedSignerSteps(moveSigner(extra, 1, -1))).toEqual(["checker"]);
+    expect(mergeAdditionalSigners([...base, { ...base[2], form_usage_step_id: "new-step" }], reduced)).toHaveLength(3);
+    expect(mergeAdditionalSigners(base, clearExcludedSignerSteps(reduced))).toEqual(base);
+  });
+  it("protects the two-person and maker/reviewer minimum", () => {
+    expect(removeSigner(base, 0)).toBe(base);
+    const reduced = removeSigner(base, 1);
+    expect(removeSigner(reduced, 1)).toBe(reduced);
+    expect(signerPlanIssue(reduced)).toBeNull();
+    expect(signerPlanIssue(reduced.map(s => ({ ...s, user_id: "same" })))).toMatch(/dua akun berbeda/);
+  });
+  it("locks functional steps and KEU10 maker/final approval", () => {
+    expect(protectedSignerSteps(base,true)).toEqual(["maker","approver"]);
+    expect(protectedSignerSteps([{...base[1],requires_unit_allocation:true}])).toEqual(["checker"]);
+    expect(protectedSignerSteps([{...base[1],verifier_user_ids:["examiner"]}])).toEqual(["checker"]);
+    expect(protectedSignerSteps(base,false,2)).toEqual(["checker"]);
+  });
 });
 
 describe("grouped signer editor", () => {
-  it("groups roles, protects mandatory rows and supports add, move and remove", () => {
+  it("groups roles and supports add, move and confirmed removal", async () => {
     function Harness() {
       const [signers, setSigners] = useState(base);
       return <SignerPlanEditor signers={signers} onChange={setSigners} editingEnabled>
         {signer => <span>{signer.user_id || "Belum dipilih"}</span>}
       </SignerPlanEditor>;
     }
-    render(<Harness />);
-    expect(screen.getAllByText("Wajib")).toHaveLength(3);
-    expect(screen.queryByRole("button", { name: /Hapus penandatangan/ })).toBeNull();
+    render(<AppDialogProvider><Harness /></AppDialogProvider>);
+    expect(screen.getAllByText("Bawaan kegunaan")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Hapus penandatangan tahap 1" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Tambah penandatangan memeriksa" }));
     const group = screen.getByRole("region", { name: "Penandatangan memeriksa" });
     expect(within(group).getByText("Tambahan")).toBeVisible();
     fireEvent.click(within(group).getByRole("button", { name: "Pindahkan ke atas tahap 3" }));
-    expect(within(group).getByRole("button", { name: "Hapus penandatangan tambahan tahap 2" })).toBeVisible();
-    fireEvent.click(within(group).getByRole("button", { name: "Hapus penandatangan tambahan tahap 2" }));
+    expect(within(group).getByRole("button", { name: "Hapus penandatangan tahap 2" })).toBeVisible();
+    fireEvent.click(within(group).getByRole("button", { name: "Hapus penandatangan tahap 2" }));
+    const confirm = await screen.findByRole("alertdialog");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Hapus penandatangan" }));
+    await screen.findByText("Manager");
     expect(within(group).queryByText("Tambahan")).toBeNull();
   });
   it("freezes additions and ordering on an existing revision", () => {
-    render(<SignerPlanEditor signers={addSigner(base, "membuat", uuid)} onChange={() => {}} editingEnabled={false}>
+    render(<AppDialogProvider><SignerPlanEditor signers={addSigner(base, "membuat", uuid)} onChange={() => {}} editingEnabled={false}>
       {signer => <span>{signer.user_id}</span>}
-    </SignerPlanEditor>);
+    </SignerPlanEditor></AppDialogProvider>);
     expect(screen.queryByRole("button")).toBeNull();
   });
 });

@@ -1,21 +1,32 @@
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SignerAssignment } from "@/components/surat/form/surat-form-types";
 import {
-  addSigner, canMoveSigner, MAX_SUBMISSION_SIGNERS, moveSigner, removeAdditionalSigner,
+  addSigner, canMoveSigner, excludedSignerSteps, MAX_SUBMISSION_SIGNERS, moveSigner, removeSigner, signerRemovalIssue,
   SIGNER_GROUPS, signerGroup,
 } from "@/features/surat/registration/lib/additional-signers";
+import { useAppDialog } from "@/components/app/AppDialogProvider";
 
 type Props = {
   signers: SignerAssignment[];
   onChange: (signers: SignerAssignment[]) => void;
   editingEnabled: boolean;
+  onRestore?: () => void;
+  protectedStepIds?: string[];
   children: (signer: SignerAssignment, index: number) => ReactNode;
 };
 
-export function SignerPlanEditor({ signers, onChange, editingEnabled, children }: Props) {
+export function SignerPlanEditor({ signers, onChange, editingEnabled, onRestore, protectedStepIds = [], children }: Props) {
+  const dialog = useAppDialog();
+  const remove = async (index: number) => {
+    if (!(await dialog.confirm({ title: "Hapus penandatangan?", description: `${signers[index].label_jabatan} tidak akan mengikuti persetujuan pengajuan ini.`, confirmText: "Hapus penandatangan" }))) return;
+    onChange(removeSigner(signers, index));
+  };
   return <div className="mx-auto max-w-3xl space-y-6">
+    {editingEnabled && onRestore && excludedSignerSteps(signers).length > 0 && <div className="flex justify-end">
+      <Button type="button" variant="outline" size="sm" onClick={onRestore}><RotateCcw className="mr-1 h-4 w-4" />Pulihkan penandatangan bawaan</Button>
+    </div>}
     {SIGNER_GROUPS.map(group => <section key={group} aria-label={`Penandatangan ${group}`} className="space-y-3">
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-2 border-b pb-2">
         <h3 className="text-sm font-semibold capitalize">{group}</h3>
@@ -36,7 +47,7 @@ export function SignerPlanEditor({ signers, onChange, editingEnabled, children }
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-semibold text-primary">{signer.label_jabatan}</span>
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              {signer.is_additional === true ? "Tambahan" : <><LockKeyhole className="h-3 w-3" />{signer.role_name === "verifikator" ? "Verifikator wajib" : "Wajib"}</>}
+              {signer.is_additional === true ? "Tambahan" : "Bawaan kegunaan"}
             </span>
           </div>
           {children(signer, index)}
@@ -48,10 +59,12 @@ export function SignerPlanEditor({ signers, onChange, editingEnabled, children }
               onClick={() => onChange(moveSigner(signers, index, direction))}>
               {direction === -1 ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
             </Button>)}
-            {signer.is_additional === true && <Button type="button" variant="ghost" size="icon"
-              className="h-8 w-8 text-destructive" title="Hapus penandatangan tambahan"
-              aria-label={`Hapus penandatangan tambahan tahap ${signer.step_order}`}
-              onClick={() => onChange(removeAdditionalSigner(signers, index))}><Trash2 className="h-4 w-4" /></Button>}
+            <Button type="button" variant="ghost" size="icon"
+              disabled={Boolean(signerRemovalIssue(signers, index)) || protectedStepIds.includes(signer.form_usage_step_id || "")}
+              className="h-8 w-8 text-destructive" title={protectedStepIds.includes(signer.form_usage_step_id || "")
+                ? "Langkah pemeriksaan khusus tetap diperlukan." : signerRemovalIssue(signers, index) || "Hapus penandatangan"}
+              aria-label={`Hapus penandatangan tahap ${signer.step_order}`}
+              onClick={() => void remove(index)}><Trash2 className="h-4 w-4" /></Button>
           </div>}
         </div>
       </div>)}
