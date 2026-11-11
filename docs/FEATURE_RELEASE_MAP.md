@@ -1,5 +1,10 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-11 [Codex] SUR-48 Audit Correction
+
+Dedicated read-only aggregate confirms seven affected active HRD stages/usages,
+not the initial manually counted eight below; two currently have examiners.
+
 ## SUR-48 HRD/GA Reviewer Routing (2026-11-11, [Codex], Issue #933)
 
 - Requested production behavior, not released: ATK/household -> Usman Huda;

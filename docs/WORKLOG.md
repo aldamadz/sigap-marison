@@ -1,5 +1,12 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-48 Audit Count Correction
+
+- Corrects the manually counted eight in the prior SUR48 entry: a dedicated
+  read-only aggregate confirms seven active HRD manager steps in seven usages,
+  of which two currently have configured examiners. The underlying row list and
+  named-account findings are unchanged; no production write was performed.
+
 ## 2026-11-11 [Codex] SUR-48 HRD/GA Reviewer Routing / Issue #933
 
 - Active feature/hrd-ga-reviewer-routing-20261111 from productione93da2e. User
