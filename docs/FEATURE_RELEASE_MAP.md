@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## SUR-45/SUR-46 Released (2026-11-11, [Codex])
+
+- Supersedes pending/staging-only notes below. Both selective features are live
+  production1ff7ae1fcd9cacef692c4a03c6fc5c8cd953da26 after staging610cdaa0968feb0e6af7e3ce2794e0f4d0cfb272.
+  SUR45 runtime4c978c3 was verified first. Migrations090000/110000 applied with
+  preservation and private ACL proof; no historical data/PDF/payload backfill.
+- Ordinary configured signers can be removed with confirmation, persisted draft
+  exclusions and restore defaults. Reduced routes retain maker plus reviewer/
+  approver from two different accounts; Unit/recommendation/verification/mandatory
+  attachment and KEU10 BM/Finance/final-director controls remain protected.
+- Coordinated app/PDF rollouts passed public health and synthetic native rendering;
+  old routes/archives and all other services unchanged. New verified Unit titles
+  and future outbound descriptions use ready count while retaining request/review
+  evidence. No vendor POST/resend. See dated worklog for CI and rollout proof.
+
 ## SUR-46 Configured Signer Removal (2026-11-11, [Codex], Issue #921)
 
 - Explicitly authorized staging then selective production: requester may remove

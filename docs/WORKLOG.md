@@ -1,5 +1,56 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-46 Final Post-release Checks
+
+- Repeated public smoke confirms staging610cdaa and production1ff7ae1: all four
+  version/live/ready/root endpoints200. Production app/PDF health and synthetic
+  rendering passed; no remaining rollout or migration blocker.
+- OPS19 canonical success hooks recorded both app and PDF release under the shared
+  lock after trusted PDF health/render checks. Temporary service-check configuration
+  was restored byte-for-byte before app success/cleanup; approval was not changed.
+- Reference-audited retention removed one unreferenced older image d86643dd1702,
+  preserved active plus three unique verified rollback IDs and all container/file
+  references. Disk free increased635232256 bytes; unused build cache older168h
+  reclaimed0B. No volume, database, file, secret or application config deletion.
+- Proof-only documentation PR927 remains separate from live executable releases;
+  feature source is fully released. No additional application rollout is needed
+  solely to activate these already-verified features.
+
+## 2026-11-11 [Codex] SUR-45/SUR-46 Production Verified / Issues #918/#921
+
+- Supersedes pending/environment restrictions in earlier entries: user explicitly
+  authorized both selective releases. SUR45 PR922 deployed production4c978c3 via
+  migration-acknowledged workflow42948394473 SUCCESS; original auto run without
+  acknowledgement failed closed. Existing production051 was not backfilled.
+- SUR46 source19868c1, PR924 stagingde823632, selective PR925 main1ff7ae1fcd9cacef692c4a03c6fc5c8cd953da26,
+  ancestry PR926 staging610cdaa0968feb0e6af7e3ce2794e0f4d0cfb272. Staging runtime
+  contained main before production cutover; app-only staging sync42952257250 passed.
+- Coordinated app/PDF staging and production rollout passed public version/live/
+  ready/root200, container health and in-worker synthetic PGD2/KEU10 reduced3 PDF
+  rendering. Paused PDF claiming and confirmed zero active leases before replacing
+  each PDF worker. Other service container IDs and runtime environment preserved.
+  Production app/PDF image456ac7c76813af2f505be9736a04890586d7f9e4a41fbde7bc0fe06243115b57.
+- New migration110000 normalized SHA256c9a5f2fdace3fb24a152ae923a4c5b29bb1488aa351d0b6f308e0f53cea8e6dc
+  rehearsed twice and applied staging ledger265->266, production262->263. Twelve
+  business-table fingerprints and canonical RPC owners/ACLs unchanged. No replay,
+  repair, existing signer-plan edit, historical PDF rewrite or vendor POST/resend.
+- Source CI42951091936 passed; staged merge CI42951510071 passed309 affected
+  assertions. Production CI42952211279 attempt1 had one transient one-second UI
+  lookup failure in existing KEU10 requester revision test; isolated17/17 passed
+  twice and full affected gate attempt2 passed302/302 plus PostgreSQL/PDF gates.
+  No assertion was removed/relaxed. Lint/typecheck/build/audit-high passed; existing
+  eighteen moderate dependency findings remain, no dependency changes here.
+- Ten native PDF fixtures passed local byte/Poppler text checks and reduced layout
+  visual inspection. Actual editor desktop/mobile light/dark tested confirmation,
+  reduced minimum, refresh persistence and default restoration in isolated fixture;
+  no claim of production business browser submission or approval acceptance.
+- App-only automatic runs42951510009 and42952715609 deliberately cancelled in
+  favor of coordinated operator rollout; no worker guard bypass. Production shared
+  deployment/retention flock held. Private operator proofs retained on the hosts.
+- Durable rule: removal applies only before submission. Server derives exclusions
+  from configured steps; caller metadata cannot authorize removing functional
+  prerequisites. Frozen historical routes stay immutable. Feature branches retained.
+
 ## 2026-11-11 [Codex] SUR-46 Configured Signer Removal / Issue #921
 
 - Active fix/requester-remove-configured-signers-20261111, based on main. User
