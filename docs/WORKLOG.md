@@ -1,5 +1,27 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-48 HRD/GA Reviewer Routing / Issue #933
+
+- Active feature/hrd-ga-reviewer-routing-20261111 from productione93da2e. User
+  requests HRD/GA examiner routing in production: ATK/household to Usman Huda;
+  BPJS/daily labor/business travel to Tri Sulistyanto. Both identities confirmed
+  by the user and read-only production lookup: active HRD & GA staff profiles.
+- User confirms Complete examination remains; no mandatory checklist/input/file.
+  Manager HRD & GA remains the approving signer. Revision/return-to-requester
+  controls must remain available. No production configuration has changed yet.
+- Read-only audit found eight active configured HRD manager stages across PGD
+  Asset/Fund and KEU1 HQ/branch usages. Only two Fund stages currently assign
+  Usman with fund_item_checklist; the other six have no configured examiner.
+- Current usages are generic, not ATK/BPJS/travel-specific. Proposed explicit
+  requester classification avoids guessing from item title/free text; server must
+  derive the single reviewer from authoritative configured candidates and freeze
+  the assignment. Existing signed/frozen routes are not implicitly reassigned.
+- Clarification pending: mixed-purpose requests (including Kas Kecil) may choose
+  one responsible examiner, or must be split. Do not invent this business rule.
+  No code/migration/business write, approval, external resend or deployment yet.
+- Prior SUR47 is live productione93da2e/staging3f6b948; proof-only PR932 remains
+  open. PROJECT_CONTEXT.md absent; existing root dirty checkout untouched.
+
 ## 2026-11-11 [Codex] SUR-47 Approval Queue Continuation / Issue #928
 
 - Active fix/approval-next-queue-20261111 from main1ff7ae1. User explicitly asks
