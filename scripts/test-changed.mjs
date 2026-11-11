@@ -153,8 +153,8 @@ for (const file of allChangedFiles) {
 if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
 
 for (const gate of gates) {
-  if (gate === 'configured-signer-removal-sql') {
-    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--configured-signer-removal']);
+  if (gate === 'actionable-dashboard-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
     continue;
   }
   if (gate === 'signer-action-sla-clock-sql') {
@@ -214,8 +214,8 @@ for (const gate of gates) {
     run('node', ['scripts/build-maintenance-edge.mjs']);
     continue;
   }
-  if (gate === 'actionable-dashboard-sql') {
-    run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
+  if (gate === 'configured-signer-removal-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--configured-signer-removal']);
     continue;
   }
   if (gate === 'recommendation-office-reservation-sql') {
