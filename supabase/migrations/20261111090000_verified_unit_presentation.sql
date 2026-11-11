@@ -44,12 +44,38 @@ begin
   where id=doc.id;
  return new;
 end $$;
+
+create or replace function unit_allocation_internal.normalize_active_title()
+returns trigger language plpgsql security definer set search_path='' as $$
+declare ready_count integer; requested_count numeric;
+begin
+ if lower(coalesce(new.form_input_data->>'request_mode',new.form_input_data->>'request_category',''))<>'unit' then return new;end if;
+ select h.allocated_count into ready_count from public.surat_unit_allocation_history h
+ join public.surat_signatures s on s.id=h.signature_id and s.surat_id=h.surat_id
+ where h.surat_id=new.id and h.signature_id::text=new.form_input_data->>'allocated_by_signature_id'
+  and s.verification_status='verified' and s.verified_by=h.actor_id and s.verified_at=h.verified_at
+  and unit_allocation_internal.has_valid_review(new.id,new.form_input_data)
+ order by h.created_at desc,h.id desc limit 1;
+ if ready_count is not null then
+  new.judul_surat:=unit_allocation_internal.title_for_count(new.judul_surat,ready_count);
+ elsif old.form_input_data ? 'allocated_units' and coalesce(new.form_input_data->>'requested_unit_count','') ~ '^[0-9]+$' then
+  requested_count:=(new.form_input_data->>'requested_unit_count')::numeric;
+  if requested_count between 1 and 2147483647 then
+   new.judul_surat:=unit_allocation_internal.title_for_count(new.judul_surat,requested_count::integer);
+  end if;
+ end if;
+ return new;
+end $$;
 revoke all on function unit_allocation_internal.title_for_count(text,integer),unit_allocation_internal.update_verified_title()
  from public,anon,authenticated,service_role;
+revoke all on function unit_allocation_internal.normalize_active_title() from public,anon,authenticated,service_role;
 grant execute on function unit_allocation_internal.title_for_count(text,integer) to postgres;
 drop trigger if exists unit_allocation_verified_title on public.surat_unit_allocation_history;
 create trigger unit_allocation_verified_title after insert on public.surat_unit_allocation_history
  for each row execute function unit_allocation_internal.update_verified_title();
+drop trigger if exists unit_allocation_normalize_active_title on public.surat_registrasi;
+create trigger unit_allocation_normalize_active_title before update of judul_surat,form_input_data on public.surat_registrasi
+ for each row execute function unit_allocation_internal.normalize_active_title();
 
 -- No backfill: old PDFs, frozen dispatches and completed document versions stay intact.
 notify pgrst,'reload schema';

@@ -54,5 +54,19 @@ do $$declare result jsonb:=public.get_verified_unit_allocation('61200000-0000-40
   raise exception 'Client metadata overrode examiner provenance';end if;
 end $$;
 reset role;
+update public.surat_registrasi set judul_surat='Pengajuan SPK Unit: 30 Unit Marison Sragen Dept. Marketing Kantor Pusat'
+ where id='61200000-0000-4000-8000-000000000091';
+do $$begin
+ if (select judul_surat from public.surat_registrasi where id='61200000-0000-4000-8000-000000000091')
+   not like 'Pengajuan SPK Unit: 3 Unit %' then raise exception 'Reopened title lost valid allocation';end if;
+end $$;
+set local role postgres;
+update public.surat_registrasi set form_input_data=form_input_data-'allocated_units'-'allocated_by_signature_id'
+ where id='61200000-0000-4000-8000-000000000091';
+reset role;
+do $$begin
+ if (select judul_surat from public.surat_registrasi where id='61200000-0000-4000-8000-000000000091')
+   not like 'Pengajuan SPK Unit: 30 Unit %' then raise exception 'Invalidated allocation still advertises ready units';end if;
+end $$;
 rollback;
 select 'Verified Unit presentation assertions passed';
