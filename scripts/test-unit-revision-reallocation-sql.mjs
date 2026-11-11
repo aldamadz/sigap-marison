@@ -5,7 +5,8 @@ const migration = readFileSync("supabase/migrations/20260811170000_unit_revision
 const statusMigration = readFileSync("supabase/migrations/20260811173000_keep_open_checker_revision_in_revision_status.sql", "utf8");
 const notificationMigration = readFileSync("supabase/migrations/20260811174500_notify_signed_users_on_checker_revision.sql", "utf8");
 const assertions = readFileSync("supabase/tests/unit_revision_reallocation.integration.sql", "utf8");
-const authority = process.argv.includes('--authority');
+const verifiedPresentation = process.argv.includes('--verified-presentation');
+const authority = process.argv.includes('--authority') || verifiedPresentation;
 const externalAddendum = process.argv.includes('--external-addendum') || authority;
 const partial = process.argv.includes('--partial') || externalAddendum;
 
@@ -156,6 +157,15 @@ try {
           registration+fix+fix+ownerGrant+ownerGrant+readFileSync('supabase/tests/unit_allocation_authority.integration.sql','utf8'),true);
         if(!proof.includes('Unit allocation authority assertions passed'))throw new Error('Missing Unit authority proof');
         console.log('Unit allocation authority assertions passed (real verification RPC, immutable history, initial injection and post-completion tampering).');
+        if (verifiedPresentation) {
+          const presentation = process.argv.includes('--presentation-baseline') ? '' :
+            readFileSync('supabase/migrations/20261111090000_verified_unit_presentation.sql', 'utf8');
+          const ownerBefore = 'create temporary table presentation_authority_before as select proowner,proacl from pg_proc where oid=\'public.get_verified_unit_allocation(uuid)\'::regprocedure;';
+          const result = run(['exec','-i',id,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+            ownerBefore + presentation + presentation + readFileSync('supabase/tests/verified_unit_presentation.integration.sql','utf8'), true);
+          if (!result.includes('Verified Unit presentation assertions passed')) throw new Error('Missing verified Unit presentation proof');
+          process.stdout.write(result);
+        }
       }
     }
   }

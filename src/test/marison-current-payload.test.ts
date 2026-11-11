@@ -8,6 +8,7 @@ import { buildMarisonDocumentBundle } from "../../backend/src/lib/marison-docume
 import { getExternalUnitReference, applyExternalUnitReference } from "@sigap/shared";
 import { isDeepStrictEqual } from "node:util";
 import { buildProductionCode } from "../../production-code.mjs";
+import { verifiedUnitTitle, verifiedUnitDescription } from "../../backend/src/lib/unit-submission-presentation";
 
 const origin = "https://sigap.test";
 const link = `${origin}/api/files/view/${"x".repeat(32)}/old.pdf`;
@@ -118,6 +119,7 @@ describe("canonical Unit builder", () => {
     const approved = { allocated_units: structuredClone([saved]) };
     const receipt = vi.fn((_project: number, refs: unknown[]) => refs);
     const context = {
+      verifiedUnitTitle, verifiedUnitDescription,
       isDeepStrictEqual, supabase: { rpc: vi.fn(async () => ({ data: approved, error: null })) },
       getMarisonRequestedProject: () => ({}), requireExternalInteger: (v: unknown) => Number(v), externalIdFrom: (v: any) => Number(v.value),
       queryExternalDataSource: async () => ({ options: [reference] }), MARISON_UNITS_SOURCE_KEY: 'units',
@@ -151,8 +153,10 @@ describe("canonical Unit builder", () => {
       struktur_atas: String(unit.addendum_atas_nominal), struktur_bawah: String(unit.addendum_bawah_nominal),
       production_serial: ["001", "002", "006"][index], production_block: "5.3", production_date: "2026-08-21",
     } }));
-    const context = { getMarisonRequestedProject: () => ({ id: 23 }), requireExternalInteger: (value: unknown) => Number(value),
-      isDeepStrictEqual, supabase: { rpc: async () => ({ data: { allocated_units: structuredClone(units) }, error: null }) },
+    const context = { verifiedUnitTitle, verifiedUnitDescription, getMarisonRequestedProject: () => ({ id: 23 }), requireExternalInteger: (value: unknown) => Number(value),
+      isDeepStrictEqual, supabase: { rpc: async () => ({ data: { allocated_units: structuredClone(units), requested_unit_count: 30,
+        catatan: "Bangun bertahap.",
+        allocated_review: { actor_name: "Pemeriksa Uji", note: "Hanya 3 unit siap bangun." } }, error: null }) },
       externalIdFrom: (value: any) => Number(value.value || value.id),
       queryExternalDataSource: async () => ({ options: units.map(unit => ({ value: unit.value, raw: { type: "30", has_submitted: true } })) }),
       MARISON_UNITS_SOURCE_KEY: "units", getMarisonAllocatedUnits: () => units, asPlainRecord: (v: unknown) => v || {},
@@ -164,10 +168,19 @@ describe("canonical Unit builder", () => {
       MARISON_OUTBOUND_CONTRACT_VERSION: "test", assertMarisonOutboundContract: (_kind: string, value: unknown) => value,
     };
     const runtime = vm.runInNewContext(money + builder + "\n({buildMarisonUnitPayload});", context);
-    const result = await runtime.buildMarisonUnitPayload({ no_surat: "051/UAI/MKT.1.SGN/X/2026", judul_surat: "SPK 30 Unit", created_at: "2026-10-19" }, {}, null,
+    const storedBefore = JSON.stringify(job);
+    const result = await runtime.buildMarisonUnitPayload({ no_surat: "051/UAI/MKT.1.SGN/X/2026", judul_surat: "SPK 30 Unit", created_at: "2026-10-19" },
+      { requested_unit_count: 30, allocated_unit_count: 99, catatan: "Caller note not verified" }, null,
       { projectId: 23, branchId: 1, nik: "TEST", approvals: [], existingFileLink: async () => link, requireUnsubmittedUnitReferences: false });
     expect(result.payload.units.map((u: any) => ({ unit_id: u.unit_id, addendum_atas_nominal: u.addendum_atas_nominal, addendum_bawah_nominal: u.addendum_bawah_nominal }))).toEqual(currentPayload.units);
     expect(result.payload.units[0].production_code).toBe("001/UAI/PRC/5.3/21/08/2026");
+    expect(result.payload.description).toContain("SPK 3 Unit");
+    expect(result.payload.description).toContain("Diajukan: 30 unit; siap bangun: 3 unit; belum dipenuhi: 27 unit.");
+    expect(result.payload.description).toContain("Catatan pemohon:\nBangun bertahap.");
+    expect(result.payload.description).not.toContain("Caller note not verified");
+    expect(result.payload.description).toContain("Catatan pemeriksa (Pemeriksa Uji):\nHanya 3 unit siap bangun.");
+    expect(result.payload.units[0].planning_notes).toBe("Bangun bertahap.");
+    expect(JSON.stringify(job)).toBe(storedBefore);
     expect(job.payload.units[2].addendum_atas_nominal).toBe(0);
   });
 });

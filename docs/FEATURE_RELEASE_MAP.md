@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## SUR-45 Verified Unit Presentation (2026-11-11, [Codex], Issue #918)
+
+- Target staging only: active title and future Unit outbound description follow
+  verified allocated count, not original requested count. Only registered review
+  evidence can update the title; no caller-supplied examiner marker is trusted.
+- Preserve requested quantity, outstanding balance, examiner name/note, original
+  number, earlier signature archives and frozen outbound history. No vendor POST,
+  historical data/PDF backfill or production change authorized.
+- Migration20261111090000 must precede app rollout; existing private verification
+  and external-addendum authorization remain authoritative. Regressions and staged
+  runtime acceptance pending. Rollback is forward-only; do not delete review history.
+
 ## OPS-19 CT104 Image Retention (2026-11-10, [Codex], Issue #912)
 
 - User explicitly requests production policy: post-success active plus three unique
