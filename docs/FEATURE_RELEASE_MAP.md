@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## SUR-47 Released (2026-11-11, [Codex], Issue #928)
+
+- Supersedes pending notes below. Productione93da2e and staging3f6b948 verified
+  through public SHA/health and actual Inbox bundle smoke; selective PR930 and
+  ancestry PR931. Production workflow42988954454 attempt2 SUCCESS.
+- After successful approve/reject/verify, retire the completed task URL and select
+  the next pending typed task, or clear the finished link for an empty queue.
+  Cover realtime-before-response, manual selection and unmount races; genuine
+  stale/unauthorized links retain their warning.47 affected tests and quality pass.
+- App-only, no DB/worker/PDF/business/outbound changes. Initial deploy permission
+  blocker resolved by restoring intended retention metadata without policy or
+  approval content changes. See dated worklog for full proof and acceptance limits.
+
 ## SUR-47 Approval Queue Continuation (2026-11-11, [Codex], Issue #928)
 
 - User authorizes staging then selective production. Successful approval/rejection/

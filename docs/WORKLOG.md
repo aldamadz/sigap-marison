@@ -1,5 +1,37 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-47 Released / Issue #928
+
+- Supersedes pending SUR47 notes below. Source5ca3b30, staging PR929/runtime3a31131,
+  selective production PR930/maine93da2e9bd9270b1f314cc578c592d64637c6c0e,
+  ancestry PR931/staging3f6b948e9e0ef97daac2cadae6eaff14abe8d26f. Merge-tree proof
+  showed ancestry sync changed no staged file content. Live staging contained
+  the production target before cutover; no whole-staging promotion.
+- Source CI42987589758/42987591733 and production commit CI42988525467 passed;
+  47 affected UI tests/two files, lint/typecheck/build/diff/audit-high pass.
+  Red baselines cover the original five failures plus late unmount and realtime
+  completion races. Eighteen existing moderate dependency advisories unchanged.
+- Staging deployments42987883039 and42988593102 SUCCESS. Production deployment
+  42988954454 attempt2 SUCCESS with exact preflight-bound SHA. Repeated public
+  version/live/ready/root200 and served Inbox bundle checks passed both domains;
+  processing state installed and genuine unavailable-task guard retained.
+- Production appdd53f5bc826c healthy/restart0/not OOM; six non-app container IDs
+  unchanged, including PDF8f4cd7d9baad. No schema, worker/PDF rollout, authorization
+  relaxation, historical correction, real approval/rejection or vendor resend.
+  UI acceptance is isolated integration fixtures, not a production approval claim.
+- Deploy attempt1 stopped before build/runtime change: prior root operator atomic
+  writes left retention files root0600. Under the shared lock restored intended
+  bootstrap metadata only: policy root:sigap-runner0640; state/rollback/pending-plan
+  sigap-runner0600. Content/approval hashes unchanged, runner access verified and
+  policy still not runner-writable. Private coordinated operator now preserves
+  file owner/group/mode on atomic writes; syntax checked, not re-executed.
+- Canonical runner post-success retention completed: no image deletion or skipped
+  candidates; unused cache older168h reclaimed0B. No secrets/config values changed.
+  Obsolete prior-target workflow42988443541 was deliberately canceled before deploy.
+- Durable lesson: test URL selection together with local queue removal, including
+  server realtime overtaking the action response and unmount while pending. A
+  genuine stale notification link must not silently select an unrelated document.
+
 ## 2026-11-11 [Codex] SUR-47 Approval Queue Continuation / Issue #928
 
 - Active fix/approval-next-queue-20261111 from main1ff7ae1. User explicitly asks
