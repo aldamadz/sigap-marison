@@ -18,6 +18,14 @@
   Lint/typecheck/frontend build/diff check pass; hosted CI and release pending.
 - No schema, worker, PDF, authorization or business-data changes. Production smoke
   will not approve/reject/verify a real submission or send any outbound request.
+- Additional regression reproduced late completion navigating back after leaving
+  Inbox. Clear the selected-item ref on unmount; completion can still invalidate
+  finished data but cannot redirect a page the user already left.
+- Follow-up realtime race reproduced: the server queue can remove the task before
+  its approval response arrives. Track the latest task URL and pending rows until
+  unmount; local success still advances even when detail is already unavailable.
+  While its own action is pending, show processing rather than an unavailable
+  error. Corrected47 affected tests pass; lint/typecheck/build/diff rechecked.
 
 ## 2026-11-11 [Codex] SUR-46 Configured Signer Removal / Issue #921
 

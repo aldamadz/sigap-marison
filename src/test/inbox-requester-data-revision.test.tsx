@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InboxPage from "@/pages/surat/InboxPage";
@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   reject: vi.fn(),
   verify: vi.fn(),
   confirm: vi.fn(),
+  realtimeFinish: null as ((key: string) => void) | null,
   detailError: false,
   kpi: [] as Record<string,unknown>[],
   noop: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock("@/features/surat/inbox/lib/use-inbox-pagination", async () => {
   const { useState } = await import("react");
   return { useInboxPagination: () => {
     const [finished, setFinished] = useState<string[]>([]);
+    mocks.realtimeFinish = key => setFinished(previous => [...previous, key]);
     const items = (mocks.queue || [mocks.compact || mocks.fixture]).filter(item => !finished.includes(`${item.task_type}:${item.id}`));
     return {
     items, total: items.length, remaining: 0, hasMore: false, loading: false, error: null, isFetching: false,
@@ -138,7 +140,13 @@ describe("Inbox requester data and attachment revision", () => {
   function QueueLocation() {
     const location = useLocation(), navigate = useNavigate();
     return <><output data-testid="queue-location">{location.search}</output>
-      <button onClick={() => navigate(`/surat/inbox?task=approval:${nextId}`)}>Pilih tugas berikutnya</button></>;
+      <output data-testid="queue-path">{location.pathname}</output>
+      <button onClick={() => navigate(`/surat/inbox?task=approval:${nextId}`)}>Pilih tugas berikutnya</button>
+      <button onClick={() => navigate('/dashboard')}>Keluar antrean</button></>;
+  }
+  function ActionQueueRoute() {
+    const location = useLocation();
+    return <>{location.pathname === '/surat/inbox' && <InboxPage/>}<QueueLocation/></>;
   }
   const mountActionQueue = (hasNext = true, legacy = false, verification = false, sameSignature = false) => {
     mocks.currentUser = { id: userId, full_name: 'Penandatangan Uji' };
@@ -152,7 +160,7 @@ describe("Inbox requester data and attachment revision", () => {
     mocks.queue = hasNext ? [mocks.fixture, next] : [mocks.fixture];
     mocks.details = { [currentId]: mocks.fixture, [next.id]: next };
     const key = legacy ? currentId : `${mocks.fixture.task_type}:${currentId}`;
-    render(<MemoryRouter initialEntries={[`/surat/inbox?task=${key}&document=old-document`]}><InboxPage/><QueueLocation/></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/surat/inbox?task=${key}&document=old-document`]}><ActionQueueRoute/></MemoryRouter>);
   };
   it.each([false, true])('advances the task URL after successful approval (legacy=%s)', async legacy => {
     mountActionQueue(true, legacy);
@@ -192,6 +200,31 @@ describe("Inbox requester data and attachment revision", () => {
     complete();
     await waitFor(() => expect(mocks.finishTask).toHaveBeenCalled());
     expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${nextId}`);
+  });
+  it('does not navigate after leaving the inbox during an approval request', async () => {
+    let complete!: () => void;
+    mocks.approve.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+    mountActionQueue();
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Keluar antrean' }));
+    complete();
+    await waitFor(() => expect(mocks.finishTask).toHaveBeenCalled());
+    expect(screen.getByTestId('queue-path')).toHaveTextContent('/dashboard');
+    expect(screen.getByTestId('queue-location')).toBeEmptyDOMElement();
+  });
+  it('advances when realtime removes the approved task before the approval response arrives', async () => {
+    let complete!: () => void;
+    mocks.approve.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+    mountActionQueue();
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalled());
+    act(() => { mocks.detailError = true; mocks.realtimeFinish!(`approval:${currentId}`); });
+    expect(screen.getByText('Memproses tindakan...')).toBeInTheDocument();
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+    complete();
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${nextId}`));
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
   });
   it('advances after successful rejection instead of treating its old task as unavailable', async () => {
     mountActionQueue();

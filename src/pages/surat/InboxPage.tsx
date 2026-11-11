@@ -178,6 +178,7 @@ export default function InboxPage() {
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
   const selectedItemRef = useRef<any>(null);
+  const queueNavigationRef = useRef<{ requestedTaskKey: string | null; items: any[] } | null>(null);
   const lastRealtimeToastRef = useRef<{ key: string; at: number } | null>(null);
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -274,6 +275,7 @@ export default function InboxPage() {
     null;
   const selectedTaskKey = getInboxTaskKey(selectedCompactItem);
   const selectedSignatureId = selectedCompactItem?.id || null;
+  const requestedTaskProcessing = Boolean(requestedId && processingId === requestedId);
 
   const { data: selectedDetail, isFetching: detailFetching } = useQuery({
     queryKey: ['surat-inbox-detail', selectedSignatureId],
@@ -321,7 +323,9 @@ export default function InboxPage() {
 
   useEffect(() => {
     selectedItemRef.current = selectedItem;
-  }, [selectedItem]);
+    queueNavigationRef.current = { requestedTaskKey, items: filteredInbox };
+    return () => { selectedItemRef.current = null; queueNavigationRef.current = null; };
+  }, [selectedItem, requestedTaskKey, filteredInbox]);
 
   useEffect(() => {
     if (!selectedItem || !isVerificationTask(selectedItem) || hydrationRef.current[selectedItem.id]) return;
@@ -650,10 +654,13 @@ export default function InboxPage() {
   const finishCompletedTask = (item: any) => {
     const taskKey = getInboxTaskKey(item);
     if (!taskKey) return;
-    const isSelected = getInboxTaskKey(selectedItemRef.current) === taskKey;
+    const navigation = queueNavigationRef.current;
+    const isSelected = navigation && (navigation.requestedTaskKey === taskKey
+      || navigation.requestedTaskKey === item.id
+      || (!navigation.requestedTaskKey && getInboxTaskKey(selectedItemRef.current) === taskKey));
     finishInboxTaskLocally(taskKey);
     if (!isSelected) return;
-    const nextTaskKey = filteredInbox.map(getInboxTaskKey).find(key => key && key !== taskKey);
+    const nextTaskKey = navigation.items.map(getInboxTaskKey).find(key => key && key !== taskKey);
     // Retire the successful task link together with its local queue row. Genuine
     // unavailable notification links must still retain their fail-closed warning.
     setSearchParams(previous => {
@@ -2784,8 +2791,8 @@ const handleApprove = async (item: any) => {
   return (
     <div className="sigap-page animate-in fade-in duration-300">
       {requestedTaskKey && !selectedCompactItem && <div role="status" className="space-y-2 border-y border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-        <p>{requestedTaskQuery.isFetching?'Memuat tugas yang dipilih...':'Tugas yang dipilih tidak tersedia untuk akun ini atau sudah berpindah tahap.'}</p>
-        {!requestedTaskQuery.isFetching && <div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>{void requestedTaskQuery.refetch();}}>Coba lagi</Button><Button asChild variant="outline" size="sm"><Link to={isNotificationUuid(searchParams.get('document'))?`/status-pengajuan?document=${searchParams.get('document')}`:'/status-pengajuan'}>Lihat status pengajuan</Link></Button></div>}
+        <p>{requestedTaskProcessing?'Memproses tindakan...':requestedTaskQuery.isFetching?'Memuat tugas yang dipilih...':'Tugas yang dipilih tidak tersedia untuk akun ini atau sudah berpindah tahap.'}</p>
+        {!requestedTaskProcessing && !requestedTaskQuery.isFetching && <div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>{void requestedTaskQuery.refetch();}}>Coba lagi</Button><Button asChild variant="outline" size="sm"><Link to={isNotificationUuid(searchParams.get('document'))?`/status-pengajuan?document=${searchParams.get('document')}`:'/status-pengajuan'}>Lihat status pengajuan</Link></Button></div>}
       </div>}
 
       <header className="sigap-panel sigap-panel-accent flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
