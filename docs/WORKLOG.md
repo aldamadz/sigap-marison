@@ -1,5 +1,21 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-46 Final Post-release Checks
+
+- Repeated public smoke confirms staging610cdaa and production1ff7ae1: all four
+  version/live/ready/root endpoints200. Production app/PDF health and synthetic
+  rendering passed; no remaining rollout or migration blocker.
+- OPS19 canonical success hooks recorded both app and PDF release under the shared
+  lock after trusted PDF health/render checks. Temporary service-check configuration
+  was restored byte-for-byte before app success/cleanup; approval was not changed.
+- Reference-audited retention removed one unreferenced older image d86643dd1702,
+  preserved active plus three unique verified rollback IDs and all container/file
+  references. Disk free increased635232256 bytes; unused build cache older168h
+  reclaimed0B. No volume, database, file, secret or application config deletion.
+- Proof-only documentation PR927 remains separate from live executable releases;
+  feature source is fully released. No additional application rollout is needed
+  solely to activate these already-verified features.
+
 ## 2026-11-11 [Codex] SUR-45/SUR-46 Production Verified / Issues #918/#921
 
 - Supersedes pending/environment restrictions in earlier entries: user explicitly
