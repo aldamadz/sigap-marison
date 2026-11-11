@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## SUR-46 Configured Signer Removal (2026-11-11, [Codex], Issue #921)
+
+- Explicitly authorized staging then selective production: requester may remove
+  ordinary configured signers, not just additions. Confirm, persist draft exclusions
+  across refresh, restore defaults; require maker plus reviewer/approver from two
+  different active accounts for reduced routes. Server freezes omitted step audit.
+- Preserve Unit allocation, required recommendation, verification/mandatory file
+  stages, KEU10 related BM, Finance verifier and amount-dependent final director.
+  Kept identities remain subject to canonical candidate and office validation.
+- Migration20261111110000 plus coordinated app/PDF release needed. Three-signer
+  reduced KEU10 PDF remains valid with maker/Finance/final approver. Frozen legacy
+  documents/routes and external payloads are unchanged. Gates/rollout pending.
+
 ## SUR-45 Verified Unit Presentation (2026-11-11, [Codex], Issue #918)
 
 ### Staging Verified

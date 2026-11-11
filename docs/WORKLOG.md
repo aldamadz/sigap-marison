@@ -1,5 +1,29 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-46 Configured Signer Removal / Issue #921
+
+- Active fix/requester-remove-configured-signers-20261111, based on main. User
+  explicitly permits removing configured ordinary signers; at least two different
+  accounts with maker and reviewer/approver remain. Special Unit/recommendation/
+  verification/mandatory attachment/KEU10 BM Finance and final director remain.
+- Confirm removal, persist excluded configured IDs in draft signer-array metadata,
+  reconcile without resurrection, restore configured route. Server derives omitted
+  steps from real usage configuration and freezes identity/labels/actor/time inside
+  immutable signer_plan; no caller marker confers permission. No submitted route edit.
+- Forward migration20261111110000 keeps canonical candidate/office/amount checks,
+  handles reduced KEU10 initialization privately, remaps effective revision targets,
+  preserves Finance/final amount controls and makes repeated submission idempotent.
+- Baseline real PostgreSQL rejects ordinary omitted signer; corrected migration
+  passes ordinary completion, KEU10 completion and revision crossing2M, private ACL,
+  two-person minimum, special-step rejection and prior addition/concurrency suites.
+- KEU10 native PDF supports explicitly frozen reduced three-signer route; ten
+  actual PDF fixtures pass byte/text checks and reduced layout visually inspected.
+  Coordinated app/PDF rollout required; do not bypass worker gate. No historical
+  backfill, vendor POST or existing document/signer rewrite. Staging gates pending.
+- User also authorized SUR45 production. Unit migration090000 applied/verified
+  production ledger262 with unchanged business fingerprints; selective PR922 main
+  4c978c3 and sync PR923 merged. Runtime production stillcf68ef3 pending rollout.
+
 ## 2026-11-11 [Codex] SUR-45 Staging Verified / Issue #918
 
 - Supersedes pending status below. Source422ac13, PR919 merged stagingc2835f820c710f6a6c34b8ac793fd91a8f2b45cf.

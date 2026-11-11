@@ -133,6 +133,7 @@ export const normalizeKeu10DocumentData = (source = {}, options = {}) => {
     signatures,
     hasAdditionalSigners: Array.isArray(source.policy_snapshot?.signer_plan)
       && source.policy_snapshot.signer_plan.some(signer => signer.is_additional === true),
+    hasReducedSigners: source.policy_snapshot?.signer_plan?.[0]?.route_version === 2,
   };
 };
 
@@ -187,12 +188,12 @@ const widthsFor = (ratios, padding = 6) => ratios.map((ratio) => (CONTENT_WIDTH 
 const cell = (value, alignment = "left", extra = {}) => ({ text: text(value), alignment, ...extra });
 const money = (value) => `Rp ${Number(value).toLocaleString("id-ID")}`;
 
-const buildSignatureBlock = (signatures, hasAdditionalSigners = false) => {
-  if (hasAdditionalSigners) {
+const buildSignatureBlock = (signatures, hasAdditionalSigners = false, hasReducedSigners = false) => {
+  if (hasAdditionalSigners || hasReducedSigners) {
     const ranks = { Membuat: 1, Memeriksa: 2, Verifikator: 2, Menyetujui: 3 };
-    if (!Array.isArray(signatures) || signatures.length < 4 || signatures.length > 8
+    if (!Array.isArray(signatures) || signatures.length < (hasReducedSigners ? 3 : 4) || signatures.length > 8
       || signatures.filter(signer => signer.role === "Verifikator").length !== 1
-      || !["Membuat", "Memeriksa", "Menyetujui"].every(role => signatures.some(signer => signer.role === role))
+      || !(hasReducedSigners ? ["Membuat", "Menyetujui"] : ["Membuat", "Memeriksa", "Menyetujui"]).every(role => signatures.some(signer => signer.role === role))
       || signatures.some((signer, index) => !ranks[signer.role]
         || (index > 0 && ranks[signer.role] < ranks[signatures[index - 1].role]))) {
       throw new Error("Susunan tanda tangan tambahan KEU 10 tidak valid.");
@@ -296,7 +297,7 @@ export const buildKeu10DocumentDefinition = (data, logoDataUrl = null) => {
             layout: borderLayout,
           },
           ...nativeDocumentRejectionBlock(data.isRejected),
-          { ...buildSignatureBlock(data.signatures, data.hasAdditionalSigners), margin: [82, 4, 0, 0] },
+          { ...buildSignatureBlock(data.signatures, data.hasAdditionalSigners, data.hasReducedSigners), margin: [82, 4, 0, 0] },
         ],
       },
       ...revisionAppendixBlock(data.revisionHistory,data.noSurat),
