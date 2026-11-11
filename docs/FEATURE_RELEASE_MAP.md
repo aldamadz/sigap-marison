@@ -2,6 +2,18 @@
 
 ## SUR-45 Verified Unit Presentation (2026-11-11, [Codex], Issue #918)
 
+### Staging Verified
+
+- Source422ac13/PR919, runtimec2835f820c with acknowledged deployment42943652649
+  SUCCESS; public health/version/live/ready/root verified. Migration090000 applied
+  ledger265 with unchanged business hashes and RPC owner/ACL. One real allocation
+  normalization probe passed entirely inside ROLLBACK; compiled app formatter passed.
+-25 direct and165 related assertions, PostgreSQL both schema shapes, lint/typecheck/
+  build/audit-high pass. Revisions retain ready count while valid, reset to requested
+  count when invalidated. Non-app workers unchanged. No historical rewrite/vendor POST.
+- Staging only; productioncf68ef3172 and existing051 remain unchanged. Production
+  promotion requires explicit authorization. Supersedes pending status below.
+
 - Target staging only: active title and future Unit outbound description follow
   verified allocated count, not original requested count. Only registered review
   evidence can update the title; no caller-supplied examiner marker is trusted.
