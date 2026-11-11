@@ -647,6 +647,24 @@ export default function InboxPage() {
     setSearchTerm(value);
   };
 
+  const finishCompletedTask = (item: any) => {
+    const taskKey = getInboxTaskKey(item);
+    if (!taskKey) return;
+    const isSelected = getInboxTaskKey(selectedItemRef.current) === taskKey;
+    finishInboxTaskLocally(taskKey);
+    if (!isSelected) return;
+    const nextTaskKey = filteredInbox.map(getInboxTaskKey).find(key => key && key !== taskKey);
+    // Retire the successful task link together with its local queue row. Genuine
+    // unavailable notification links must still retain their fail-closed warning.
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete("document");
+      if (nextTaskKey) next.set("task", nextTaskKey);
+      else next.delete("task");
+      return next;
+    }, { replace: true });
+  };
+
 // FUNGSI APPROVE
 const handleApprove = async (item: any) => {
   if (!currentUser?.full_name) {
@@ -793,8 +811,7 @@ const handleApprove = async (item: any) => {
       });
       return next;
     });
-    const taskKey = getInboxTaskKey(item);
-    if (taskKey) finishInboxTaskLocally(taskKey);
+    finishCompletedTask(item);
     refreshInboxAfterAction();
   } catch (error: any) {
     console.error("Approve Error:", error);
@@ -832,8 +849,7 @@ const handleApprove = async (item: any) => {
       toast.error("Dokumen Ditolak", {
         description: "Alur dokumen telah dihentikan secara permanen.",
       });
-      const taskKey = getInboxTaskKey(item);
-      if (taskKey) finishInboxTaskLocally(taskKey);
+      finishCompletedTask(item);
       refreshInboxAfterAction();
     } catch (error: any) {
       console.error("Reject Error:", error);
@@ -1005,8 +1021,7 @@ const handleApprove = async (item: any) => {
         delete next[item.id];
         return next;
       });
-      const taskKey = getInboxTaskKey(item);
-      if (taskKey) finishInboxTaskLocally(taskKey);
+      finishCompletedTask(item);
       refreshInboxAfterAction();
     } catch (error: any) {
       toast.error(error.message || "Gagal menyimpan pemeriksaan data.");

@@ -1,5 +1,24 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-47 Approval Queue Continuation / Issue #928
+
+- Active fix/approval-next-queue-20261111 from main1ff7ae1. User explicitly asks
+  staging then production release. SUR45/SUR46 production1ff7ae1 was verified in
+  the previous task; proof-only PR927 remains open, superseding older pending notes.
+- Root cause: local completion removes the task row/detail cache but leaves the
+  requested task in URL. Strict notification selection correctly refuses to fall
+  back, so a successful approval incorrectly lands on the unavailable warning.
+- Share a completion helper across approve/reject/verify: retire the successful
+  deep link, navigate to the next loaded pending task (typed key), clear obsolete
+  document fallback, or clear the finished link if empty. Preserve navigation if
+  a different task was selected while the request was pending.
+- Baseline focused UI suite reproduced five failures on the old source. Corrected
+  code passes45 affected tests/two files, including genuine unavailable-link guard,
+  cancelled/failed approvals and same-signature verification/approval distinction.
+  Lint/typecheck/frontend build/diff check pass; hosted CI and release pending.
+- No schema, worker, PDF, authorization or business-data changes. Production smoke
+  will not approve/reject/verify a real submission or send any outbound request.
+
 ## 2026-11-11 [Codex] SUR-46 Configured Signer Removal / Issue #921
 
 - Active fix/requester-remove-configured-signers-20261111, based on main. User
