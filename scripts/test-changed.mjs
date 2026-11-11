@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 if (allChangedFiles.some(file => /configured_signer_removal.*\.sql$/u.test(file))) gates.add('configured-signer-removal-sql');
+if (allChangedFiles.some(file => /hrd_ga_review.*\.sql$/u.test(file))) gates.add('hrd-ga-review-sql');
 if (allChangedFiles.some(file => /docker.*retention|production-deploy-lock/.test(file))) gates.add('docker-image-retention');
 for (const file of allChangedFiles) {
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
@@ -153,6 +154,10 @@ for (const file of allChangedFiles) {
 if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
 
 for (const gate of gates) {
+  if (gate === 'hrd-ga-review-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--hrd-ga-review']);
+    continue;
+  }
   if (gate === 'actionable-dashboard-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
     continue;

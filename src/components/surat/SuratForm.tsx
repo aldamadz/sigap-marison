@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { HrdGaReviewAssignment } from "@/components/surat/HrdGaReviewAssignment";
+import { hrdGaReviewContext, hrdGaReviewIssue, hrdGaReviewerSummary } from "@/lib/hrd-ga-review";
 import { migratedStorageDisplayUrl } from "@/lib/storage-display-url";
 import { isKeu1FirstSignerCandidate, isKeu1RequesterStep } from "@/features/surat/registration/lib/keu1-first-signer";
 import { isKeu10Form } from "@/features/surat/registration/lib/keu10-form";
@@ -2211,7 +2213,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     });
   };
 
+  const hrdGaContext = hrdGaReviewContext(selectedUsage, externalRevision ? externalRevision.policySnapshot ?? {} : undefined);
   const validateRegistration = (signerAssignments: SignerAssignment[] = signers) => {
+    const reviewIssue = hrdGaContext && hrdGaReviewIssue(effectiveFormInputData.items, hrdGaContext.frozenGroup);
+    if (reviewIssue) {
+      toast({ variant: "destructive", title: "Kategori pemeriksaan belum valid", description: reviewIssue });
+      return false;
+    }
     const planIssue = excludedSignerSteps(signerAssignments).length ? signerPlanIssue(signerAssignments) : null;
     if (planIssue) {
       toast({ variant: "destructive", title: "Susunan penandatangan belum valid", description: planIssue });
@@ -2311,6 +2319,8 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
     for (const moduleField of moduleSummaryFields) {
       fields.push({ key: moduleField.key, label: moduleField.label, value: moduleField.value });
     }
+    const reviewerSummary = hrdGaReviewerSummary(selectedUsage, effectiveFormInputData.items, externalRevision ? externalRevision.policySnapshot ?? {} : undefined);
+    if (reviewerSummary) fields.push({ key: "hrd_ga_review", label: "Pemeriksaan HRD & GA", value: reviewerSummary });
 
     Object.entries(effectiveFormInputData).forEach(([key, value]) => {
       if (mappedKeys.has(key) || hiddenKeys.has(key) || formatSummaryValue(value) === "-") return;
@@ -4159,6 +4169,13 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                   )}
                 </div>
               )}
+
+              {hrdGaContext && <HrdGaReviewAssignment
+                config={hrdGaContext.config}
+                frozenGroup={hrdGaContext.frozenGroup}
+                items={effectiveFormInputData.items}
+                onChange={items => setInputValue("items", items)}
+              />}
 
               {externalRevision && (
                 <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-4">

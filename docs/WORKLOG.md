@@ -1,5 +1,59 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-48 Implementation / Mixed Requests Confirmed
+
+- User confirms mixed GA and HRD needs must be two submissions, including Kas
+  Kecil. New HRD manager routes classify each item, with bulk category selection;
+  GA -> Usman Huda; HRD -> Tri Sulistyanto. No title/free-text inference.
+- Server freezes the single authoritative examiner from active configured staff;
+  rejects missing/mixed categories and forged assignment snapshots. Revision
+  additions retain the original category; old documents retain their old team.
+- Examiner completion has no mandatory checklist/input/file; revision/return
+  stays available. Manager approval still waits for examiner completion.
+- New private migration 20261111150000 installs controls without activating
+  configuration. Activation is operator-only AFTER the new app is live, expected
+  staging12 (seven normal plus five UJI usages), production7; no document backfill.
+- Focused UI tests387/387 (58 files), lint, tsc and build pass. One asynchronous
+  KEU10 UI assertion was transient under simultaneous build load; isolated17/17
+  and full impacted rerun387/387 passed without changing assertions.
+- Disposable PostgreSQL actual registration/verification/approval/revision RPCs
+  pass: exact routing, split enforcement, wrong actor denial, manager gate,
+  completion without input, attributed return reason, immutable snapshots,
+  revision additions, inactive examiner denial and legacy snapshot preservation.
+  Migration applied twice. Existing additional-signer concurrency also passes.
+- Actual panel Playwright desktop1440/mobile390 light/dark: category bulk-select
+  and names render, no horizontal overflow; synthetic local fixture only.
+- Status: local/source complete, release/preflight in progress; NOT yet live.
+
+## 2026-11-11 [Codex] SUR-48 Audit Count Correction
+
+- Corrects the manually counted eight in the prior SUR48 entry: a dedicated
+  read-only aggregate confirms seven active HRD manager steps in seven usages,
+  of which two currently have configured examiners. The underlying row list and
+  named-account findings are unchanged; no production write was performed.
+
+## 2026-11-11 [Codex] SUR-48 HRD/GA Reviewer Routing / Issue #933
+
+- Active feature/hrd-ga-reviewer-routing-20261111 from productione93da2e. User
+  requests HRD/GA examiner routing in production: ATK/household to Usman Huda;
+  BPJS/daily labor/business travel to Tri Sulistyanto. Both identities confirmed
+  by the user and read-only production lookup: active HRD & GA staff profiles.
+- User confirms Complete examination remains; no mandatory checklist/input/file.
+  Manager HRD & GA remains the approving signer. Revision/return-to-requester
+  controls must remain available. No production configuration has changed yet.
+- Read-only audit found eight active configured HRD manager stages across PGD
+  Asset/Fund and KEU1 HQ/branch usages. Only two Fund stages currently assign
+  Usman with fund_item_checklist; the other six have no configured examiner.
+- Current usages are generic, not ATK/BPJS/travel-specific. Proposed explicit
+  requester classification avoids guessing from item title/free text; server must
+  derive the single reviewer from authoritative configured candidates and freeze
+  the assignment. Existing signed/frozen routes are not implicitly reassigned.
+- Clarification pending: mixed-purpose requests (including Kas Kecil) may choose
+  one responsible examiner, or must be split. Do not invent this business rule.
+  No code/migration/business write, approval, external resend or deployment yet.
+- Prior SUR47 is live productione93da2e/staging3f6b948; proof-only PR932 remains
+  open. PROJECT_CONTEXT.md absent; existing root dirty checkout untouched.
+
 ## 2026-11-11 [Codex] SUR-47 Approval Queue Continuation / Issue #928
 
 - Active fix/approval-next-queue-20261111 from main1ff7ae1. User explicitly asks

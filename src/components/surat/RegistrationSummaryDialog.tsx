@@ -363,7 +363,7 @@ const TableSummary = ({
       </div>
     );
   }
-  const excluded = new Set(["recommendation_attachment"]);
+  const excluded = new Set(["recommendation_attachment", "hrd_ga_category"]);
   const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
     .filter((key) => !excluded.has(key) && !key.startsWith("recommendation_attachment_") && rows.some((row) => formatSummaryValue(row[key]) !== "-"));
   return (
