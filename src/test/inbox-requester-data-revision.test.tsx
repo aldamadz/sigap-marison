@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InboxPage from "@/pages/surat/InboxPage";
 
@@ -19,7 +19,15 @@ type Fixture = {
 const mocks = vi.hoisted(() => ({
   fixture: {} as Fixture,
   compact: null as Record<string, unknown> | null,
-  currentUser: null as {id:string}|null,
+  currentUser: null as {id:string;full_name?:string}|null,
+  queue: null as Fixture[] | null,
+  details: null as Record<string, Fixture> | null,
+  finishTask: vi.fn(),
+  approve: vi.fn(),
+  reject: vi.fn(),
+  verify: vi.fn(),
+  confirm: vi.fn(),
+  realtimeFinish: null as ((key: string) => void) | null,
   detailError: false,
   kpi: [] as Record<string,unknown>[],
   noop: vi.fn(),
@@ -33,19 +41,25 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: mocks.noop }),
   useQuery: ({ queryKey }: { queryKey: unknown[] }) => ({
-    data: queryKey[0] === "surat-inbox-detail" ? queryKey[1] && !mocks.detailError ? mocks.fixture : undefined : queryKey[0] === "user-profile-inbox" ? mocks.currentUser : queryKey[0] === "surat-inbox-kpi" ? mocks.kpi : mocks.empty,
+    data: queryKey[0] === "surat-inbox-detail" ? queryKey[1] && !mocks.detailError ? mocks.details?.[String(queryKey[1])] || mocks.fixture : undefined : queryKey[0] === "user-profile-inbox" ? mocks.currentUser : queryKey[0] === "surat-inbox-kpi" ? mocks.kpi : mocks.empty,
     isError: queryKey[0] === "surat-inbox-detail" && mocks.detailError,isFetching: false, isLoading: false,
   }),
 }));
-vi.mock("@/features/surat/inbox/lib/use-inbox-pagination", () => ({
-  useInboxPagination: () => ({
-    items: [mocks.compact || mocks.fixture], total: 1, remaining: 0, hasMore: false, loading: false, error: null, isFetching: false,
+vi.mock("@/features/surat/inbox/lib/use-inbox-pagination", async () => {
+  const { useState } = await import("react");
+  return { useInboxPagination: () => {
+    const [finished, setFinished] = useState<string[]>([]);
+    mocks.realtimeFinish = key => setFinished(previous => [...previous, key]);
+    const items = (mocks.queue || [mocks.compact || mocks.fixture]).filter(item => !finished.includes(`${item.task_type}:${item.id}`));
+    return {
+    items, total: items.length, remaining: 0, hasMore: false, loading: false, error: null, isFetching: false,
     detailCache: {}, setDetailCache: mocks.noop, loadMore: mocks.noop, refetch: mocks.noop, refetchFull: mocks.noop,
-    finishTaskLocally: mocks.noop, refreshAfterAction: mocks.noop, resetPagination: mocks.noop,
-  }),
-}));
+    finishTaskLocally: (key: string) => { mocks.finishTask(key); setFinished(previous => [...previous, key]); },
+    refreshAfterAction: mocks.noop, resetPagination: mocks.noop,
+  }; } };
+});
 vi.mock("@/providers/AttentionProvider", () => ({ useAttention: () => ({ refetch: mocks.noop }) }));
-vi.mock("@/components/app/AppDialogProvider", () => ({ useAppDialog: () => ({ prompt: mocks.prompt }) }));
+vi.mock("@/components/app/AppDialogProvider", () => ({ useAppDialog: () => ({ prompt: mocks.prompt, confirm: mocks.confirm }) }));
 vi.mock("@/hooks/useDocumentOpener", () => ({
   useDocumentOpener: () => ({ openPdf: mocks.noop, openFile: mocks.noop, isOpening: () => false }),
   documentOperationKey: { pdf: () => "document", file: () => "file" },
@@ -55,7 +69,8 @@ vi.mock("@/lib/supabase", () => ({
   onRealtimeReconnect:()=>({unsubscribe:()=>undefined}),
 }));
 vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({
-  suratApprovalApi: { requestProcessRevision: mocks.requestRevision, saveVerificationDraft:mocks.saveDraft },
+  suratApprovalApi: { requestProcessRevision: mocks.requestRevision, saveVerificationDraft:mocks.saveDraft,
+    approveSurat: mocks.approve, rejectSurat: mocks.reject, verifySignature: mocks.verify },
 }));
 vi.mock("sonner", () => ({ toast: { error: mocks.error, success: mocks.noop } }));
 
@@ -81,6 +96,11 @@ const useKeu10 = (role = "verifikator") => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.compact = null;
+  mocks.queue = null; mocks.details = null;
+  mocks.approve.mockReset().mockResolvedValue(undefined);
+  mocks.reject.mockReset().mockResolvedValue(undefined);
+  mocks.verify.mockReset().mockResolvedValue(undefined);
+  mocks.confirm.mockReset().mockResolvedValue(true);
   mocks.kpi=[];
   mocks.currentUser=null;mocks.detailError=false;
   mocks.requestRevision.mockResolvedValue({ id: "revision" });
@@ -113,6 +133,122 @@ afterEach(() => {
 });
 
 describe("Inbox requester data and attachment revision", () => {
+  const unavailable = 'Tugas yang dipilih tidak tersedia untuk akun ini atau sudah berpindah tahap.';
+  const currentId = '00000000-0000-4000-8000-000000000003';
+  const nextId = '00000000-0000-4000-8000-000000000005';
+  const userId = '00000000-0000-4000-8000-000000000004';
+  function QueueLocation() {
+    const location = useLocation(), navigate = useNavigate();
+    return <><output data-testid="queue-location">{location.search}</output>
+      <output data-testid="queue-path">{location.pathname}</output>
+      <button onClick={() => navigate(`/surat/inbox?task=approval:${nextId}`)}>Pilih tugas berikutnya</button>
+      <button onClick={() => navigate('/dashboard')}>Keluar antrean</button></>;
+  }
+  function ActionQueueRoute() {
+    const location = useLocation();
+    return <>{location.pathname === '/surat/inbox' && <InboxPage/>}<QueueLocation/></>;
+  }
+  const mountActionQueue = (hasNext = true, legacy = false, verification = false, sameSignature = false) => {
+    mocks.currentUser = { id: userId, full_name: 'Penandatangan Uji' };
+    Object.assign(mocks.fixture, { id: currentId, user_id: userId,
+      task_type: verification ? 'verification' : 'approval' });
+    const next = structuredClone(mocks.fixture);
+    next.id = sameSignature ? currentId : nextId;
+    if (sameSignature) next.task_type = 'approval';
+    next.surat_id = 'next-document';
+    Object.assign(next.surat_registrasi, { id: 'next-document', judul_surat: 'Pengajuan berikutnya', no_surat: '002/UAI/X/2026' });
+    mocks.queue = hasNext ? [mocks.fixture, next] : [mocks.fixture];
+    mocks.details = { [currentId]: mocks.fixture, [next.id]: next };
+    const key = legacy ? currentId : `${mocks.fixture.task_type}:${currentId}`;
+    render(<MemoryRouter initialEntries={[`/surat/inbox?task=${key}&document=old-document`]}><ActionQueueRoute/></MemoryRouter>);
+  };
+  it.each([false, true])('advances the task URL after successful approval (legacy=%s)', async legacy => {
+    mountActionQueue(true, legacy);
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByText('Pengajuan berikutnya')).toBeInTheDocument());
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+    const params = new URLSearchParams(screen.getByTestId('queue-location').textContent || '');
+    expect(params.get('task')).toBe(`approval:${nextId}`); expect(params.has('document')).toBe(false);
+    expect(mocks.finishTask).toHaveBeenCalledExactlyOnceWith(`approval:${currentId}`);
+  });
+  it('clears the finished deep link when the last approval leaves an empty queue', async () => {
+    mountActionQueue(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.finishTask).toHaveBeenCalled());
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').has('task')).toBe(false));
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Setujui' })).not.toBeInTheDocument();
+  });
+  it.each(['cancel', 'error'])('retains the current task when approval ends in %s', async mode => {
+    if (mode === 'cancel') mocks.confirm.mockResolvedValue(false);
+    else mocks.approve.mockRejectedValue(new Error('Persetujuan belum tersimpan.'));
+    mountActionQueue();
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mode === 'cancel' ? mocks.confirm : mocks.error).toHaveBeenCalled());
+    expect(mocks.finishTask).not.toHaveBeenCalled();
+    expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${currentId}`);
+  });
+  it('does not move a different task opened while an approval request is still pending', async () => {
+    let complete!: () => void;
+    mocks.approve.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+    mountActionQueue();
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Pilih tugas berikutnya' }));
+    await screen.findByText('Pengajuan berikutnya');
+    complete();
+    await waitFor(() => expect(mocks.finishTask).toHaveBeenCalled());
+    expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${nextId}`);
+  });
+  it('does not navigate after leaving the inbox during an approval request', async () => {
+    let complete!: () => void;
+    mocks.approve.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+    mountActionQueue();
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Keluar antrean' }));
+    complete();
+    await waitFor(() => expect(mocks.finishTask).toHaveBeenCalled());
+    expect(screen.getByTestId('queue-path')).toHaveTextContent('/dashboard');
+    expect(screen.getByTestId('queue-location')).toBeEmptyDOMElement();
+  });
+  it('advances when realtime removes the approved task before the approval response arrives', async () => {
+    let complete!: () => void;
+    mocks.approve.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+    mountActionQueue();
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalled());
+    act(() => { mocks.detailError = true; mocks.realtimeFinish!(`approval:${currentId}`); });
+    expect(screen.getByText('Memproses tindakan...')).toBeInTheDocument();
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+    complete();
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${nextId}`));
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+  });
+  it('advances after successful rejection instead of treating its old task as unavailable', async () => {
+    mountActionQueue();
+    fireEvent.click(screen.getByRole('button', { name: 'Tolak' }));
+    await waitFor(() => expect(mocks.reject).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('Pengajuan berikutnya')).toBeInTheDocument());
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+  });
+  it('advances after a completed verification task', async () => {
+    mountActionQueue(true, false, true);
+    fireEvent.click(screen.getByRole('button', { name: 'Simpan & lanjutkan' }));
+    await waitFor(() => expect(mocks.verify).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('Pengajuan berikutnya')).toBeInTheDocument());
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+    expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`verification:${nextId}`);
+  });
+  it('retains a distinct approval task for the same signature after verification', async () => {
+    mountActionQueue(true, false, true, true);
+    fireEvent.click(screen.getByRole('button', { name: 'Simpan & lanjutkan' }));
+    await waitFor(() => expect(mocks.finishTask).toHaveBeenCalledExactlyOnceWith(`verification:${currentId}`));
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${currentId}`));
+    expect(screen.getByRole('button', { name: 'Setujui' })).toBeInTheDocument();
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+  });
   it('does not prefill examiner identity fields from requester-controlled allocation detail', async () => {
     const unit = {value:'2048',label:'B40',raw:{id:2048,type:'30/52',land_area:60,production_code:'001/UAI/PRC/5.2/07/10/2026'}};
     Object.assign(mocks.fixture,{task_type:'verification',verification_required:true,verification_status:'pending',requires_unit_allocation:true,action_type:'unit_allocation'});

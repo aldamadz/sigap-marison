@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## SUR-47 Approval Queue Continuation (2026-11-11, [Codex], Issue #928)
+
+- User authorizes staging then selective production. Successful approval/rejection/
+  verification must retire its task URL with its local queue row and select the
+  next pending task, or clear selection when empty. Genuine stale/unauthorized
+  deep links retain the fail-closed unavailable warning.
+- Preserve task-type identity, including two tasks on one signature. Completion
+  must not move a different task opened during the request; cancel/error must not
+  remove or navigate away from the pending task. No approval authorization change.
+- App-only change; no migration, worker/PDF change, business backfill or outbound
+  resend. Focused UI regression and staging/runtime smoke precede production.
+
 ## SUR-46 Configured Signer Removal (2026-11-11, [Codex], Issue #921)
 
 - Explicitly authorized staging then selective production: requester may remove
