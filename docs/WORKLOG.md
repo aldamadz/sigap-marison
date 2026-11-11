@@ -1,5 +1,20 @@
 # Worklog
 
+## 2026-11-11 [Codex] SUR-45 Verified Unit Title and Description / Issue #918
+
+- Active main-based fix/unit-verified-title-20261111, target staging only. User
+  requests active SPK Unit title and external description follow verified units,
+  e.g.30 requested,3ready,27remaining. No production or vendor POST authorized.
+- Canonical verification history triggers a title-only update. Original requested
+  count, review evidence, number, earlier signatures and stored archives remain.
+  No historical backfill or rewrite of frozen dispatch payloads/PDFs.
+- Outbound description uses service-only verified allocation, leads with ready
+  quantity, and preserves labelled request counts/requester/examiner notes. Getter
+  replaces any row-supplied review marker with immutable server-owned evidence.
+- New forward migration20261111090000, private trigger/helpers, existing getter
+  owner/ACL preserved. Changed tests, PostgreSQL rehearsal and staging rollout
+  pending. PROJECT_CONTEXT absent; dirty root/other worktrees unchanged.
+
 ## 2026-11-10 [Codex] OPS-19 CT104 Image Retention / Issue #912
 
 - User explicitly authorizes persistent production retention, but requires actual
