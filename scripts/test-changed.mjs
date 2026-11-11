@@ -97,6 +97,7 @@ if (changesGlobalTestInfrastructure) {
 }
 
 const gates = new Set();
+if (allChangedFiles.some(file => /configured_signer_removal.*\.sql$/u.test(file))) gates.add('configured-signer-removal-sql');
 if (allChangedFiles.some(file => /docker.*retention|production-deploy-lock/.test(file))) gates.add('docker-image-retention');
 for (const file of allChangedFiles) {
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
@@ -152,6 +153,10 @@ for (const file of allChangedFiles) {
 if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
 
 for (const gate of gates) {
+  if (gate === 'actionable-dashboard-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
+    continue;
+  }
   if (gate === 'signer-action-sla-clock-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--action-clock']);
     continue;
@@ -209,10 +214,6 @@ for (const gate of gates) {
     run('node', ['scripts/build-maintenance-edge.mjs']);
     continue;
   }
-  if (gate === 'actionable-dashboard-sql') {
-    run('node', ['scripts/test-actionable-dashboard-sql.mjs']);
-    continue;
-  }
   if (gate === 'recommendation-office-reservation-sql') {
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs']);
     run('node', ['scripts/test-recommendation-office-reservation-sql.mjs', '--production-shape']);
@@ -226,6 +227,10 @@ for (const gate of gates) {
   if (gate === 'unit-verified-presentation-sql') {
     run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--verified-presentation']);
     run('node', ['scripts/test-unit-revision-reallocation-sql.mjs', '--verified-presentation', '--production-shape']);
+    continue;
+  }
+  if (gate === 'configured-signer-removal-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--configured-signer-removal']);
     continue;
   }
   if (gate === 'draft-reservation-lifecycle-sql') run('node', ['scripts/test-letter-number-reuse-sql.mjs', '--draft-lifecycle']);

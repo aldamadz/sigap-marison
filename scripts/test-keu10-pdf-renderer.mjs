@@ -313,6 +313,13 @@ const additionalData = normalizeKeu10DocumentData({ ...source,
 ] });
 assert.equal(additionalData.hasAdditionalSigners,true);
 assert.doesNotThrow(() => buildKeu10DocumentDefinition(additionalData));
+const reducedData = normalizeKeu10DocumentData({ ...source, policy_snapshot: { signer_plan: [{ route_version: 2 }] } },
+  { signatures: [baseSignatures[0], baseSignatures[2], { ...baseSignatures[3], step_order: 3 }] });
+assert.equal(reducedData.hasReducedSigners,true);
+assert.equal(reducedData.signatures.length,3);
+assert.doesNotThrow(() => buildKeu10DocumentDefinition(reducedData));
+assert.throws(() => buildKeu10DocumentDefinition({ ...reducedData, signatures: reducedData.signatures.filter(signer => signer.role!=="Verifikator") }), /KEU 10/);
+assert.throws(() => buildKeu10DocumentDefinition({ ...reducedData, signatures: [...reducedData.signatures].reverse() }), /KEU 10/);
 assert.throws(() => buildKeu10DocumentDefinition({ ...additionalData,
   signatures: [additionalData.signatures[7], ...additionalData.signatures.slice(0,7)],
 }), /tambahan KEU 10/);
@@ -341,6 +348,7 @@ if (renderScreenshots) {
 }
 try {
   for (const [name, value] of [
+    ["keu10-three-reduced", reducedData],
     ["keu10-four", normalizeKeu10DocumentData(source, { signatures: baseSignatures })],
     ["keu10-five", canonicalFive],
     ["keu10-six", data],

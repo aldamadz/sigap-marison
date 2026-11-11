@@ -182,6 +182,7 @@ export type FormFieldValue =
 export type FormInputData = Record<string, FormFieldValue>;
 
 export type SignerAssignment = {
+  excluded_step_ids?: string[];
   is_additional?: boolean;
   client_id?: string;
   step_order: number;

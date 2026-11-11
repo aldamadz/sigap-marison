@@ -35,7 +35,7 @@ import {
 import { suratRegistrationApi } from "@/features/surat/registration/services/surat-registration-api";
 import { suratRecommendationApi } from "@/features/surat/recommendation/services/surat-recommendation-api";
 import { buildSignerAssignments } from "@/features/surat/registration/lib/signer-assignments";
-import { mergeAdditionalSigners } from "@/features/surat/registration/lib/additional-signers";
+import { clearExcludedSignerSteps, excludedSignerSteps, mergeAdditionalSigners, protectedUsageSignerSteps, signerPlanIssue } from "@/features/surat/registration/lib/additional-signers";
 import { SignerPlanEditor } from "@/components/surat/SignerPlanEditor";
 import { useSuratAutosave } from "@/features/surat/registration/lib/use-surat-autosave";
 import { useSuratDraftLifecycle } from "@/features/surat/registration/lib/use-surat-draft-lifecycle";
@@ -2212,6 +2212,11 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
   };
 
   const validateRegistration = (signerAssignments: SignerAssignment[] = signers) => {
+    const planIssue = excludedSignerSteps(signerAssignments).length ? signerPlanIssue(signerAssignments) : null;
+    if (planIssue) {
+      toast({ variant: "destructive", title: "Susunan penandatangan belum valid", description: planIssue });
+      return false;
+    }
     if (isKeu10RequesterEdit && (revisionCandidates.status !== "ready" || revisionCandidates.eventId !== externalRevision?.eventId
       || !frozenFinalStep?.id || !signerAssignments.some(signer => isEditableRevisionFinalSigner(signer)
         && keu10FinalCandidates.some(user => user.id === signer.user_id)))) {
@@ -4199,6 +4204,9 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
                 </div>
 
                 <SignerPlanEditor signers={signers} editingEnabled={!externalRevision}
+                  protectedStepIds={protectedUsageSignerSteps(selectedUsage, formData.form_input_data)}
+                  onRestore={() => { if (selectedUsage) setSigners(getVisibleConfiguredSigners(reconcileConfiguredSigners(
+                    buildSignerAssignments(selectedUsage), clearExcludedSignerSteps(signers)))); }}
                   onChange={next => { setSigners(next); setOpenSignerIndex(null); setSignerSearch({}); }}>
                   {(s, i) => <>
                           <Popover open={openSignerIndex === i} onOpenChange={(open) => setOpenSignerIndex(open ? i : null)}>

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { signerPlanIssue } from "@/features/surat/registration/lib/additional-signers";
 import { unitReadinessIssue } from "@/lib/unit-readiness";
 import { accessService } from './access.service';
 import { registrationUploadIdentity } from "@/lib/registration-upload-identity";
@@ -1008,6 +1009,7 @@ export const suratService = {
       }
       const signerSnapshots = await this.getSignerSnapshots(activeSigners);
       const hasAdditionalSigners = activeSigners.some(signer => signer.is_additional === true);
+      let hasRemovedConfiguredSigners = false;
       const configuredSigners = activeSigners.filter(signer => signer.is_additional !== true);
       for (const signer of activeSigners.filter(signer => signer.is_additional === true)) {
         const profile = signerSnapshots[signer.user_id];
@@ -1080,13 +1082,9 @@ export const suratService = {
         const allConfiguredSteps = [...(configContext.usage?.form_usage_steps || [])]
           .sort((a: any, b: any) => a.step_order - b.step_order);
         const activeStepIds = new Set(configuredSigners.map(signer => signer.form_usage_step_id).filter(Boolean));
-        const missingRequiredStep = allConfiguredSteps.find((step: any) =>
-          step.skip_if_no_candidate !== true
-          && !activeStepIds.has(step.id)
-        );
-        if (missingRequiredStep) {
-          throw new Error(`Penandatangan tahap ${missingRequiredStep.step_order} belum dipilih.`);
-        }
+        hasRemovedConfiguredSigners = allConfiguredSteps.some((step: any) => !activeStepIds.has(step.id));
+        const planIssue = hasRemovedConfiguredSigners ? signerPlanIssue(activeSigners) : null;
+        if (planIssue) throw new Error(planIssue);
         const configuredSteps = allConfiguredSteps.filter((step: any) => activeStepIds.has(step.id));
         if (configuredSteps.length !== configuredSigners.length) {
           throw new Error("Jumlah penandatangan tidak sesuai konfigurasi kegunaan.");
@@ -1187,8 +1185,9 @@ export const suratService = {
       cleanPayload.file_path = `native://document/${payloadDraftId || payloadReservationId || encodeURIComponent(String(payload.no_surat || "draft"))}`;
 
       const keu10Registration = isKeu10Form(context.form);
-      const atomicRegistration = keu10Registration || hasAdditionalSigners;
-      const { data: registrationResult, error: suratError } = hasAdditionalSigners
+      const editablePlan = hasAdditionalSigners || hasRemovedConfiguredSigners;
+      const atomicRegistration = keu10Registration || editablePlan;
+      const { data: registrationResult, error: suratError } = editablePlan
         ? await supabase.rpc("create_registration_with_signer_plan", {
             p_payload: cleanPayload,
             p_signers: activeSigners.map(signer => ({
