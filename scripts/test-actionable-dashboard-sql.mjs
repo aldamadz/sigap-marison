@@ -148,8 +148,11 @@ try {
   +(signerScope ? signerScopeSetup+monitoringRpcs+signerScopeMigration+signerScopeMigration : '')+assertions+signerScopeAssertions);
  if(monitoringDetails){
   const patch=process.argv.includes('--baseline') ? '' : read('supabase/migrations/20261112100000_monitoring_readable_details.sql');
+  const approvalPolicySource=read('supabase/migrations/20260608093000_harden_surat_approval.sql');
+  const mutationPolicy=approvalPolicySource.slice(approvalPolicySource.indexOf('create policy "Creators current signers and admins can update surat"'),
+    approvalPolicySource.indexOf('create or replace function public.handle_approve_surat_v2('));
   const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
-   patch+patch+read('supabase/tests/monitoring_readable_details.integration.sql'));
+   patch+patch+mutationPolicy+'grant update on public.surat_registrasi to authenticated;'+read('supabase/tests/monitoring_readable_details.integration.sql'));
   if(!result.includes('Monitoring readable details: all assertions passed'))throw Error('Missing monitoring detail proof');
   console.log('Monitoring readable details: real PostgreSQL RLS, scoped files, hierarchy and unchanged action authority passed.');
  }

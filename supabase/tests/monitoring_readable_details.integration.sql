@@ -18,6 +18,11 @@ select check_ok(get_surat_monitoring_detail(tid(300))->>'file_path'='private/doc
 select check_ok(get_surat_monitoring_detail(tid(300))#>>'{form_input_data,items,0,nama_barang}'='Synthetic detail','complete items visible');
 select check_ok(jsonb_array_length(get_surat_monitoring_detail(tid(300))->'surat_attachments')=1,'attachments visible');
 select check_ok(get_surat_monitoring_detail(tid(300))#>>'{surat_signatures,0,signer_snapshot,synthetic}'='snapshot','signature detail visible');
+do $$declare changed integer;begin
+ update surat_registrasi set judul_surat='Forbidden viewer edit' where id=tid(300);
+ get diagnostics changed=row_count;
+ perform check_ok(changed=0,'canonical update RLS denies read-only colleague');
+end$$;
 select check_ok((get_actionable_dashboard('signer','active',null,null,'SIGNER-DETAIL')->>'count')::int=0,'no new signature task');
 select check_ok((get_actionable_dashboard('team','active',null,null,'SIGNER-DETAIL')->'rows'->0->>'can_remind')::boolean=false,'reminder authority unchanged');
 do $$begin begin perform remind_dashboard_request(tid(300));exception when insufficient_privilege then return;end;
