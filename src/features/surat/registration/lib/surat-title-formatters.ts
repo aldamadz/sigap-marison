@@ -204,7 +204,7 @@ export const buildAutoTitle = (options: BuildAutoTitleOptions): string => {
   }
 
   const categoryLabel =
-    category === "asset"
+    category === "goods" ? "Permintaan Barang dari Stok GA" : category === "asset"
       ? "Pengajuan Aset"
       : category === "non_asset"
         ? String(formInputData.fund_type) === "production_cost"

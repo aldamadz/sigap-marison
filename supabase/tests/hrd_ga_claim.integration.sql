@@ -1,0 +1,71 @@
+reset role;
+select keu10_test.assert(hrd_ga_review_internal.configure_claim(1)=1,'Claim mode activation');
+select keu10_test.assert(not has_table_privilege('authenticated','hrd_ga_review_internal.claims','insert')
+  and not has_function_privilege('authenticated','public.verify_surat_signature_v2_pre_hrd_ga_claim(uuid,text,jsonb)','execute'), 'No private mutation bypass');
+set role authenticated;
+select set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+do $$ declare result jsonb; doc uuid; sig uuid; claimed jsonb;
+begin
+  result:=public.create_registration_with_signer_plan(keu10_test.hrd_payload(133,null),keu10_test.hrd_plan());
+  doc:=(result#>>'{surat,id}')::uuid;
+  select id into sig from public.surat_signatures where surat_id=doc and step_order=2;
+  perform keu10_test.assert((select jsonb_array_length(verifier_snapshot)=2 and verification_required
+    and input_schema_snapshot#>>'{hrd_ga_review,mode}'='claim' and verification_claimed_by is null
+    from public.surat_signatures where id=sig),'Both candidates, no item category required');
+  perform keu10_test.expect_error('42501',format('select public.claim_hrd_ga_examination(%L)',sig));
+  perform set_config('request.jwt.claim.sub',keu10_test.id(961)::text,false);
+  perform keu10_test.expect_error('42501',format('select public.claim_hrd_ga_examination(%L)',sig));
+  perform keu10_test.expect_error('42501',format('select public.verify_surat_signature_v2(%L,null,''{}'')',sig));
+  perform keu10_test.approve(doc,1);
+  perform set_config('request.jwt.claim.sub',keu10_test.id(961)::text,false);
+  claimed:=public.claim_hrd_ga_examination(sig);
+  perform keu10_test.assert(public.claim_hrd_ga_examination(sig)=claimed,'Same claimant idempotent');
+  perform keu10_test.assert((select verification_claimed_by=keu10_test.id(961) and verification_claimed_at is not null
+    from public.surat_signatures where id=sig),'Claim visible for display');
+  perform set_config('request.jwt.claim.sub',keu10_test.id(962)::text,false);
+  perform keu10_test.expect_error('40001',format('select public.claim_hrd_ga_examination(%L)',sig));
+  perform keu10_test.expect_error('42501',format('select public.verify_surat_signature_v2(%L,null,''{}'')',sig));
+  perform keu10_test.expect_error('42501',format('select public.save_surat_verification_draft(%L,''{}'',null)',sig));
+  perform keu10_test.expect_error('42501',format('update public.surat_signatures set verification_status=''verified'',verified_by=%L where id=%L',keu10_test.id(961),sig));
+  perform keu10_test.expect_error('42501',format('select public.request_surat_process_revision(%L,%L,''requester'',null,''Lengkapi rincian'',''{}'')',doc,sig));
+  update public.surat_signatures set verification_claimed_by=keu10_test.id(962) where id=sig;
+  perform keu10_test.assert((select verification_claimed_by=keu10_test.id(961) from public.surat_signatures where id=sig),'Client cannot forge claimant projection');
+  perform set_config('request.jwt.claim.sub',keu10_test.id(961)::text,false);
+  perform public.save_surat_verification_draft(sig,'{}','Catatan pemeriksa');
+  perform public.verify_surat_signature_v2(sig,'Sudah diperiksa','{}');
+  perform keu10_test.assert((select verified_by=keu10_test.id(961) and not is_signed from public.surat_signatures where id=sig),'Examiner completes without approving');
+  perform keu10_test.approve(doc,2); perform keu10_test.approve(doc,3);
+  perform set_config('request.jwt.claim.sub',keu10_test.id(961)::text,false);
+  perform keu10_test.expect_error('42501',format('select public.claim_hrd_ga_examination(%L)',sig));
+  perform set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+  result:=public.create_registration_with_signer_plan(keu10_test.hrd_payload(134,null),keu10_test.hrd_plan());
+  doc:=(result#>>'{surat,id}')::uuid; perform keu10_test.approve(doc,1);
+  select id into sig from public.surat_signatures where surat_id=doc and step_order=2;
+  perform set_config('request.jwt.claim.sub',keu10_test.id(962)::text,false);
+  perform public.claim_hrd_ga_examination(sig);
+  perform public.request_surat_process_revision(doc,sig,'requester',null,'Lengkapi rincian barang',jsonb_build_object('requester_edit_required',true));
+  perform keu10_test.assert((select verification_claimed_by=keu10_test.id(962) from public.surat_signatures where id=sig),'Returning to requester retains claimant');
+  perform keu10_test.assert(exists(select 1 from public.surat_revision_events where surat_id=doc and actor_id=keu10_test.id(962)),'Revision attributed to claimant');
+  perform set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+  result:=public.create_registration_with_signer_plan(keu10_test.hrd_payload(135,null),keu10_test.hrd_plan());
+  doc:=(result#>>'{surat,id}')::uuid; perform keu10_test.approve(doc,1);
+  select id into sig from public.surat_signatures where surat_id=doc and step_order=2;
+  insert into keu10_test.results(key,event_id) values('claim-concurrency',sig);
+  perform set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+  result:=public.create_registration_with_signer_plan(keu10_test.hrd_payload(136,null),keu10_test.hrd_plan());
+  doc:=(result#>>'{surat,id}')::uuid;
+end $$;
+reset role;
+update public.form_usages set request_category='goods' where id=keu10_test.id(951);
+set role authenticated;
+select set_config('request.jwt.claim.sub',keu10_test.id(1)::text,false);
+do $$ declare payload jsonb:=keu10_test.hrd_payload(137,null); result jsonb;
+begin
+  payload:=jsonb_set(payload,'{form_input_data,request_category}','"goods"');
+  result:=public.create_registration_with_signer_plan(payload,keu10_test.hrd_plan());
+  perform keu10_test.assert(result#>>'{surat,form_input_data,request_category}'='goods','Goods use canonical registration, not fund or asset');
+  perform keu10_test.assert(public.marison_procurement_routing_block((result#>>'{surat,id}')::uuid)='internal_goods','Goods cannot enqueue or build external payload');
+end $$;
+reset role;
+select keu10_test.assert((select count(*)=2 from hrd_ga_review_internal.claim_events),'One audit per successful first claim');
+select 'HRD GA claim: all assertions passed';

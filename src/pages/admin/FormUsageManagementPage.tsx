@@ -22,7 +22,7 @@ import {
   type CheckerInputType,
 } from "@/features/surat/inbox/lib/checker-input";
 
-type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
+type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset" | "goods";
 type UsageStatus = "draft" | "active" | "archived";
 type RoleName = "membuat" | "memeriksa" | "verifikator" | "menyetujui";
 type ActionType = "approval" | "unit_allocation" | "configured_input";
@@ -185,6 +185,7 @@ const requestCategoryLabel = (value?: string | null) => {
   if (category === "asset") return "Pengajuan Aset";
   if (category === "unit") return "Pengajuan SPK";
   if (category === "non_asset") return "Pengajuan Dana";
+  if (category === "goods") return "Permintaan Barang dari Stok GA";
   return "Pengajuan Non Unit";
 };
 
@@ -949,6 +950,7 @@ export default function FormUsageManagementPage() {
                     <SelectItem value="asset">Pengajuan Aset</SelectItem>
                     <SelectItem value="unit">Pengajuan SPK</SelectItem>
                     <SelectItem value="non_asset">Pengajuan Dana</SelectItem>
+                    <SelectItem value="goods">Permintaan Barang dari Stok GA</SelectItem>
                     <SelectItem value="non_unit">Pengajuan Non Unit</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1453,6 +1455,9 @@ export default function FormUsageManagementPage() {
                                 const schema = normalizeCheckerInputSchema(step.input_schema);
                                 const routing = schema.hrd_ga_review;
                                 if (!routing) return null;
+                                if (routing.mode === "claim") return <p className="text-sm text-muted-foreground">
+                                  Antrean bersama: <strong className="text-foreground">{routing.reviewers.ga.full_name} / {routing.reviewers.hrd.full_name}</strong>
+                                </p>;
                                 return <div className="grid gap-3 sm:grid-cols-2">
                                   {(["ga", "hrd"] as const).map(group => <div key={group} className="space-y-2">
                                     <Label>{group === "ga" ? "ATK / rumah tangga" : "BPJS / tenaga harian / dinas"}</Label>

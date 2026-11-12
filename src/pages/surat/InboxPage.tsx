@@ -52,6 +52,9 @@ import {
   isVerificationTask,
   isWaitingVerification,
   shouldSignerInputStageData,
+  isSharedExamination,
+  canEditExamination,
+  examinationClaimantName,
 } from "@/features/surat/inbox/lib/inbox-task-state";
 import { departmentKpiService, type DepartmentKpiDetail } from "@/services/department-kpi.service";
 import { supabase, onRealtimeReconnect } from "@/lib/supabase";
@@ -477,7 +480,7 @@ export default function InboxPage() {
     isVerificationTask(item) &&
     (isFundRabReviewStage(item.surat_registrasi?.location_snapshot?.form || item.surat_registrasi?.data_snapshot?.form,
       item.surat_registrasi?.form_input_data?.request_category, item.role_name, item.label_jabatan)
-      || item.input_schema_snapshot?.review_mode === "fund_item_checklist" || (isUnitAllocationRequired(item) && (
+      || isSharedExamination(item) || item.input_schema_snapshot?.review_mode === "fund_item_checklist" || (isUnitAllocationRequired(item) && (
       !getAllocationProject(item)?.code ||
       Boolean(allocationErrors[item.id]) ||
       (!allocationLoading[item.id] && (allocationUnits[item.id] || []).length === 0)
@@ -615,7 +618,7 @@ export default function InboxPage() {
   }, [selectedItem, allocationProjectSelected]);
 
   useEffect(() => {
-    if (!selectedItem || !isVerificationTask(selectedItem) || !hydrationRef.current[selectedItem.id]) return;
+    if (!selectedItem || !isVerificationTask(selectedItem) || !canEditExamination(selectedItem, currentUser?.id) || !hydrationRef.current[selectedItem.id]) return;
     const signatureId = selectedItem.id;
     const payload = buildVerificationDraftPayload(selectedItem);
     const note = notes[signatureId] || "";
@@ -640,6 +643,8 @@ export default function InboxPage() {
     };
   }, [
     selectedItem?.id,
+    selectedItem?.verification_claimed_by,
+    currentUser?.id,
     notes[selectedItem?.id || ""],
     JSON.stringify(allocationProjectSelected[selectedItem?.id || ""] || null),
     JSON.stringify(allocationSelected[selectedItem?.id || ""] || []),
@@ -867,6 +872,7 @@ const handleApprove = async (item: any) => {
   };
 
   const handleReturnToRequester = async (item: any) => {
+    if (!canEditExamination(item, currentUser?.id)) return;
     const reason = await appDialog.prompt({
       title: "Minta perbaikan pemohon?",
       description: `Pengajuan "${item.surat_registrasi.judul_surat}" perlu diperbaiki pemohon. Tuliskan item yang perlu diperbaiki beserta alasannya.`,
@@ -920,6 +926,7 @@ const handleApprove = async (item: any) => {
 
   const handleVerify = async (item: any) => {
     try {
+      if (!canEditExamination(item, currentUser?.id)) throw new Error("Ambil pemeriksaan terlebih dahulu.");
       const selectedUnits = getSelectedAllocationUnits(item);
       const selectedProject = getAllocationProject(item);
       if (isUnitAllocationRequired(item)) {
@@ -1171,11 +1178,13 @@ const handleApprove = async (item: any) => {
   };
 
   const openRevisionDialog = (item: any) => {
+    if (isVerificationTask(item) && !canEditExamination(item, currentUser?.id)) return;
     const rows = getRevisionSourceItems(item);
     const context = getRevisionContext(item);
     const requestedUnitCount = getRequestedUnitCount(item);
     setRevisionDialogItem(item);
     setFullRevisionForm(signerRevisionForm(getInboxSurat(item)));
+    if (isVerificationTask(item) && isSharedExamination(item)) setRevisionTarget("requester");
     setRequesterRevisionMode("general");
     setRevisionNote(notes[item.id] || "");
     setKeu10RevisionItems(canProposeKeu10Correction(item) ? normalizeKeu10SubmissionItems(rows) : []);
@@ -2912,11 +2921,28 @@ const handleApprove = async (item: any) => {
             </div>
              <div data-testid="approval-detail-scroll" className="min-h-0 flex-none overflow-visible lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
                <div className="w-full space-y-4 p-4 pb-8 sm:p-6">
+                 {isVerificationTask(selectedItem) && isSharedExamination(selectedItem) && <section className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-500/30 bg-sky-500/5 p-4" aria-label="Penugasan pemeriksaan">
+                   <div><h3 className="text-sm font-semibold">{selectedItem.verification_claimed_by ? `Diambil oleh ${examinationClaimantName(selectedItem)}` : "Belum diambil"}</h3>
+                     <p className="mt-1 text-xs text-muted-foreground">{selectedItem.verification_claimed_by ? "Persetujuan tetap dilakukan Mgr. HRD & GA." : "Kandidat: Usman Huda / Tri Sulistyanto"}</p></div>
+                   {!selectedItem.verification_claimed_by && <Button disabled={processingId === selectedItem.id} onClick={async () => {
+                     setProcessingId(selectedItem.id);
+                     try {
+                       await suratApprovalApi.claimExamination(selectedItem.id);
+                       await queryClient.invalidateQueries({ queryKey: ['surat-inbox-detail', selectedItem.id] });
+                       toast.success("Pemeriksaan berhasil diambil");
+                     } catch (error: any) {
+                       toast.error(error.message || "Gagal mengambil pemeriksaan");
+                       await queryClient.invalidateQueries({ queryKey: ['surat-inbox-detail', selectedItem.id] });
+                     } finally { setProcessingId(null); }
+                   }}><ShieldCheck className="mr-2 h-4 w-4" />Ambil pemeriksaan</Button>}
+                 </section>}
                  {renderRequestSummary(selectedItem)}{renderRevisionHistory()}
                  {getRequestedUnitCount(selectedItem) > 0 && <UnitAllocationHistory suratId={selectedSuratId} />}
-                 {renderApprovalHistory(selectedItem)}{renderUnitAllocationPanel(selectedItem)}
+                 {renderApprovalHistory(selectedItem)}{renderDocumentsPanel(selectedItem)}
+                 <fieldset disabled={isVerificationTask(selectedItem) && !canEditExamination(selectedItem, currentUser?.id)} className="min-w-0 space-y-4">
+                 {renderUnitAllocationPanel(selectedItem)}
                  {renderConfiguredInputPanel(selectedItem)}{renderRecommendationPanel(selectedItem)}
-                 {renderDocumentsPanel(selectedItem)}{renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}
+                 {renderApprovalAttachmentPanel(selectedItem)}{renderVerificationNotePanel(selectedItem)}
                  <section className="sigap-panel">
                    <div className="mb-3 flex items-center gap-3"><MessageSquare className="h-5 w-5 text-primary" /><div>
                      <p className="text-sm font-semibold">{isVerificationTask(selectedItem) ? "Catatan pemeriksaan" : "Catatan persetujuan"}</p>
@@ -2932,6 +2958,7 @@ const handleApprove = async (item: any) => {
                      onChange={(event) => setNotes((previous) => ({ ...previous, [selectedItem.id]: event.target.value }))}
                      className="min-h-24 resize-y text-sm" />
                  </section>
+                 </fieldset>
                </div>
              </div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
@@ -2966,20 +2993,23 @@ const handleApprove = async (item: any) => {
                       <Button
                         variant="outline"
                         className="shrink-0 border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
-                        disabled={processingId === selectedItem.id}
+                        disabled={processingId === selectedItem.id || !canEditExamination(selectedItem, currentUser?.id)}
                         onClick={() => handleReturnToRequester(selectedItem)}
                       >
                         {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                         Minta perbaikan
                       </Button>
                     )}
+                    {isSharedExamination(selectedItem) && <Button variant="outline" disabled={processingId === selectedItem.id || !canEditExamination(selectedItem, currentUser?.id)} onClick={() => openRevisionDialog(selectedItem)}>
+                      <RefreshCw className="mr-2 h-4 w-4" />Revisi pemeriksa
+                    </Button>}
                     <Button variant="outline" disabled={summaryExportingId === selectedItem.id} onClick={() => void exportApprovalSummary(selectedItem)}>
                       {summaryExportingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
                       Export Summary
                     </Button>
-                    <Button className="shrink-0 bg-sky-600 text-white hover:bg-sky-500 sm:min-w-40" disabled={processingId === selectedItem.id} onClick={() => handleVerify(selectedItem)}>
+                    <Button className="shrink-0 bg-sky-600 text-white hover:bg-sky-500 sm:min-w-40" disabled={processingId === selectedItem.id || !canEditExamination(selectedItem, currentUser?.id)} onClick={() => handleVerify(selectedItem)}>
                       {processingId === selectedItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                      Simpan & lanjutkan
+                      {isSharedExamination(selectedItem) ? "Selesai pemeriksaan" : "Simpan & lanjutkan"}
                     </Button>
                   </div>
                 ) : String(activeSurat.status || "").toUpperCase() === "MENUNGGU_PERBAIKAN" ? (

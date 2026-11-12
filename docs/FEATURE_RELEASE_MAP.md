@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## SUR-49 Shared HRD GA Examination / Internal Goods (2026-11-12, [Codex], #938)
+
+Supersedes the abandoned six-purpose scratch plan (never applied). New HRD GA
+submissions use an atomic shared claim by Usman Huda or Tri Sulistyanto; only the
+claimant may examine or request revision, manager retains approval. Legacy frozen
+assignments remain untouched. PGD `goods` is non-asset internal procurement, not
+Fund or Asset and never dispatched externally; KEU1 petty cash stays internal.
+Migrations 20261112120000/20261112121000 install inactive capabilities; operator
+activation follows compatible application rollout. Staging then production user
+authorized; source tests pass, runtime rollout pending. Withdraw new usage
+activation without rewriting existing claims, signatures or revision history.
+
 ## SUR-50 Scoped Monitoring Document Details (2026-11-12, [Codex], #939)
 
 User authorizes full detail and related files within the existing monitoring
