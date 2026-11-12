@@ -1,5 +1,50 @@
 # Worklog
 
+## 2026-11-12 [Codex] SUR-49 Completed / Issue #938
+
+- Latest product decision implemented: GA purchases stock using EXISTING
+  Pengajuan Dana / Biaya Operasional. New PGD Permintaan Barang dari Stok GA is
+  internal, non-asset and non-disbursement. No fixed six-purpose routing or new
+  Fund usage; no automatic inventory balance or shortage purchase.
+- Usman Huda / Tri Sulistyanto share an atomic claim pool for new HRD GA tasks.
+  Only claimant saves/completes/requests revision; manager remains approver.
+  Full-form proposal records before/after, actor and reason, requester acceptance
+  resumes the same stage and retains claim. Manager SLA pauses pending review.
+- Source e13ea53/a23867c; PR944 staging, PR945 selective main, PR946 ancestry sync.
+  Staging initial runtime1d1933d, finalcdbe840f81a15a9f4ac331a4cc942eed34fa8094
+  contained production target664928ea1fd720ac99813f17d4e2d066b5b24254 before cutover.
+  Staging43153146687/43154780083 and production43155192911 SUCCESS;
+  public root/live/ready200 and exact version verified.
+- Migrations20261112120000/20261112121000 normalized combined SHA256
+  db1e2894521b5d3832101827a178150a72ffb40e44747b0e804b0c8febe6f64d.
+  Exact prior ledger audit, double-apply/activation rollback rehearsal, explicit
+  apply and ACL verification both environments. Ledgers staging270/prod267;
+  six scoped stock variants staging, three production. Master activation after
+  app health preserved business rows; every pre-existing usage unchanged,
+  including Dana Operasional. No migration repair or historical backfill.
+- Focused tests:218 existing impacted assertions plus three new inbox claim/action
+  cases; focused reruns, lint/typecheck/frontend+backend build and20 PGD PDF checks
+  passed. Disposable PostgreSQL verifies actual canonical registration/revision,
+  unauthorized mutations, claimant spoofing, no mandatory inputs, repeat install,
+  two-connection single winner, full proposal/requester acceptance/resume. Separate
+  migration administrator vs canonical owner exposed/fixed private schema ownership.
+- Live staging authenticated-role rollback acceptance with Test akun pusat passed
+  number/draft/registration, outbound exclusion, manager SLA pause, owner-only
+  mutation,30-to10 proposal/acceptance, retained claim and manager not auto-signed.
+  All test data rolled back. Desktop1440/mobile390 local browser synthetic fixture
+  verified claim command/read-only non-owner and no page overflow; not a logged-in
+  real examiner browser session or production business approval.
+- Production app0853e7ff79df healthy; PDF8f4cd7d9baad, tunnel57601ec6c36a,
+  outbound657fba2b5a1f, syncfc03d1194fee, external99e7d80fd17a and relay8e6d0b6c69db
+  unchanged. No vendor POST/resend or production document/signature mutation.
+- Audit high/critical gate passed;18 pre-existing moderate advisories remain,
+  dependency manifests unchanged. No release blocker. Private operator proofs
+  stay on operator hosts, no credentials in source or this worklog.
+- Durable: staging and production master IDs differ; resolve scoped canonical
+  sources rather than copying IDs. A private claim store is authority, public
+  columns only projections. Keep advisory/document/signature lock ordering and
+  preserve canonical function ownership when installing through a different role.
+
 ### 2026-11-12 [Codex] SUR-49 Stock GA Clarification
 
 - Latest user decision: GA bulk stock purchase uses the EXISTING Pengajuan Dana
