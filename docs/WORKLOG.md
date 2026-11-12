@@ -1,5 +1,38 @@
 # Worklog
 
+## 2026-11-12 [Codex] SUR-48 Verified Production Release
+
+- Completed; supersedes pending entries. Source2e597ec; staging PR934,
+  selective main PR935 ->5e5d961; ancestry-only sync PR936 ->8341ec8.
+- Production deploy43008717503 SUCCESS, live5e5d961; staging43008154539
+  SUCCESS, live8341ec8 contains main. Public version/live/ready/root and actual
+  registration category/split-guard bundles rechecked on12 November.
+- Migration20261111150000: staging266->267, production263->264. Exact digest
+  e0ee25e75ed2bfbb7952f2bdef0fb2a1d2eb715fbfd06bf42716ccbe26e902d8.
+  Double rehearsal, private ACL, public function/owner/ACL preservation and
+  twelve business-table hash checks passed. Activation preserves business data.
+- Configuration active: staging12 (seven normal plus five UJI), production7;
+  canonical active examiner resolution verified for both categories. Only two UJI
+  staging HRD RAB rules became optional; no production attachment rule changed.
+- GA -> Usman Huda; HRD -> Tri Sulistyanto. Mixed requests must be split.
+  No mandatory examiner checklist/input/file; revision/return remains available;
+  manager retains approval. Old document assignments and history preserved.
+- Impacted387/387, actual PostgreSQL RPC/concurrency tests, lint/tsc/build/audit
+  and responsive panel QA passed. Main CI43007118252 attempt2 passed without
+  source/assertion changes after an intermittent asynchronous KEU10 UI failure;
+  identical-source PR checks passed. No baseline-source failure proof claimed.
+- Initial auto staging stopped at missing migration ACK; acknowledged43005912701
+  passed. Redundant production43008569187 cancelled during quality BEFORE deploy;
+  replacement43008717503 reran all gates with the exact migration acknowledgement.
+- Production app98095c8de12a healthy after14 hours; six non-app IDs unchanged:
+  PDF8f4cd7d9baad, tunnel57601ec6c36a, outbound657fba2b5a1f, syncfc03d1194fee,
+  external99e7d80fd17a, relay8e6d0b6c69db. No business approval/submission,
+  vendor POST/resend, PDF regeneration or secret changes during testing.
+- Withdrawal: compare live configuration fingerprints; restore ONLY affected
+  steps/pools/rules from private activation evidence before a pre-SUR48 frontend.
+  Keep migration and frozen assignments. Root checkout untouched; context file
+  remains absent. Private activation records contain the full prior configuration.
+
 ## 2026-11-11 [Codex] SUR-48 Implementation / Mixed Requests Confirmed
 
 - User confirms mixed GA and HRD needs must be two submissions, including Kas
