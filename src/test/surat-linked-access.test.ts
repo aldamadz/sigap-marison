@@ -39,7 +39,7 @@ describe("linked recommendation document access", () => {
     expect(runtime).toContain('.eq("child_surat_id", childSuratId)');
     expect(runtime).toContain('.eq("link_type", "recommendation")');
     expect(runtime).toContain('.eq("status", "active")');
-    expect(runtime).toContain("await canReadActiveRecommendationViaParent(surat.id, userRes.user.id)");
+    expect(runtime).toContain("await canReadActiveRecommendationViaParent(surat.id, userRes.user.id, token)");
     expect(runtime).not.toContain("await getAuthorizedSurat(parent");
   });
 });

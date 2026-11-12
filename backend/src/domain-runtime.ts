@@ -2864,7 +2864,7 @@ const canReadSurat = async (surat, userId) => {
   return isActiveAdminProfile(profile);
 };
 
-const canReadActiveRecommendationViaParent = async (childSuratId, userId) => {
+const canReadActiveRecommendationViaParent = async (childSuratId, userId, token = null) => {
   const { data: links, error: linkError } = await supabase
     .from("surat_linked_documents")
     .select("parent_surat_id, link_type, status")
@@ -2887,10 +2887,15 @@ const canReadActiveRecommendationViaParent = async (childSuratId, userId) => {
     rows.push(signature);
     signaturesByParent.set(signature.surat_id, rows);
   }
-  return (parentsResult.data || []).some((parent) => hasDirectSuratAccess({
+  const participantAccess = (parentsResult.data || []).some((parent) => hasDirectSuratAccess({
     ...parent,
     surat_signatures: signaturesByParent.get(parent.id) || [],
   }, userId));
+  if (participantAccess || !token) return participantAccess;
+  const { data: readableParents, error: scopeError } = await createUserSupabaseClient(token)
+    .from("surat_registrasi").select("id").in("id", parentIds);
+  if (scopeError) throw Object.assign(new Error("Akses dokumen belum dapat diverifikasi."), { status: 503 });
+  return Array.isArray(readableParents) && readableParents.length > 0;
 };
 
 // Ownership comparisons must include the storage origin: the same bucket/path
@@ -4616,10 +4621,18 @@ const getAuthorizedSurat = async (suratId, token, authenticatedUser = null, { in
   surat.surat_attachments = attachmentsRes.data || [];
 
   const directAccess = await canReadSurat(surat, userRes.user.id);
-  const linkedParentAccess = directAccess
+  let monitoringAccess = false;
+  if (!directAccess) {
+    // Evaluate document scope with the caller JWT, never the service-role identity.
+    const { data: allowed, error: scopeError } = await createUserSupabaseClient(token)
+      .rpc("can_read_surat", { p_surat_id: surat.id });
+    if (scopeError) throw Object.assign(new Error("Akses dokumen belum dapat diverifikasi."), { status: 503 });
+    monitoringAccess = allowed === true;
+  }
+  const linkedParentAccess = directAccess || monitoringAccess
     ? false
-    : await canReadActiveRecommendationViaParent(surat.id, userRes.user.id);
-  if (!directAccess && !linkedParentAccess) {
+    : await canReadActiveRecommendationViaParent(surat.id, userRes.user.id, token);
+  if (!directAccess && !monitoringAccess && !linkedParentAccess) {
     const err = new Error("Forbidden");
     err.status = 403;
     throw err;
