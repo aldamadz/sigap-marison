@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-12 [Codex] SUR-49 Completed / Issue #938
+
+Supersedes the pending rollout entry below. PR #944 staging, #945 selective
+production, #946 ancestry synchronization; source e13ea53/a23867c. Live staging
+cdbe840f81a15a9f4ac331a4cc942eed34fa8094 contains production
+664928ea1fd720ac99813f17d4e2d066b5b24254. Deploy runs 43154780083 and 43155192911
+successful; public version/root/live/ready verified. Both forward migrations
+installed and activated after compatible app health. Production has three scoped
+Permintaan Barang dari Stok GA usages; existing usages, including Dana Operasional,
+remain unchanged. No new Fund usage, automatic stock balance or vendor dispatch.
+Shared Usman/Tri claiming applies to new documents; legacy frozen teams preserved.
+Withdraw new master activation only; retain claims, revision history and old forms.
+
 ## SUR-49 Shared HRD GA Examination / Internal Goods (2026-11-12, [Codex], #938)
 
 Supersedes the abandoned six-purpose scratch plan (never applied). New HRD GA
