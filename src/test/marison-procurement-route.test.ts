@@ -4,7 +4,7 @@ import vm from "node:vm";
 import { assertMarisonProcurementRoute, getMarisonProcurementRoute } from "../../backend/src/lib/marison-procurement-route";
 
 describe("procurement routing is decided by trusted database form identity", () => {
-  it.each(["finance_not_connected", "form_not_procurement", "form_identity_unavailable"])("blocks %s before payload/identity/file work", async code => {
+  it.each(["finance_not_connected", "form_not_procurement", "form_identity_unavailable", "internal_goods"])("blocks %s before payload/identity/file work", async code => {
     const rpc = vi.fn(async () => ({ data: code, error: null }));
     await expect(assertMarisonProcurementRoute({ rpc }, "letter")).rejects.toMatchObject({ status: 409, code });
     expect(rpc).toHaveBeenCalledWith("marison_procurement_routing_block", { p_surat_id: "letter" });

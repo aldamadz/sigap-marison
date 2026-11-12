@@ -8,6 +8,8 @@ type Fixture = {
   id: string; surat_id: string; task_type: string; step_order: number; role_name: string; is_signed: boolean;
   label_jabatan?: string;
   verifier_snapshot?: { user_id: string; full_name: string }[]; requires_unit_allocation?: boolean;
+  input_schema_snapshot?: Record<string, unknown>; verification_claimed_by?: string;
+  verification_required?: boolean; verification_status?: string;
   surat_registrasi: {
     id: string; no_surat: string; judul_surat: string; status: string; created_at: string; request_date: string; request_place: string;
     requester_snapshot: { full_name: string }; location_snapshot: { office: { name: string }; department: { name: string }; form: { nomor_form: string } };
@@ -26,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   approve: vi.fn(),
   reject: vi.fn(),
   verify: vi.fn(),
+  claim: vi.fn(),
   confirm: vi.fn(),
   realtimeFinish: null as ((key: string) => void) | null,
   detailError: false,
@@ -70,6 +73,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({
   suratApprovalApi: { requestProcessRevision: mocks.requestRevision, saveVerificationDraft:mocks.saveDraft,
+    claimExamination: mocks.claim,
     approveSurat: mocks.approve, rejectSurat: mocks.reject, verifySignature: mocks.verify },
 }));
 vi.mock("sonner", () => ({ toast: { error: mocks.error, success: mocks.noop } }));
@@ -100,6 +104,7 @@ beforeEach(() => {
   mocks.approve.mockReset().mockResolvedValue(undefined);
   mocks.reject.mockReset().mockResolvedValue(undefined);
   mocks.verify.mockReset().mockResolvedValue(undefined);
+  mocks.claim.mockReset().mockResolvedValue({});
   mocks.confirm.mockReset().mockResolvedValue(true);
   mocks.kpi=[];
   mocks.currentUser=null;mocks.detailError=false;
@@ -496,5 +501,36 @@ describe("Inbox requester data and attachment revision", () => {
     mocks.fixture.task_type = "verification";
     renderInbox();
     expect(screen.queryByRole("button", { name: /Minta perbaikan/ })).not.toBeInTheDocument();
+  });
+
+  const sharedTask = (claimedBy?: string) => {
+    mocks.currentUser = { id: "usman", full_name: "Usman Huda" };
+    Object.assign(mocks.fixture, { task_type: "verification", verification_required: true, verification_status: "pending",
+      input_schema_snapshot: { fields: [], hrd_ga_review: { mode: "claim" } },
+      verifier_snapshot: [{ user_id: "usman", full_name: "Usman Huda" }, { user_id: "tri", full_name: "Tri Sulistyanto" }],
+      verification_claimed_by: claimedBy });
+  };
+  it("requires a claim before any examination action and provides the claim command", async () => {
+    sharedTask(); renderInbox();
+    expect(screen.getByRole("button", { name: "Selesai pemeriksaan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Minta perbaikan" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Revisi pemeriksa" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Ambil pemeriksaan" }));
+    await waitFor(() => expect(mocks.claim).toHaveBeenCalledExactlyOnceWith("signature"));
+    expect(mocks.verify).not.toHaveBeenCalled();
+  });
+  it("keeps another claimant's task read-only without requesting claim again", () => {
+    sharedTask("tri"); renderInbox();
+    expect(screen.getByText("Diambil oleh Tri Sulistyanto")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ambil pemeriksaan" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Selesai pemeriksaan" })).toBeDisabled();
+    expect(screen.getByPlaceholderText("Tambahkan catatan pemeriksaan bila diperlukan")).toBeDisabled();
+  });
+  it("allows claimant full revision while never exposing manager approval", () => {
+    sharedTask("usman"); renderInbox();
+    expect(screen.getByRole("button", { name: "Selesai pemeriksaan" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Setujui" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Revisi pemeriksa" }));
+    expect(screen.getByRole("dialog", { name: "Perbaikan pengajuan" })).toBeInTheDocument();
   });
 });

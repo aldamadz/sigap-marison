@@ -3,10 +3,11 @@ import { assetModule } from "./asset/asset-module";
 import { fundModule } from "./fund/fund-module";
 import { unitModule } from "./unit/unit-module";
 import { nonUnitModule } from "./non-unit/non-unit-module";
+import { goodsModule } from "./goods/goods-module";
 import type { UsageDetailRecord } from "@/components/surat/form/surat-form-types";
 
 // Register all modules (hanya empat kategori canonical; tanpa generic fallback)
-export const modules = [assetModule, fundModule, unitModule, nonUnitModule];
+export const modules = [assetModule, fundModule, unitModule, nonUnitModule, goodsModule];
 
 export { resolveUsageModuleKey, getUsageModule };
 

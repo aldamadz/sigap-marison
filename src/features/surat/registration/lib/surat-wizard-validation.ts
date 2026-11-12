@@ -7,7 +7,7 @@
 
 import { isFundSubmissionType, usesFundSubmissionType } from "../usages/fund/fund-types";
 
-type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
+type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset" | "goods";
 
 // ── Input snapshot ──────────────────────────────────────────────────────────
 

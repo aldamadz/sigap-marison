@@ -40,8 +40,8 @@ describe("usage registry fail-closed", () => {
   });
 
   it("4. tidak ada fallback generic/non_unit", () => {
-    expect(modules).toHaveLength(4);
-    expect(modules.map(m => m.meta.key).sort()).toEqual(["asset", "non_asset", "non_unit", "unit"]);
+    expect(modules).toHaveLength(5);
+    expect(modules.map(m => m.meta.key).sort()).toEqual(["asset", "goods", "non_asset", "non_unit", "unit"]);
     expect(isUsageModuleRegistered("generic" as never)).toBe(false);
     expect(normalizeFormInputData({})).not.toHaveProperty("request_category");
     expect(normalizeFormInputData({ request_mode: "unit" }).request_category).toBe("unit");

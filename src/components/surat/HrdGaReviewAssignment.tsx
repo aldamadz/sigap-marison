@@ -4,6 +4,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 type Props = { config: HrdGaReviewConfig; items: unknown; frozenGroup?: HrdGaGroup; onChange: (items: Record<string, unknown>[]) => void };
 export function HrdGaReviewAssignment({ config, items, frozenGroup, onChange }: Props) {
+  if (config.mode === "claim") return <section className="space-y-2 border-y border-border py-4" aria-label="Pemeriksaan HRD & GA">
+    <h3 className="text-sm font-semibold">Pemeriksaan HRD & GA</h3>
+    <p className="text-sm"><span className="text-muted-foreground">Kandidat pemeriksa: </span><strong>{config.reviewers.ga.full_name} / {config.reviewers.hrd.full_name}</strong></p>
+    <p className="text-xs text-muted-foreground">Menunggu diambil salah satu pemeriksa.</p>
+  </section>;
   const rows = Array.isArray(items) ? items.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
   const group = hrdGaReviewGroup(rows, frozenGroup);
   const issue = hrdGaReviewIssue(rows, frozenGroup);

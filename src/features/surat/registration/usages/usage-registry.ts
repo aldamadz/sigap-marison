@@ -32,6 +32,7 @@ const KNOWN_CATEGORIES: ReadonlySet<string> = new Set([
   "unit",
   "non_asset",
   "non_unit",
+  "goods",
 ]);
 
 function isKnownCategory(value: unknown): value is UsageCategory {

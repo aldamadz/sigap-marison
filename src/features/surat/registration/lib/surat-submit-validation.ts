@@ -16,7 +16,7 @@ export interface MissingFieldSnapshot {
   label: string;
 }
 
-export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
+export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset" | "goods";
 
 export interface SuratSubmitValidationInput {
   uploadingRequirement: boolean;

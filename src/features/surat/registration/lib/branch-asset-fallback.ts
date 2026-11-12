@@ -24,7 +24,7 @@
  * trusted by the backend.
  */
 
-export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
+export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset" | "goods";
 
 export interface BranchAssetFallbackInput {
   officeKedudukan: "Pusat" | string | null | undefined;
@@ -40,7 +40,7 @@ export interface BranchAssetFallbackInput {
 export function isBranchAssetFallback(input: BranchAssetFallbackInput): boolean {
   if (!input.officeKedudukan || input.officeKedudukan === "Pusat") return false;
   if (input.branchHasRegisteredProjects) return false;
-  if (input.requestCategory !== "asset") return false;
+  if (input.requestCategory !== "asset" && input.requestCategory !== "goods") return false;
   if (!input.formUsageId?.trim()) return false;
   if (input.projectId != null && input.projectId !== "") return false;
   if (input.projectIsDefault !== true) return false;

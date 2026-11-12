@@ -3,7 +3,7 @@ export const INBOX_DETAIL_SELECT = `
   requires_unit_allocation, available_at, signer_snapshot,
   input_schema_snapshot, attachment_requirements_snapshot,
   verification_required, verification_status, verified_at, verified_by,
-  verification_note, verifier_snapshot,
+  verification_note, verifier_snapshot, verification_claimed_by, verification_claimed_at,
   surat_registrasi!inner (
     id, no_surat, judul_surat, status, current_step, created_at, updated_at,
     request_date, request_place, policy_snapshot,
