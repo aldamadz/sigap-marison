@@ -11,7 +11,8 @@ const actionClock = process.argv.includes('--action-clock');
 const receivingAuthority = process.argv.includes('--receiving-authority');
 const weekly = process.argv.includes('--weekly') || actionClock || receivingAuthority;
 const receiving = process.argv.includes('--receiving') || weekly;
-const signerScope = process.argv.includes('--signer-scope') || receiving || notifications;
+const monitoringDetails = process.argv.includes('--monitoring-details');
+const signerScope = process.argv.includes('--signer-scope') || monitoringDetails || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
 const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
 const monitoringRpcs = monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
@@ -145,6 +146,16 @@ try {
  if(!ready)throw Error('Disposable PostgreSQL not ready');
  run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],fixture+migration+migration+labels+labels
   +(signerScope ? signerScopeSetup+monitoringRpcs+signerScopeMigration+signerScopeMigration : '')+assertions+signerScopeAssertions);
+ if(monitoringDetails){
+  const patch=process.argv.includes('--baseline') ? '' : read('supabase/migrations/20261112100000_monitoring_readable_details.sql');
+  const approvalPolicySource=read('supabase/migrations/20260608093000_harden_surat_approval.sql');
+  const mutationPolicy=approvalPolicySource.slice(approvalPolicySource.indexOf('create policy "Creators current signers and admins can update surat"'),
+    approvalPolicySource.indexOf('create or replace function public.handle_approve_surat_v2('));
+  const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+   patch+patch+mutationPolicy+'grant update on public.surat_registrasi to authenticated;'+read('supabase/tests/monitoring_readable_details.integration.sql'));
+  if(!result.includes('Monitoring readable details: all assertions passed'))throw Error('Missing monitoring detail proof');
+  console.log('Monitoring readable details: real PostgreSQL RLS, scoped files, hierarchy and unchanged action authority passed.');
+ }
  const parallelReminder = () => new Promise((resolve,reject) => {
   const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});
   let output='',error='';child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});
