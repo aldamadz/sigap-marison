@@ -27,6 +27,20 @@
   Apply/deploy and authenticated staging acceptance still pending. No production
   changes; no real notification or outbound sent during local tests.
 
+### 2026-11-12 [Codex] NTF-08 Legacy Header Compatibility
+
+- Found the old header still calls generate_work_calendar_notifications. Preserve
+  its authenticated signature as a no-op so old browser bundles cannot create
+  implicit reminders. Retire only exact legacy calendar namespaced popup events;
+  existing notifications remain stored and workflow delivery remains enabled.
+- Updated migration (not yet applied) re-rehearsed twice with rollback on staging,
+  ledger still 270; preserved rows/ACL passed. Replaces the prior rehearsal digest:
+  ca303f9ab11ef1481756a3ce2a9f59e2336a7488c28a18323c2ce890d9989a55.
+- PR #949 created via GitHub CLI, no manual Submit needed. Browser acceptance
+  cannot use the user Chrome session because CUA could not validate its URL;
+  local Playwright visual proof and scoped staging database acceptance are used
+  separately, without claiming a live authenticated browser test.
+
 ### 2026-11-12 [Codex] SUR-49 Stock GA Clarification
 
 - Latest user decision: GA bulk stock purchase uses the EXISTING Pengajuan Dana

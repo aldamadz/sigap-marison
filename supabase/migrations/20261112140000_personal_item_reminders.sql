@@ -90,10 +90,29 @@ returns boolean language sql stable security definer set search_path='' as $$
   and r.status='sent' and r.popup and personal_reminder_internal.target_active(r.user_id,r.calendar_entry_id,r.surat_id));
 $$;
 
+create or replace function personal_reminder_internal.retired(p_data jsonb)
+returns boolean language sql immutable set search_path='' as $$
+ select coalesce(p_data->>'category','') in ('team_digest','calendar_scheduled','calendar_deadline','calendar_result')
+  or coalesce(p_data->>'dedupe_key','') like 'work-calendar:%' and coalesce(p_data->>'category','') in ('deadline_overdue','follow_up_reminder','blocked_escalation');
+$$;
+
 -- Disable the retired automatic reminders; ordinary workflow notifications keep
 -- their existing transport and authorization. Defaults never imply user consent.
 alter table public.notification_preferences alter column team_notifications set default false,
  alter column calendar_reminders set default false,alter column calendar_push set default false;
+
+-- Older browser bundles still invoke this on header load. Keep the RPC shape,
+-- but it must no longer schedule reminders without a per-item opt-in.
+create or replace function public.generate_work_calendar_notifications(
+ p_today date default null,p_escalation_work_days integer default 2,p_debounce_hours integer default 6)
+returns integer language plpgsql security definer set search_path='' as $$
+begin
+ if auth.uid() is null then raise exception 'Authentication required' using errcode='42501';end if;
+ return 0;
+end $$;
+alter function public.generate_work_calendar_notifications(date,integer,integer) owner to postgres;
+revoke all on function public.generate_work_calendar_notifications(date,integer,integer) from public,anon,authenticated,service_role;
+grant execute on function public.generate_work_calendar_notifications(date,integer,integer) to authenticated;
 do $transport$
 declare definition text; anchor text;
 begin
@@ -101,15 +120,15 @@ begin
  if position('personal_reminder_internal.popup_allowed' in definition)=0 then
   anchor:='where b.user_id=new.user_id';
   if position(anchor in definition)=0 then raise exception 'Unknown notification enqueue body';end if;
-  definition:=replace(definition,anchor,anchor||E'\n  and coalesce(new.data->>''category'','''') not in (''team_digest'',''calendar_scheduled'',''calendar_deadline'',''calendar_result'')\n  and (new.data->>''category'' is distinct from ''personal_reminder'' or personal_reminder_internal.popup_allowed(new.id,new.user_id,new.data))');
+  definition:=replace(definition,anchor,anchor||E'\n  and not personal_reminder_internal.retired(new.data)\n  and (new.data->>''category'' is distinct from ''personal_reminder'' or personal_reminder_internal.popup_allowed(new.id,new.user_id,new.data))');
   execute definition;
  end if;
  definition:=pg_get_functiondef('public.claim_notification_push(integer,uuid[])'::regprocedure);
  if position('personal_reminder_internal.popup_allowed' in definition)=0 then
   anchor:='where d.status in (''pending'',''leased'') and (';
   if position(anchor in definition)=0 or position('where (d.status=''pending''' in definition)=0 then raise exception 'Unknown notification claim body';end if;
-  definition:=replace(definition,anchor,anchor||E'coalesce(n.data->>''category'','''') in (''team_digest'',''calendar_scheduled'',''calendar_deadline'',''calendar_result'')\n   or n.data->>''category''=''personal_reminder'' and not personal_reminder_internal.popup_allowed(n.id,n.user_id,n.data) or ');
-  definition:=replace(definition,'where (d.status=''pending''',E'where coalesce(n.data->>''category'','''') not in (''team_digest'',''calendar_scheduled'',''calendar_deadline'',''calendar_result'')\n   and (n.data->>''category'' is distinct from ''personal_reminder'' or personal_reminder_internal.popup_allowed(n.id,n.user_id,n.data)) and (d.status=''pending''');
+  definition:=replace(definition,anchor,anchor||E'personal_reminder_internal.retired(n.data)\n   or n.data->>''category''=''personal_reminder'' and not personal_reminder_internal.popup_allowed(n.id,n.user_id,n.data) or ');
+  definition:=replace(definition,'where (d.status=''pending''',E'where not personal_reminder_internal.retired(n.data)\n   and (n.data->>''category'' is distinct from ''personal_reminder'' or personal_reminder_internal.popup_allowed(n.id,n.user_id,n.data)) and (d.status=''pending''');
   execute definition;
  end if;
 end $transport$;
@@ -154,6 +173,7 @@ alter function public.save_personal_reminder(text,uuid,timestamptz,boolean,integ
 alter function public.generate_notification_reminders_at(timestamptz,uuid[]) owner to postgres;
 alter function personal_reminder_internal.target_active(uuid,uuid,uuid) owner to postgres;
 alter function personal_reminder_internal.popup_allowed(uuid,uuid,jsonb) owner to postgres;
+alter function personal_reminder_internal.retired(jsonb) owner to postgres;
 revoke all on all functions in schema personal_reminder_internal from public,anon,authenticated,service_role;
 notify pgrst,'reload schema';
 commit;

@@ -11,6 +11,8 @@ select check_ok(not has_table_privilege('authenticated','personal_reminders','up
 select check_ok(not has_function_privilege('anon','save_personal_reminder(text,uuid,timestamptz,boolean,integer)','execute'),'anonymous denied');
 select check_ok(not has_function_privilege('service_role','generate_notification_reminders_at(timestamptz,uuid[])','execute'),'client clock denied');
 select set_config('request.jwt.claim.sub',tid(1)::text,true);set local role authenticated;
+select check_ok(generate_work_calendar_notifications(current_date,1,1)=0,'legacy header generator cannot schedule reminders');
+select check_ok(not exists(select 1 from personal_reminders),'legacy browser call does not create opt-in');
 select check_ok(save_personal_reminder('calendar',tid(950))->>'status'='off','cancel unscheduled is no-op');
 do $$begin begin perform save_personal_reminder(null,tid(950),now()+interval '1 hour');exception when invalid_parameter_value then return;end;raise exception 'null kind allowed';end$$;
 do $$begin begin perform save_personal_reminder('calendar',tid(951),now()+interval '1 hour');exception when insufficient_privilege then return;end;raise exception 'another owner allowed';end$$;
@@ -65,6 +67,8 @@ select check_ok((select count(*)=2 from personal_reminders where status='cancell
 insert into notifications(id,user_id,title,is_read,data) values(tid(956),tid(1),'Approval',false,'{"category":"approval"}'),(tid(957),tid(1),'Legacy',false,'{"category":"calendar_scheduled"}');
 select check_ok(exists(select 1 from notification_push_deliveries where notification_id=tid(956)),'normal workflow notifications unchanged');
 select check_ok(not exists(select 1 from notification_push_deliveries where notification_id=tid(957)),'retired auto categories suppressed');
+insert into notifications(id,user_id,title,is_read,data) values(tid(958),tid(1),'Legacy header',false,'{"category":"deadline_overdue","dedupe_key":"work-calendar:deadline_overdue:fixture"}');
+select check_ok(not exists(select 1 from notification_push_deliveries where notification_id=tid(958)),'legacy header automatic popup suppressed');
 select check_ok(exists(select 1 from claim_notification_push(20,array[tid(1)]) where notification_id=tid(956)),'normal workflow delivery still claims');
 select set_config('request.jwt.claim.sub',tid(2)::text,true);set local role authenticated;
 select check_ok(save_personal_reminder('surat',tid(11),now()+interval '1 hour')->>'status'='scheduled','same department may schedule visible surat');
