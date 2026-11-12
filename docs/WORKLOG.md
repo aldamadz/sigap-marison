@@ -1,5 +1,25 @@
 # Worklog
 
+## 2026-11-12 [Codex] SUR-50 Scoped Monitoring Details / Issue #939
+
+- User explicitly prefers full detail/files for documents already visible in
+  organization/signature monitoring, after Usman production diagnosis66 visible,
+  63 progress-only,3 full. No global access or mutation/approval expansion.
+- Separate branch codex/monitoring-readable-details-20261112 from main5e5d961;
+  SUR49 purpose/claim work remains incomplete and is NOT included in this release.
+- Migration20261112100000 aligns can_read_surat with existing progress scope,
+  checks nonrecursive dependency shape, retains anonymous denial. Backend file
+  readers use the caller JWT for canonical read authority, including active linked
+  recommendation parents. Notifications, upload, approval and reminder authority
+  remain on existing participant/current-assignment rules.
+- New real PostgreSQL tests fail on baseline at department-colleague detail and
+  pass after migration twice: full items/files/signature detail, same list scope,
+  dynamic transfer, unrelated departments/KC/KCP, inactive/deleted actors and
+  anonymous denial, unchanged signer inbox and reminder permissions. BFF tests
+  cover strict boolean scope result, caller JWT and fail-closed lookup failure.
+- Status: implementation/testing; no runtime/DB change yet for SUR50. Existing
+  SUR48 production5e5d961/staging8341ec8 remains live. PROJECT_CONTEXT absent.
+
 ## 2026-11-11 [Codex] SUR-48 Implementation / Mixed Requests Confirmed
 
 - User confirms mixed GA and HRD needs must be two submissions, including Kas

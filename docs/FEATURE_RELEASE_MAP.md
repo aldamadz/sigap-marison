@@ -1,5 +1,15 @@
 # SIGAP Feature and Release Map
 
+## SUR-50 Scoped Monitoring Document Details (2026-11-12, [Codex], #939)
+
+User authorizes full detail and related files within the existing monitoring
+scope, not company-wide access or new approval/edit rights. New migration
+20261112100000 and caller-JWT BFF file authority; no scope list change, worker
+rollout or business backfill. Test staging before selective production release.
+Independent from unfinished SUR49 purpose/claim work. Implementation tests pass;
+runtime rollout pending. Withdraw via forward migration restoring read helper;
+do not reset document rows or revoke unrelated grants.
+
 ### 2026-11-11 [Codex] SUR-48 Implemented / Awaiting Runtime Release
 
 User confirms mixed requests must be split. Per-item GA/HRD categories, bulk

@@ -254,6 +254,11 @@ describe("PDF job preview fast path", () => {
   });
 
   it("rejects another user before reading jobs or minting a viewer token", async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) !== "https://database.test/rest/v1/rpc/can_read_surat") throw new Error("Unexpected network");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer session-token");
+      return new Response("false", { headers: { "Content-Type": "application/json" } });
+    });
     const clients = createClients({ createdBy: "other-requester" });
     booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
     const response = await booted!.app.inject({
@@ -263,6 +268,34 @@ describe("PDF job preview fast path", () => {
     expect(response.statusCode).toBe(403);
     expect(clients.supabase.from).not.toHaveBeenCalledWith("document_pdf_jobs");
     expect(clients.tokenInserts).toHaveLength(0);
+  });
+
+  it("serves an authorized monitoring reader the cached PDF with a viewer token", async () => {
+    const clients = createClients({ createdBy: "other-requester" });
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) !== "https://database.test/rest/v1/rpc/can_read_surat") throw new Error("Unexpected network");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer session-token");
+      expect(JSON.parse(String(init?.body))).toEqual({ p_surat_id: suratId });
+      return new Response("true", { headers: { "Content-Type": "application/json" } });
+    });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const response = await booted!.app.inject({ method: "GET", url: `/api/documents/${suratId}/pdf`, headers: { authorization: "Bearer session-token" } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: "ready", viewUrl: expect.stringMatching(/^\/api\/files\/view\//) });
+    expect(clients.tokenInserts).toHaveLength(1);
+  });
+
+  it("does not mint a viewer token when monitoring permission cannot be verified", async () => {
+    const clients = createClients({ createdBy: "other-requester" });
+    vi.mocked(fetch).mockImplementation(async input => {
+      if (String(input) !== "https://database.test/rest/v1/rpc/can_read_surat") throw new Error("Unexpected network");
+      return new Response('{"message":"Synthetic unavailable"}', { status: 503, headers: { "Content-Type": "application/json" } });
+    });
+    booted!.runtime.setDomainRuntimeDependenciesForTest(clients);
+    const response = await booted!.app.inject({ method: "GET", url: `/api/documents/${suratId}/pdf`, headers: { authorization: "Bearer session-token" } });
+    expect(response.statusCode).toBe(503);
+    expect(clients.tokenInserts).toHaveLength(0);
+    expect(clients.supabase.from).not.toHaveBeenCalledWith("document_pdf_jobs");
   });
 
   it("still loads attachment references for the arbitrary file-token route", async () => {
