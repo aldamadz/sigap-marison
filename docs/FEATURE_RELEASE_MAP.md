@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-12 [Codex] SUR-48 Released and Verified
+
+Supersedes pending status below. Production5e5d961 (PR935, successful43008717503),
+staging8341ec8 (PR934/936, successful43008154539). Migration20261111150000:
+production264/staging267 ledger entries. Active on seven production and twelve
+staging HRD manager stages: GA -> Usman; HRD -> Tri; mixed requests must be split.
+No mandatory examiner checklist/input/file; manager remains approver. Old routes
+preserved. Impacted387 tests, actual PostgreSQL RPCs, hosted gates, responsive
+panel QA and public health/bundle smoke passed; public/config checks repeated
+12 November. No worker rollout or resend. Withdrawal requires scoped config
+restoration before an old frontend; keep migration and frozen assignments.
+
 ### 2026-11-11 [Codex] SUR-48 Implemented / Awaiting Runtime Release
 
 User confirms mixed requests must be split. Per-item GA/HRD categories, bulk
