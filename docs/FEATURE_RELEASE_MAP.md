@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-12 [Codex] SUR-50 Released and Verified
+
+Productionff17964 / successful43143921737; staginge0bb58e / successful43143527758
+contains main (PR940/941/942). Migration20261112100000 verified: stage268/prod265
+ledger entries. Existing monitoring scope now permits full detail/related files;
+Usman production66 visible/66 full, actual authenticated RLS and detail RPC tested.
+No new edit/approval/reminder/upload rights. Caller-JWT file gate installed and
+anonymous401 retained. Impacted157 tests, PostgreSQL/RLS and hosted gates pass;
+workers unchanged, no business mutation/resend. Valid-user PDF endpoint tested
+synthetically, not via a logged-in Usman browser. SUR49 pooled claiming/new usages
+are NOT part of this release and remain unfinished. Withdrawal: restore read
+helper through a forward migration and scoped app rollback, never reset data.
+
 ## SUR-50 Scoped Monitoring Document Details (2026-11-12, [Codex], #939)
 
 User authorizes full detail and related files within the existing monitoring
