@@ -1,5 +1,14 @@
 export const isVerificationTask = (item: any) => item?.task_type === "verification";
 
+export const isSharedExamination = (item: any) =>
+  item?.input_schema_snapshot?.hrd_ga_review?.mode === "claim";
+
+export const canEditExamination = (item: any, userId?: string) =>
+  !isSharedExamination(item) || Boolean(userId && item?.verification_claimed_by === userId);
+
+export const examinationClaimantName = (item: any) =>
+  item?.verifier_snapshot?.find((person: any) => person.user_id === item?.verification_claimed_by)?.full_name || "pemeriksa lain";
+
 // A signature can yield two independent inbox tasks when its assigned signer
 // is also a verifier. The task type is therefore part of every UI identity.
 export const getInboxTaskKey = (item: any): string | null => {

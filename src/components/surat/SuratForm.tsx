@@ -332,7 +332,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const getRequestCategory = (): RequestCategory | null => {
     const category = formData.form_input_data.request_category;
-    return category === "asset" || category === "unit" || category === "non_unit" || category === "non_asset"
+    return category === "asset" || category === "unit" || category === "non_unit" || category === "non_asset" || category === "goods"
       ? category
       : null;
   };
@@ -2215,7 +2215,7 @@ export function SuratForm({ onSuccess, isLoading, setIsLoading, setJudulForDispl
 
   const hrdGaContext = hrdGaReviewContext(selectedUsage, externalRevision ? externalRevision.policySnapshot ?? {} : undefined);
   const validateRegistration = (signerAssignments: SignerAssignment[] = signers) => {
-    const reviewIssue = hrdGaContext && hrdGaReviewIssue(effectiveFormInputData.items, hrdGaContext.frozenGroup);
+    const reviewIssue = hrdGaContext && hrdGaContext.config.mode !== "claim" && hrdGaReviewIssue(effectiveFormInputData.items, hrdGaContext.frozenGroup);
     if (reviewIssue) {
       toast({ variant: "destructive", title: "Kategori pemeriksaan belum valid", description: reviewIssue });
       return false;

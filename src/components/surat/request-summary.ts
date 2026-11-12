@@ -4,6 +4,7 @@ export const formatRequestCategory = (value: unknown) => {
   if (category === "unit") return "Pengajuan SPK";
   if (category === "non_unit") return "Pengajuan Non Unit";
   if (category === "non_asset") return "Pengajuan Dana";
+  if (category === "goods") return "Permintaan Barang dari Stok GA";
   return String(value || "-");
 };
 

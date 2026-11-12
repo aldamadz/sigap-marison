@@ -1,5 +1,30 @@
 # Worklog
 
+### 2026-11-12 [Codex] SUR-49 Stock GA Clarification
+
+- Latest user decision: GA bulk stock purchase uses the EXISTING Pengajuan Dana
+  with Biaya Operasional, no new fund usage. New PGD usage is named Permintaan
+  Barang dari Stok GA: quantities/specifications, no disbursement, internal only.
+- Shared Usman/Tri examination still applies. No automatic inventory balances,
+  automatic shortage purchase, vendor POST or rewriting previous submissions.
+
+## 2026-11-12 [Codex] SUR-49 Shared Examination / Issue #938
+
+- Supersedes obsolete fixed-purpose experiment; it was never committed/applied.
+- User: both Usman/Tri may claim any eligible HRD GA examination; no per-item
+  category; manager approves; legacy frozen assignments preserved. Goods PGD
+  explicitly stays internal SIGAP (user clarification), KEU1 also stays internal.
+- Two new migrations: private claim/audit store, canonical mutation ownership,
+  server-owned display columns, shared UI and independent goods category/routing.
+- Real disposable PostgreSQL: registration, unauthorized claims, draft/verify/
+  return controls, audit, legacy routing, no mandatory input and two-connection
+  single winner passed. Focused UI tests/lint/typecheck/frontend build passed.
+- Runtime not yet changed. Remaining: extended checks, preflight/rehearsal,
+  staged activation/acceptance and selective production promotion. No vendor POST
+  or production business approval, document mutation or historical backfill.
+- Durable: shared claim must preserve canonical advisory/document/signature lock
+  order; read-only candidates do not acquire action authority through monitoring.
+
 ## 2026-11-12 [Codex] SUR-50 Scoped Monitoring Details / Issue #939
 
 - User explicitly prefers full detail/files for documents already visible in

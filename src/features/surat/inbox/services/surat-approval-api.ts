@@ -1,6 +1,8 @@
 import { suratService } from "@/services/surat.service";
 
 export const suratApprovalApi = {
+  claimExamination: (...args: Parameters<typeof suratService.claimExamination>) =>
+    suratService.claimExamination(...args),
   approveSurat: (...args: Parameters<typeof suratService.approveSurat>) =>
     suratService.approveSurat(...args),
   rejectSurat: (...args: Parameters<typeof suratService.rejectSurat>) =>

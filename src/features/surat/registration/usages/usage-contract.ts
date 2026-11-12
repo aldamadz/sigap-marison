@@ -15,8 +15,8 @@ import type {
 import type { UnitAvailabilityState } from "./unit/unit-availability";
 import type { RequesterRevisionSnapshot, RequesterRevisionAttachment } from "@/lib/requester-revision-summary";
 
-export type UsageCategory = "asset" | "unit" | "non_asset" | "non_unit";
-/** Hanya empat kategori canonical yang didukung. Tidak ada modul generic. */
+export type UsageCategory = "asset" | "unit" | "non_asset" | "non_unit" | "goods";
+/** Kategori canonical; barang non-aset internal berbeda dari pencairan dana. */
 export type UsageModuleKey = UsageCategory;
 
 /** Fail-closed: resolver/module tidak pernah menebak kategori. */

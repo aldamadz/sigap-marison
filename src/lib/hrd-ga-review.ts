@@ -9,6 +9,7 @@ export type HrdGaReviewConfig = {
   version: 1;
   department_id: string;
   reviewers: Record<HrdGaGroup, { user_id: string; full_name: string }>;
+  mode?: "claim";
 };
 const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -19,16 +20,18 @@ export function normalizeHrdGaReviewConfig(value: unknown): HrdGaReviewConfig | 
   if (config.version !== 1 || !uuid(config.department_id)) return null;
   const ga = record(reviewers.ga), hrd = record(reviewers.hrd);
   if (!uuid(ga.user_id) || !uuid(hrd.user_id) || ga.user_id === hrd.user_id) return null;
+  if (config.mode !== undefined && config.mode !== "claim") return null;
   return { version: 1, department_id: config.department_id, reviewers: {
     ga: { user_id: ga.user_id, full_name: String(ga.full_name || "Tim GA").slice(0, 160) },
     hrd: { user_id: hrd.user_id, full_name: String(hrd.full_name || "Tim HRD").slice(0, 160) },
-  } };
+  }, ...(config.mode === "claim" ? { mode: "claim" as const } : {}) };
 }
 export function hrdGaReviewContext(usage: unknown, revisionPolicy?: unknown) {
   if (revisionPolicy !== undefined) {
     const frozen = record(record(revisionPolicy).hrd_ga_review);
     const config = normalizeHrdGaReviewConfig(frozen.config);
-    return config && isHrdGaGroup(frozen.group) ? { config, frozenGroup: frozen.group } : null;
+    return config && (config.mode === "claim" || isHrdGaGroup(frozen.group))
+      ? { config, frozenGroup: isHrdGaGroup(frozen.group) ? frozen.group : undefined } : null;
   }
   const steps = record(usage).form_usage_steps;
   if (!Array.isArray(steps)) return null;
@@ -54,6 +57,7 @@ export function hrdGaReviewIssue(items: unknown, frozenGroup?: HrdGaGroup): stri
 }
 export function hrdGaReviewerSummary(usage: unknown, items: unknown, revisionPolicy?: unknown) {
   const context = hrdGaReviewContext(usage, revisionPolicy);
+  if (context?.config.mode === "claim") return `Tim pemeriksa: ${context.config.reviewers.ga.full_name} / ${context.config.reviewers.hrd.full_name}`;
   const group = context && hrdGaReviewGroup(items, context.frozenGroup);
   return group && context ? `${HRD_GA_LABELS[group]} · ${context.config.reviewers[group].full_name}` : null;
 }

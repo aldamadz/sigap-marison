@@ -186,6 +186,32 @@ try {
       const routing = read(migrationRoot + "20261111150000_hrd_ga_review_assignment.sql");
       run(psqlArgs, routing + routing);
       process.stdout.write(run(psqlArgs, read("supabase/tests/hrd_ga_review.integration.sql")));
+      if (process.argv.includes("--hrd-ga-claim")) {
+        run(psqlArgs, canonical("20260618120000_form_usage_step_verification.sql", "verify_surat_signature"));
+        run(psqlArgs, canonical("20260707113000_save_surat_verification_draft.sql", "save_surat_verification_draft"));
+        const claim = read(migrationRoot + "20261112120000_hrd_ga_shared_claim.sql");
+        run(psqlArgs, claim + claim);
+        const goods = read(migrationRoot + "20261112121000_internal_non_asset_goods.sql");
+        run(psqlArgs, canonical("20261103160000_procurement_pgd_only.sql", "marison_procurement_routing_block"));
+        run(psqlArgs, goods + goods);
+        process.stdout.write(run(psqlArgs, read("supabase/tests/hrd_ga_claim.integration.sql")));
+        const submitClaim = (actor) => new Promise((resolve, reject) => {
+          const child = spawn("docker", psqlArgs);
+          let stdout = "", stderr = "";
+          child.stdout.on("data", data => { stdout += data; });
+          child.stderr.on("data", data => { stderr += data; });
+          child.on("error", reject);
+          child.on("close", code => resolve({ code, stdout, stderr }));
+          child.stdin.end(`set role authenticated; select set_config('request.jwt.claim.sub',keu10_test.id(${actor})::text,false);
+            select public.claim_hrd_ga_examination((select event_id from keu10_test.results where key='claim-concurrency'))->>'actor_id';`);
+        });
+        const claims = await Promise.all([submitClaim(961), submitClaim(962)]);
+        if (claims.filter(result => result.code === 0).length !== 1
+          || claims.filter(result => /sudah diambil/.test(result.stderr)).length !== 1) {
+          throw new Error(`Examiner claim concurrency failed: ${JSON.stringify(claims)}`);
+        }
+        process.stdout.write("Examiner claim concurrency: exactly one winner across two connections.\n");
+      }
     }
     if (process.argv.includes("--configured-signer-removal")) {
       const removal = process.argv.includes("--removal-baseline") ? "" : read(migrationRoot + "20261111110000_requester_configured_signer_removal.sql");
@@ -329,6 +355,15 @@ try {
           run(psqlArgs, keu1Totals);
         }
         process.stdout.write(run(psqlArgs, read('supabase/tests/full_signer_revision_keu1_totals.integration.sql')));
+        if (process.argv.includes('--claim-full-revision')) {
+          run(psqlArgs, canonical('20260618120000_form_usage_step_verification.sql', 'verify_surat_signature'));
+          run(psqlArgs, canonical('20260707113000_save_surat_verification_draft.sql', 'save_surat_verification_draft'));
+          run(psqlArgs, read('supabase/tests/hrd_ga_claim_full_revision.before.sql'));
+          run(psqlArgs, read(migrationRoot + '20261111150000_hrd_ga_review_assignment.sql'));
+          const claim = read(migrationRoot + '20261112120000_hrd_ga_shared_claim.sql');
+          run(psqlArgs, claim + claim);
+          process.stdout.write(run(psqlArgs, read('supabase/tests/hrd_ga_claim_full_revision.integration.sql')));
+        }
       }
       // Contention runs only inside this no-network disposable database.
       for (const lock of [

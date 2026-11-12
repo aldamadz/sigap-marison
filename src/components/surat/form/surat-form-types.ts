@@ -40,7 +40,7 @@ export type MasterData = {
   projects: MasterRecord[];
 };
 
-export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset";
+export type RequestCategory = "asset" | "unit" | "non_unit" | "non_asset" | "goods";
 export type CandidateScope = "manual" | "request_office" | "request_department" | "branch_office_or_request_department" | "head_office" | "all_offices";
 export type SuratStepActionType = "approval" | "unit_allocation" | "configured_input";
 export type SignerAssigneeMode = "select" | "requester";

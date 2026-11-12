@@ -1642,6 +1642,12 @@ export const suratService = {
     return true;
   },
 
+  async claimExamination(signatureId: string) {
+    const { data, error } = await supabase.rpc("claim_hrd_ga_examination", { p_signature_id: signatureId });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
   async verifySignature(
     signatureId: string,
     note: string = "",

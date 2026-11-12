@@ -100,6 +100,7 @@ const gates = new Set();
 if (allChangedFiles.some(file => /monitoring_readable_details.*\.sql$/u.test(file))) gates.add('monitoring-readable-details-sql');
 if (allChangedFiles.some(file => /configured_signer_removal.*\.sql$/u.test(file))) gates.add('configured-signer-removal-sql');
 if (allChangedFiles.some(file => /hrd_ga_review.*\.sql$/u.test(file))) gates.add('hrd-ga-review-sql');
+if (allChangedFiles.some(file => /hrd_ga_shared_claim.*\.sql$|internal_non_asset_goods.*\.sql$/u.test(file))) gates.add('hrd-ga-claim-sql');
 if (allChangedFiles.some(file => /docker.*retention|production-deploy-lock/.test(file))) gates.add('docker-image-retention');
 for (const file of allChangedFiles) {
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
@@ -161,6 +162,11 @@ for (const gate of gates) {
   }
   if (gate === 'hrd-ga-review-sql') {
     run('node', ['scripts/test-keu10-workflow-sql.mjs', '--hrd-ga-review']);
+    continue;
+  }
+  if (gate === 'hrd-ga-claim-sql') {
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--hrd-ga-review', '--hrd-ga-claim']);
+    run('node', ['scripts/test-keu10-workflow-sql.mjs', '--full-signer-revision', '--claim-full-revision']);
     continue;
   }
   if (gate === 'actionable-dashboard-sql') {

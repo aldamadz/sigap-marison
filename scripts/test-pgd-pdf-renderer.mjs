@@ -13,6 +13,20 @@ import {
 const PGD_MASTER_FORM = { id: "form-pgd", nama_form: "FORM PERMINTAAN BARANG & JASA", nomor_form: "FM-UAI.PGD-07-77" };
 const NON_PGD_MASTER_FORM = { id: "form-rec", nama_form: "FORM REKOMENDASI", nomor_form: "FM-UAI.HRD-30-00" };
 
+test("PGD stock GA is non-asset goods, without financial disbursement fields", async () => {
+  const data = normalizePgdDocumentData({
+    no_surat: "001/UAI/06-000.1.1/XI/2026", judul_surat: "Permintaan Barang dari Stok GA",
+    is_aset: false, resolved_master_form: PGD_MASTER_FORM,
+    form_input_data: { request_category: "goods", request_mode: "barang", is_aset: false,
+      items: [{ nama_barang: "Kertas A4", jumlah: 10, satuan: "Rim", status: "2" }], catatan: "Diambil dari stok GA." },
+  });
+  assert.equal(data.isAsset, false);
+  assert.equal(data.items[0].quantity, "10");
+  assert.ok(!JSON.stringify(buildPgdDocumentDefinition(data)).includes("Jenis dana:"));
+  const pdf = await renderPgdPdf(data);
+  assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+});
+
 const stubClient = ({ usage = null, usageError = null } = {}) => ({
   from: (table) => ({
     select: () => ({
