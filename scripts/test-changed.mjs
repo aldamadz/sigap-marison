@@ -106,6 +106,7 @@ for (const file of allChangedFiles) {
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
   if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
+  if (/personal_item_reminders.*\.sql$/u.test(file)) gates.add('personal-reminders-sql');
   if (/department_receiving_periods.*\.sql$/u.test(file)) gates.add('department-receiving-sql');
   if (/department_receiving_authority.*\.sql$/u.test(file)) gates.add('department-receiving-authority-sql');
   if (/weekly_department_sla.*\.sql$/u.test(file)) gates.add('department-weekly-sql');
@@ -183,6 +184,10 @@ for (const gate of gates) {
   }
   if (gate === 'notification-delivery-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--notifications']);
+    continue;
+  }
+  if (gate === 'personal-reminders-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--personal-reminders']);
     continue;
   }
   if (gate === 'department-receiving-authority-sql') {

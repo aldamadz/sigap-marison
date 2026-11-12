@@ -6,7 +6,8 @@ const start = source.indexOf('create or replace function public.calculate_busine
 const businessMinutes = source.slice(start, source.indexOf('$$;',start)+3);
 const migration = read('supabase/migrations/20261019090000_actionable_role_dashboard.sql');
 const labels = read('supabase/migrations/20261019091000_actionable_role_dashboard_stage_labels.sql');
-const notifications = process.argv.includes('--notifications');
+const personalReminders = process.argv.includes('--personal-reminders');
+const notifications = process.argv.includes('--notifications') || personalReminders;
 const actionClock = process.argv.includes('--action-clock');
 const receivingAuthority = process.argv.includes('--receiving-authority');
 const weekly = process.argv.includes('--weekly') || actionClock || receivingAuthority;
@@ -184,6 +185,26 @@ try {
   const claims=await Promise.all([claim(),claim()]);
   if(claims.filter(output=>/^1$/m.test(output)).length!==1)throw Error('Concurrent queue claims must have exactly one winner');
   console.log('NTF06: notification assertions and two-connection queue concurrency passed.');
+  if(personalReminders){
+   const policy=read('supabase/migrations/20261112140000_personal_item_reminders.sql');
+   const owners=`do $$declare t record;begin for t in select tablename from pg_tables where schemaname='public' loop
+    execute format('alter table public.%I owner to postgres',t.tablename);end loop;end$$;`;
+   const result=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],owners+policy+policy
+    +read('supabase/tests/personal_item_reminders.integration.sql'));
+   if(!result.includes('NTF08 personal reminders passed'))throw Error('Missing personal reminders proof');
+   run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+    "insert into work_calendar_entries(id,owner_id,work_date,title) values(tid(970),tid(1),current_date,'Scheduler concurrency');begin;select set_config('request.jwt.claim.sub',tid(1)::text,true);set local role authenticated;select save_personal_reminder('calendar',tid(970),now()+interval '1 minute');commit;");
+   const generate=()=>new Promise((resolve,reject)=>{
+    const child=spawn('docker',['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{stdio:['pipe','pipe','pipe']});let output='',error='';
+    child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{error+=data;});child.on('error',reject);child.on('close',code=>code===0?resolve(output):reject(Error(error)));
+    child.stdin.end("begin;select generate_notification_reminders_at(now()+interval '2 minutes',array[tid(1)]);select pg_sleep(0.1);commit;");
+   });
+   const generated=await Promise.all([generate(),generate()]);
+   if(generated.filter(output=>/^1$/m.test(output)).length!==1)throw Error('Personal scheduler must have exactly one winner');
+   run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+    "select check_ok((select count(*)=1 from notifications where data->>'entry_id'=tid(970)::text),'two schedulers create exactly one notification');");
+   console.log('NTF08: personal reminders, default off, authorization, versions, push receipts and workflow isolation passed.');
+  }
  }
  if(receiving){
   const setup=`alter table master_departments add column code text;

@@ -89,7 +89,7 @@ describe("forward-only calendar carryover SQL", () => {
         new RegExp(`create\\s+or\\s+replace\\s+function\\s+public\\.${name}\\s*\\(`, "i").test(migration.sql),
       ).map((migration) => migration.file).sort();
       expect(definingFiles.at(-1)).toBe(name === "generate_work_calendar_notifications"
-        ? "20261006120000_work_calendar_notification_scope.sql" : migrationName);
+        ? "20261112140000_personal_item_reminders.sql" : migrationName);
     }
   });
 
@@ -99,6 +99,17 @@ describe("forward-only calendar carryover SQL", () => {
     expect(hardened).toContain("and p.is_active is true");
     expect(hardened).toContain("and child.is_active is true");
     expect(hardened.replace(/\n {10}and (?:p|child)\.is_active is true/g, "")).toBe(definition(sql, name));
+  });
+
+  it("retires implicit header reminders while preserving the legacy callable signature", () => {
+    const overlay = source('20261112140000_personal_item_reminders.sql');
+    const start = overlay.indexOf('create or replace function public.generate_work_calendar_notifications(');
+    const end = overlay.indexOf('end $$;', start);
+    const retired = overlay.slice(start, end);
+    expect(retired).toContain('p_today date default null,p_escalation_work_days integer default 2,p_debounce_hours integer default 6');
+    expect(retired).toContain('if auth.uid() is null');
+    expect(retired).toContain('return 0;');
+    expect(retired).not.toMatch(/insert into|work_calendar_emit_notification/);
   });
 
   it("defaults to sequential baseline/carryover children before any outer database setup", () => {

@@ -15,7 +15,7 @@
  * - mode Tim selalu read-only terhadap entry bawahan.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, CalendarDays, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -111,7 +111,8 @@ export function WorkCalendarWorkspace({  currentUser,
   settingsRepository,
   workSettings: workSettingsOverride,
   holidays: holidaysOverride,
-}: WorkCalendarWorkspaceProps) {
+  renderReminder,
+}: WorkCalendarWorkspaceProps & { renderReminder?: (entry: WorkEntry) => ReactNode }) {
   const calendar = useWorkCalendarView({
     repository,
     currentUserId: currentUser.id,
@@ -1213,6 +1214,7 @@ export function WorkCalendarWorkspace({  currentUser,
           detailDataReady &&
           selectedEntry && (
             <WorkEntryDetail
+              reminderAction={renderReminder?.(selectedEntry)}
               key={selectedEntry.id}
               entry={selectedEntry}
               owner={ownerById.get(selectedEntry.ownerId)}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
+import { PersonalReminderButton } from '@/components/notifications/PersonalReminderButton';
 import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 import { withOptionalVerifierAttachmentRequirement } from "@/lib/optional-surat-attachments";
 import { effectiveFundRabRequirements, hasRequesterRab, isFundRabReviewStage } from "@/lib/fund-rab";
@@ -2916,6 +2917,7 @@ const handleApprove = async (item: any) => {
             </div>
           ) : selectedItem && activeSurat ? <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             <div className="shrink-0 flex items-start gap-3 border-b border-border bg-card p-4 sm:p-5">
+              <PersonalReminderButton kind="surat" targetId={activeSurat.id} />
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{activeSurat.no_surat || "Nomor diproses"}</span><Badge variant="outline">Tahap {selectedItem.step_order}</Badge><Badge variant="outline">{displayText(selectedItem.label_jabatan || selectedItem.role_name, "Approval")}</Badge>{isVerificationTask(selectedItem) && <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">Pemeriksaan Data</Badge>}</div><h2 className="mt-2 text-lg font-bold leading-tight sm:text-xl">{displayText(activeSurat.judul_surat, "Pengajuan tanpa judul")}</h2><p className="mt-1 text-sm text-muted-foreground">Diajukan {activeSurat.created_at ? new Date(activeSurat.created_at).toLocaleString("id-ID") : "-"}</p></div>
               {activeKpi && <div className={cn("hidden min-w-36 rounded-lg border p-3 text-right sm:block", activeKpi.tone === "late" && "border-destructive/30 bg-destructive/5", activeKpi.tone === "due" && "border-amber-500/30 bg-amber-500/5", activeKpi.tone === "safe" && "border-emerald-500/30 bg-emerald-500/5")}><p className="text-sm font-semibold">{activeKpi.label}</p><p className="mt-1 text-xs text-muted-foreground">{activeKpi.detail}</p></div>}
             </div>

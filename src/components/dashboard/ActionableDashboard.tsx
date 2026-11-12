@@ -13,6 +13,7 @@ import { dashboardRowLink, getActionableDashboard, remindDashboardRequest, type 
 import { todayWorkDate } from '@/features/work-calendar/lib/work-calendar-date';
 import { toast } from 'sonner';
 import {ReceivingPeriodNotice} from '@/components/surat/ReceivingPeriodNotice';
+import { PersonalReminderButton } from '@/components/notifications/PersonalReminderButton';
 
 export const DASHBOARD_BUCKET_LABELS: Record<DashboardBucket, string> = {
   all: 'Semua', active: 'Antrean aktif', ready: 'Perlu tanda tangan', blocked: 'Menunggu kelengkapan',
@@ -176,6 +177,7 @@ export function ActionableDashboard({ userId }: { userId: string }) {
                 <td className="block min-w-0 px-4 pb-4 lg:table-cell lg:py-5"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">SLA</span><DashboardSla row={row} /></td><td className="block self-end px-4 pb-4 lg:table-cell lg:py-5"><div className="flex justify-end gap-2 lg:justify-start">
                   {(!row.receiving_at||Date.parse(row.receiving_at)<=Date.now()) && row.can_remind !== false && row.current_signer_id !== userId && ((row.bucket === 'returned' && scope !== 'mine') || (['ready','waiting'].includes(row.bucket) && !row.sla_paused && !row.needs_verification && !row.needs_recommendation)) &&
                     <Button variant="ghost" size="icon" title="Ingatkan penanggung jawab" aria-label={`Ingatkan ${row.no_surat || row.title}`} disabled={reminding !== null} onClick={() => { void remind(row); }}><BellRing className={cn('h-4 w-4', reminding === row.id && 'animate-pulse')} /></Button>}
+                  {!['completed','rejected'].includes(row.bucket) && <PersonalReminderButton kind="surat" targetId={row.id} />}
                   <Button asChild variant="outline" size="icon" title="Buka pengajuan" aria-label={`Buka ${row.no_surat || row.title}`}><Link to={dashboardRowLink(row, scope)}><ArrowRight className="h-4 w-4" /></Link></Button>
                 </div></td>
               </tr>)}

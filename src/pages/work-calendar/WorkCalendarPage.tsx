@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, RefreshCw, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import { PersonalReminderButton } from '@/components/notifications/PersonalReminderButton';
 import {
   WorkCalendarWorkspace,
   createSupabaseWorkCalendarProfileRepository,
@@ -169,6 +170,8 @@ export default function WorkCalendarPage() {
   return (
     <WorkCalendarWorkspace
       currentUser={state.currentUser}
+      renderReminder={entry => entry.ownerId === state.currentUser.id && entry.status !== 'completed'
+        ? <PersonalReminderButton kind="calendar" targetId={entry.id} /> : null}
       repository={repository}
       teamOverviewRepository={teamOverviewRepository}
       settingsRepository={settingsRepository}
