@@ -1,5 +1,46 @@
 # Worklog
 
+## 2026-11-12 [Codex] SUR-50 Verified Staging and Production Release
+
+- Completed read-only detail/file access change; supersedes pending SUR50 entry.
+  Source7ddb2cd; staging PR940 ->501b55b; selective main PR941 ->ff17964;
+  ancestry-only sync PR942 ->e0bb58e, with identical staged tree9391f4af.
+- Production deploy43143921737 SUCCESS, liveff1796438c1ee373a1703ca930015554d2f3f68f;
+  staging43143527758 SUCCESS, livee0bb58e7df436f3fd3e10af7b2a8780c98dd30fc
+  contains main. Prior acknowledged stage rollout43142533117 also passed.
+- Exact migration20261112100000 digest
+  f1629d60825883128de68ec86068c4a8bf972d50be9dc9dc4ca8dc1597408821:
+  stage267->268, prod264->265. Double rollback rehearsal and same-source apply
+  preserve twelve business-table hashes, document-ID visibility hash, all other
+  public function bodies and every public function owner/ACL. No RLS write-policy
+  edits, data backfill, secret change, approval or vendor resend.
+- Usman acceptance: staging5 visible/5 full (was3 full); production66 visible/66
+  full (was3). Actual production authenticated-role RLS count66 and complete RPC
+  details66; no global visibility expansion. Related SELECT-only policies and
+  can_read_form_usage inherit read authority; no write policy/RPC uses the helper.
+- Caller-JWT file authorization present in both compiled live backends. Public
+  version/live/ready/root pass; anonymous PDF GET and file-token POST remain401.
+  Valid-reader cached-PDF/token path tested in real Fastify injection with synthetic
+  scoped RPC response; no logged-in Usman browser/PDF download was performed.
+- Impacted157 tests across18 files, actual PostgreSQL/RLS tests (including the
+  canonical UPDATE policy refusing a monitoring viewer), baseline-red/patched-green,
+  double apply, lint/typecheck/frontend/backend build and hosted gates pass.
+  npm audit high/critical gate passes;18 existing moderate dependency advisories
+  remain. No dependency/lockfile changes or claim that all advisories are fixed.
+- Duplicate automatic staging43142529694 and production43143128718/43143888256
+  runs cancelled BEFORE deployment because they lacked the exact migration ACK;
+  manual acknowledged workflows reran all quality/deploy gates. No bypass.
+- Prod app58eea7346a9d healthy; six non-app IDs unchanged: PDF8f4cd7d9baad,
+  tunnel57601ec6c36a, outbound657fba2b5a1f, syncfc03d1194fee,
+  external99e7d80fd17a, relay8e6d0b6c69db. Stage non-app IDs also unchanged.
+- SUR49 pooled Usman/Tri claiming and simplified PGD non-asset-goods/KEU usages
+  remain incomplete and NOT included. Old SUR49 fixed-purpose scratch migration
+  must not be applied. Issue938 records the superseding user decision.
+- Withdrawal: forward migration restores can_read_surat to can_monitor_surat_scope
+  with the same owner/ACL; roll back only this selected app change. Keep history,
+  existing read visibility scope and unrelated grants intact. Root dirty checkout
+  untouched; PROJECT_CONTEXT.md remains absent.
+
 ## 2026-11-12 [Codex] SUR-50 Scoped Monitoring Details / Issue #939
 
 - User explicitly prefers full detail/files for documents already visible in
