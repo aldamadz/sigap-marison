@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## NTF-08 Personal Item Reminders (2026-11-12, [Codex], #948)
+
+User selects one future reminder per own calendar work item or visible submitted
+surat; default off, optional browser popup, recipient is always the scheduling
+user. Retires automatic hourly team and 15/30-minute calendar reminder generation,
+not transactional notifications or explicit manual follow-up. Canonical RPC,
+owner-only RLS, version checks, due-row locking and server-owned push receipts.
+Migration 20261112140000. Staging target only; development/tests in progress,
+not applied or deployed. Production requires separate explicit authorization.
+Withdraw UI scheduling plus disable the personal planner without restoring old
+automatic defaults; retain notification history and ordinary workflow delivery.
+
 ## SUR-49 Shared HRD GA Examination / Internal Goods (2026-11-12, [Codex], #938)
 
 Supersedes the abandoned six-purpose scratch plan (never applied). New HRD GA

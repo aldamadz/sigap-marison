@@ -67,6 +67,7 @@ import { WorkEntryTimeline } from "./WorkEntryTimeline";
 import { WorkEntryResult } from "./WorkEntryResult";
 
 export interface WorkEntryDetailProps {
+  reminderAction?: import('react').ReactNode;
   entry: WorkEntry;
   owner?: WorkEntryOwner;
   today: string;
@@ -92,6 +93,7 @@ export function WorkEntryDetail({
   onSave,
   onQuickSave,
   onClose,
+  reminderAction,
 }: WorkEntryDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
   /**
@@ -223,6 +225,7 @@ export function WorkEntryDetail({
                   </Button>
                 </>
               )}
+              {reminderAction}
               <Button
                 type="button"
                 variant="ghost"

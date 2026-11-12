@@ -1,5 +1,32 @@
 # Worklog
 
+## 2026-11-12 [Codex] NTF-08 / Issue #948
+
+- User clarification: reminder is per pekerjaan/pengajuan, default OFF, not a
+  global schedule. One-shot date/time WIB and optional popup; self only.
+- Branch codex/user-reminder-settings-20261112, base main 664928e. Staging only.
+- Canonical versioned RPC, owner-only read RLS, bounded due scheduler, explicit
+  popup receipt; old automatic generators retired, normal process/manual
+  notifications unchanged. Migration 20261112140000 not applied yet.
+- Local disposable PostgreSQL passes: double apply, access checks, cancellation,
+  scope loss/completion, popup consent/dedupe and transactional isolation.
+  UI tests, visual acceptance and staging rollout still pending.
+
+### 2026-11-12 [Codex] NTF-08 Local Verification
+
+- Related Vitest: 19 files / 337 tests passed, plus 73 architecture boundary
+  checks. Lint, typecheck and build passed. Real PostgreSQL includes two scheduler
+  connections competing for one reminder, exactly one notification, and existing
+  manual follow-up / workflow delivery regressions.
+- Playwright checked actual calendar detail + reminder popover at 1280x720 and
+  390x844 with isolated local API fixtures: default off, popup off, save/reopen
+  retains WIB date/time, mobile has no horizontal overflow. Fixture files removed.
+- Staging preflight matches 270 ledger versions; double-apply rollback rehearsal
+  preserves existing business/notification rows and validates ACL. Digest
+  cc936758e9a839a828a107f0551945e8caf908ec41785291ef366c4e4cf12423.
+  Apply/deploy and authenticated staging acceptance still pending. No production
+  changes; no real notification or outbound sent during local tests.
+
 ### 2026-11-12 [Codex] SUR-49 Stock GA Clarification
 
 - Latest user decision: GA bulk stock purchase uses the EXISTING Pengajuan Dana
