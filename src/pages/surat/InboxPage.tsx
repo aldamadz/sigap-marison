@@ -2962,7 +2962,7 @@ const handleApprove = async (item: any) => {
                </div>
              </div>
             <div className="shrink-0 border-t border-border bg-background/95 p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
-              <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className={cn("mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", isSharedExamination(selectedItem) && "sm:flex-col sm:items-stretch")}>
                 <div className="min-w-0">
                   {isVerificationTask(selectedItem) ? (
                     <div className="flex items-center gap-2 text-sm font-medium text-sky-700 dark:text-sky-300">
@@ -2988,7 +2988,7 @@ const handleApprove = async (item: any) => {
                   )}
                 </div>
                 {isVerificationTask(selectedItem) ? (
-                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:justify-end">
+                  <div className={cn("grid shrink-0 gap-2 sm:flex sm:flex-wrap sm:justify-end", isSharedExamination(selectedItem) ? "grid-cols-1 min-[440px]:grid-cols-2" : "grid-cols-2")}>
                     {canReturnToRequester(selectedItem) && (
                       <Button
                         variant="outline"
