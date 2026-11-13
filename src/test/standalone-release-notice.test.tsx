@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, cleanup, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +31,15 @@ describe('standalone announcement configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pratinjau' }));
     expect(await screen.findByRole('dialog')).toHaveTextContent('<img src=x onerror=alert(1)>');
     expect(document.querySelector('img')).toBeNull(); expect(mocks.update).not.toHaveBeenCalled();
+  });
+  it('previews bullets and numbered lists without changing saved content', async () => {
+    mount(<WhatsNewConfigurationPage />);
+    fireEvent.change(await screen.findByLabelText('Isi pembaruan'), { target: { value: 'Pembaruan:\n- Perbaikan dana\n- Pengingat\n1. Buka kalender' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Pratinjau' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getAllByRole('list').map(list => list.tagName)).toEqual(['UL', 'OL']);
+    expect(within(dialog).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Perbaikan dana', 'Pengingat', 'Buka kalender']);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
   it('publish includes unsaved editor changes and requires confirmation; duplicate clicks send once', async () => {
     let finish!: (value: ReleaseNoticeAdmin) => void;
@@ -69,6 +78,13 @@ describe('standalone announcement configuration', () => {
   });
 });
 describe('independent announcement popup', () => {
+  it('uses the same bullet rendering in the user popup', async () => {
+    mocks.current.mockResolvedValue({ serverNow: now, release: { ...release, items: ['Pembaruan:', '- Perbaikan dana', '- Pengingat'] } });
+    mount(<ReleaseNoticeController userId="user-a" />);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('list')).toHaveClass('list-disc');
+    expect(within(dialog).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Perbaikan dana', 'Pengingat']);
+  });
   it('opens from an announcement without any maintenance status or completed event', async () => {
     mount(<ReleaseNoticeController userId="user-a" />);
     expect(await screen.findByRole('dialog')).toHaveTextContent('Perbaikan: Penulisan data dana');

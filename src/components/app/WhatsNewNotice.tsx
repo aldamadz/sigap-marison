@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { ReleaseNotice } from '@/services/release-notice.service';
+import { ReleaseNoticeContent } from '@/components/app/ReleaseNoticeContent';
 
 export const releaseSessionKey = (userId:string,releaseId:string) => `sigap-release:v1:${userId}:${releaseId}`;
 export const releaseIsCurrent = (release:ReleaseNotice,now:number) => {
@@ -37,7 +38,7 @@ export function WhatsNewNotice({userId,release,now}:{userId:string;release:Relea
     <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
       <DialogHeader><Sparkles className="mb-2 h-6 w-6 text-primary" /><DialogTitle>What's New di SIGAP</DialogTitle>
         <DialogDescription>Pembaruan layanan SIGAP.</DialogDescription></DialogHeader>
-      <ul className="divide-y">{release.items.map((item,index)=><li key={index} className="whitespace-pre-wrap break-words py-3 text-sm leading-relaxed">{item}</li>)}</ul>
+      <ReleaseNoticeContent items={release.items} />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <DialogFooter><Button variant="outline" disabled={saving} onClick={()=>{void dismiss();}}>Jangan tampilkan lagi</Button><Button disabled={saving} onClick={close}>Mengerti</Button></DialogFooter>
     </DialogContent>

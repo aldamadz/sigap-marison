@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { maintenanceDate } from '@/services/maintenance.service';
 import { releaseNoticeService, type ReleaseNotice, type ReleaseNoticeAdmin } from '@/services/release-notice.service';
 import { releaseIsCurrent } from '@/components/app/WhatsNewNotice';
+import { ReleaseNoticeContent } from '@/components/app/ReleaseNoticeContent';
 
 export default function WhatsNewConfigurationPage() {
   const client = useQueryClient();
@@ -66,7 +67,7 @@ export default function WhatsNewConfigurationPage() {
     <form className="max-w-3xl space-y-4" onSubmit={event => { event.preventDefault(); void update('save'); }}>
       <div className="flex flex-wrap items-center justify-between gap-2"><Label htmlFor="release-content">Isi pembaruan</Label><span className="text-xs text-muted-foreground">{dirty ? 'Perubahan belum disimpan' : state.revision === 0 ? 'Belum ada draft' : `Draft tersimpan${state.updatedAt ? ` · ${maintenanceDate(state.updatedAt)}` : ''}`}</span></div>
       <Textarea id="release-content" rows={9} maxLength={1500} value={content} disabled={saving}
-        placeholder={'Perbaikan: Penulisan data pengajuan dana\nPenambahan: Pengingat pekerjaan'}
+        placeholder={'Pembaruan SIGAP hari ini:\n- Perbaikan: Penulisan data pengajuan dana\n- Penambahan: Pengingat pekerjaan'}
         onChange={event => { setContent(event.target.value); setDirty(true); }} />
       <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>{content.length}/1500 karakter</span><span>{content.split('\n').length}/10 baris</span></div>
       {(error || changedElsewhere) && <div role="alert" className="space-y-2 text-sm text-destructive"><p>{error || 'Pengumuman telah diubah admin lain. Muat ulang dahulu.'}</p><Button variant="outline" type="button" disabled={saving} onClick={() => { void reload(); }}><RefreshCw className="h-4 w-4" />Muat ulang</Button></div>}
@@ -84,7 +85,7 @@ export default function WhatsNewConfigurationPage() {
     </section>
     <Dialog open={preview !== null} onOpenChange={open => { if (!open) setPreview(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl"><DialogHeader>
       <Sparkles className="mb-2 h-6 w-6 text-primary" /><DialogTitle>What's New di SIGAP</DialogTitle><DialogDescription>Pembaruan layanan SIGAP.</DialogDescription></DialogHeader>
-      <ul className="divide-y">{preview?.map((item, index) => <li key={index} className="whitespace-pre-wrap break-words py-3 text-sm leading-relaxed">{item}</li>)}</ul>
+      <ReleaseNoticeContent items={preview ?? []} />
       <DialogFooter><Button onClick={() => setPreview(null)}>Tutup pratinjau</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={confirmOpen} onOpenChange={open => { if (!saving) setConfirmOpen(open); }}><DialogContent><DialogHeader>
       <DialogTitle>{confirm === 'publish' ? 'Terbitkan pembaruan?' : 'Tarik pengumuman?'}</DialogTitle>
