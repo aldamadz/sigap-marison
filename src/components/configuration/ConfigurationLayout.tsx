@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server, ShieldCheck, CalendarClock } from "lucide-react";
+import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server, ShieldCheck, CalendarClock, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import { desktopIntegrationVisible } from "@/lib/desktop-api";
 import {
@@ -13,6 +13,7 @@ import {
 const configurationOptions = [
   ...(desktopIntegrationVisible() ? [{value:'/admin/configuration/desktop-devices',label:'Perangkat Desktop',description:'Sesi aplikasi desktop dan pencabutan akses pengguna staging.',icon:ShieldCheck}] : []),
   {value:'/admin/configuration/maintenance',label:'Pemeliharaan Sistem',description:'Jadwal pembaruan, dampak layanan, dan pemberitahuan pengguna.',icon:CalendarClock},
+  {value:'/admin/configuration/whats-new',label:"What's New",description:'Draft, publikasi, dan riwayat pembaruan layanan.',icon:Sparkles},
   {
     value: "/admin/configuration/access",
     label: "Hak Akses",

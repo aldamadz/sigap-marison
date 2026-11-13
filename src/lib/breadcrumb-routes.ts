@@ -42,6 +42,7 @@ export const BREADCRUMB_ROUTES: Record<string, string> = {
   '/admin/configuration/email': 'Notifikasi Email',
   '/admin/configuration/access': 'Hak Akses',
   '/admin/configuration/maintenance': 'Pemeliharaan Sistem',
+  '/admin/configuration/whats-new': "What's New",
 }
 
 export const BREADCRUMB_ALIASES: Record<string, string> = {

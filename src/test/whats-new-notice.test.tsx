@@ -19,6 +19,11 @@ describe("What's New release notice",()=>{
     expect(releaseIsCurrent(release,Date.parse('2026-11-05T17:00:00Z'))).toBe(false);
     expect(releaseIsCurrent(release,Date.parse('2026-11-05T06:59:59Z'))).toBe(false);
   });
+  it('uses standalone publication time without requiring maintenance completion',()=>{
+    const {completedAt,...standalone}=release;
+    expect(releaseIsCurrent({...standalone,publishedAt:completedAt},now)).toBe(true);
+    expect(releaseIsCurrent({...standalone,publishedAt:'invalid'},now)).toBe(false);
+  });
   it('renders safe text and allows session dismissal separately from permanent opt-out',async()=>{
     const notice={...release,items:['<img src=x onerror=alert(1)>']};
     const view=mount('user-a',notice);await screen.findByRole('dialog');

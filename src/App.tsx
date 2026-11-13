@@ -8,6 +8,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from "@/lib/supabase";
 import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 import { MaintenanceNotice } from "@/components/app/MaintenanceNotice";
+import { ReleaseNoticeController } from "@/components/app/ReleaseNoticeController";
 import { notificationReturnPath } from "@/lib/notification-target";
 import { SubmissionStatusRedirect } from "@/components/layout/SubmissionStatusRedirect";
 
@@ -58,6 +59,7 @@ const EmailNotificationSettingsPage = lazy(() => import("./pages/admin/EmailNoti
 const MarisonIntegrationPage = lazy(() => import("./pages/admin/MarisonIntegrationPage"));
 const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
 const AccessConfigurationPage = lazy(() => import("./pages/admin/AccessConfigurationPage"));
+const WhatsNewConfigurationPage = lazy(() => import("./pages/admin/WhatsNewConfigurationPage"));
 const MaintenanceConfigurationPage = lazy(() => import("./pages/admin/MaintenanceConfigurationPage"));
 const DesktopAuthorizePage = lazy(() => import("./pages/auth/DesktopAuthorizePage"));
 const DesktopDevicesPage = lazy(() => import("./pages/settings/DesktopDevicesPage"));
@@ -184,6 +186,7 @@ const App = () => {
       <Toaster />
       <Sonner position="top-right" closeButton />
       {isAuth && <MaintenanceNotice key={session.user.id} userId={session.user.id} />}
+      {isAuth && <ReleaseNoticeController key={`release:${session.user.id}`} userId={session.user.id} />}
 
       <Suspense fallback={<PageLoader />}>
         <Routes location={location}>
@@ -247,6 +250,7 @@ const App = () => {
   <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
   <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
   <Route path="access" element={<AccessConfigurationPage />} />
+  <Route path="whats-new" element={<WhatsNewConfigurationPage />} />
   <Route path="maintenance" element={<MaintenanceConfigurationPage />} />
   {desktopIntegrationVisible() && <Route path="desktop-devices" element={<DesktopDevicesPage admin />} />}
 </Route>

@@ -97,6 +97,7 @@ if (changesGlobalTestInfrastructure) {
 }
 
 const gates = new Set();
+if (allChangedFiles.some(file => /standalone_release_notices.*\.sql$|test-standalone-release-notices-sql\.mjs$/u.test(file))) gates.add('standalone-release-notices-sql');
 if (allChangedFiles.some(file => /monitoring_readable_details.*\.sql$/u.test(file))) gates.add('monitoring-readable-details-sql');
 if (allChangedFiles.some(file => /configured_signer_removal.*\.sql$/u.test(file))) gates.add('configured-signer-removal-sql');
 if (allChangedFiles.some(file => /hrd_ga_review.*\.sql$/u.test(file))) gates.add('hrd-ga-review-sql');
@@ -157,6 +158,10 @@ for (const file of allChangedFiles) {
 if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
 
 for (const gate of gates) {
+  if (gate === 'standalone-release-notices-sql') {
+    run('node', ['scripts/test-standalone-release-notices-sql.mjs']);
+    continue;
+  }
   if (gate === 'monitoring-readable-details-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--monitoring-details']);
     continue;
