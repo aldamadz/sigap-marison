@@ -2,6 +2,11 @@
 
 ## OPS-18 Standalone What's New (2026-11-13, [Codex], #958)
 
+Follow-up: popup and admin preview share a safe plain-text list renderer. Lines
+starting with `- `, `* ` or a pasted bullet render as round bullets; `1. ` / `1) `
+render as numbered lists. Other lines stay paragraphs. No HTML/Markdown execution,
+stored content rewrite, database migration or production release.
+
 Staging-only candidate. Configuration has a dedicated What's New editor,
 saved draft, safe preview, atomic publication, withdrawal and immutable audit.
 Announcements no longer depend on maintenance publish/complete. Existing edge
