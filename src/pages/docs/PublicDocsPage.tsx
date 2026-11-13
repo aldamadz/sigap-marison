@@ -59,6 +59,7 @@ import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/services/user-ui.service";
 import type { User } from "@/types/agenda";
 import { DocsArticle } from "./DocsArticle";
+import { ReleaseNoticeArchive } from "./ReleaseNoticeArchive";
 import {
   ADMIN_DOCS,
   ALL_DOCS,
@@ -240,7 +241,9 @@ const SearchTrigger = ({
   </button>
 );
 
-const VersionPanel = () => (
+const VersionPanel = ({ userId }: { userId?: string }) => (
+  <div className="space-y-6">
+  <ReleaseNoticeArchive userId={userId} />
   <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
     <section className="rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card)] sm:p-6">
       <div className="flex items-center gap-3">
@@ -248,7 +251,7 @@ const VersionPanel = () => (
           <History className="h-5 w-5" />
         </span>
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Riwayat dokumentasi</h1>
+          <h2 className="text-xl font-semibold text-foreground">Riwayat dokumentasi</h2>
           <p className="text-sm text-muted-foreground">Perubahan isi dan cara penggunaan dokumentasi SIGAP.</p>
         </div>
       </div>
@@ -284,6 +287,7 @@ const VersionPanel = () => (
         ))}
       </ul>
     </aside>
+  </div>
   </div>
 );
 
@@ -751,7 +755,7 @@ export default function PublicDocsPage({ embedded = false }: PublicDocsPageProps
             ) : null}
 
             {activeTab === "version" ? (
-              <VersionPanel />
+              <VersionPanel userId={session?.user.id} />
             ) : activeEntry ? (
               <DocsArticle entry={activeEntry} activeSectionSlug={activeSectionSlug} />
             ) : null}

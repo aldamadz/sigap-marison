@@ -5,8 +5,8 @@ vi.mock('@/lib/supabase', () => ({ supabase: { rpc: mocks.rpc } }));
 beforeEach(() => { vi.clearAllMocks(); mocks.rpc.mockResolvedValue({ data: { revision: 1 }, error: null }); });
 describe('standalone release notice service', () => {
   it('reads active and admin views without using maintenance endpoints', async () => {
-    await releaseNoticeService.current(); await releaseNoticeService.admin();
-    expect(mocks.rpc.mock.calls.map(call => call[0])).toEqual(['get_active_release_notice', 'get_release_notice_admin']);
+    await releaseNoticeService.current(); await releaseNoticeService.admin(); await releaseNoticeService.history();
+    expect(mocks.rpc.mock.calls.map(call => call[0])).toEqual(['get_active_release_notice', 'get_release_notice_admin', 'get_release_notice_history']);
   });
   it('publishes editor content atomically with the expected revision and no actor/time override', async () => {
     await releaseNoticeService.update('publish', 4, 'Perbaikan: Payload dana');

@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 export type ReleaseNotice = { id: string; publishedAt?: string; completedAt?: string; expiresAt: string; items: string[] };
 export type ReleaseNoticeState = { serverNow: string; release: ReleaseNotice | null };
+export type ReleaseNoticeHistory = { releases: ReleaseNotice[] };
 export type ReleaseNoticeAdmin = ReleaseNoticeState & {
   revision: number; draftContent: string; updatedAt: string;
   history: { revision: number; action: 'publish' | 'withdraw'; at: string; actorName: string; release: ReleaseNotice | null }[];
@@ -21,6 +22,7 @@ const rpc = async <T>(name: string, args?: Record<string, unknown>): Promise<T> 
 
 export const releaseNoticeService = {
   current: () => rpc<ReleaseNoticeState>('get_active_release_notice'),
+  history: () => rpc<ReleaseNoticeHistory>('get_release_notice_history'),
   admin: () => rpc<ReleaseNoticeAdmin>('get_release_notice_admin'),
   update: (action: 'save' | 'publish' | 'withdraw', revision: number, content?: string, releaseId?: string) =>
     rpc<ReleaseNoticeAdmin>('update_release_notice', {

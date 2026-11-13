@@ -91,7 +91,7 @@ describe('independent announcement popup', () => {
     expect(mocks.admin).not.toHaveBeenCalled();
   });
   it('does not open on the editor or administrator recovery pages', async () => {
-    for (const path of ['/admin/configuration/whats-new', '/admin/configuration/maintenance', '/maintenance-admin']) {
+    for (const path of ['/admin/configuration/whats-new', '/admin/configuration/maintenance', '/maintenance-admin', '/docs/versi/changelog']) {
       const view = mount(<ReleaseNoticeController userId="user-a" />, path);
       await waitFor(() => expect(mocks.current).toHaveBeenCalled()); expect(screen.queryByRole('dialog')).toBeNull(); view.unmount();
     }
