@@ -58,8 +58,8 @@ const EmailNotificationSettingsPage = lazy(() => import("./pages/admin/EmailNoti
 const MarisonIntegrationPage = lazy(() => import("./pages/admin/MarisonIntegrationPage"));
 const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
 const AccessConfigurationPage = lazy(() => import("./pages/admin/AccessConfigurationPage"));
-const MaintenanceConfigurationPage = lazy(() => import("./pages/admin/MaintenanceConfigurationPage"));
 const WhatsNewConfigurationPage = lazy(() => import("./pages/admin/WhatsNewConfigurationPage"));
+const MaintenanceConfigurationPage = lazy(() => import("./pages/admin/MaintenanceConfigurationPage"));
 
 // Konfigurasi Query Client
 const queryClient = new QueryClient({
@@ -245,8 +245,8 @@ const App = () => {
   <Route path="job-title-labels" element={<JobTitleDisplayOverridesPage />} />
   <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
   <Route path="access" element={<AccessConfigurationPage />} />
-  <Route path="maintenance" element={<MaintenanceConfigurationPage />} />
   <Route path="whats-new" element={<WhatsNewConfigurationPage />} />
+  <Route path="maintenance" element={<MaintenanceConfigurationPage />} />
 </Route>
         </Route>
 
