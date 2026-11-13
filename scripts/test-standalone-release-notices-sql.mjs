@@ -1,6 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {spawn, spawnSync} from 'node:child_process';
 const migration=readFileSync('supabase/migrations/20261113110000_standalone_release_notices.sql','utf8');
+const archive=readFileSync('supabase/migrations/20261113130000_standalone_release_notices_archive.sql','utf8');
 const preferences=readFileSync('supabase/migrations/20261105061000_release_notice_preferences.sql','utf8');
 const assertions=readFileSync('supabase/tests/standalone_release_notices.integration.sql','utf8');
 const container=`sigap-release-notice-test-${process.pid}-${Date.now()}`;
@@ -10,15 +11,16 @@ const run=(args,input)=>{
   if(result.status!==0)throw Error(result.stderr||result.stdout||'Docker fixture failed');
   return String(result.stdout||'')+String(result.stderr||'');
 };
-const sql=input=>run(['exec','-i',container,'psql','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],input);
+const sql=input=>run(['exec','-i',container,'psql','-h','127.0.0.1','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],input);
 let created=false;
 try {
   run(['run','--detach','--name',container,'--network','none','--memory','256m','--cpus','1',
     '-e','POSTGRES_USER=sigap_fixture_root','-e','POSTGRES_PASSWORD=disposable-fixture-only','postgres:17-alpine']);
   created=true;
   let ready=false;
+  // initdb's temporary socket-only server restarts before the final TCP listener.
   for(let attempt=0;attempt<40;attempt++){
-    const result=spawnSync('docker',['exec',container,'pg_isready','-U','sigap_fixture_root'],{stdio:'ignore'});
+    const result=spawnSync('docker',['exec',container,'pg_isready','-h','127.0.0.1','-U','sigap_fixture_root'],{stdio:'ignore'});
     if(result.status===0){ready=true;break;}
     await new Promise(resolve=>setTimeout(resolve,500));
   }
@@ -32,16 +34,17 @@ try {
     insert into public.profiles values(release_test_id(1),'Admin A','admin',true,null),(release_test_id(2),'Admin B','super_admin',true,null),
       (release_test_id(3),'User','user',true,null),(release_test_id(4),'Inactive','admin',false,null),(release_test_id(5),'Deleted','admin',true,now());
     create table public.maintenance_fixture(status text);insert into public.maintenance_fixture values('completed');
-    ${preferences}${migration}${migration}
+    ${preferences}${migration}${migration}${archive}${archive}
     insert into public.release_notice_preferences(user_id,dismissed_release_id) values(release_test_id(3),release_test_id(90));
     do $$declare r record;begin
       for r in select tablename from pg_tables where schemaname='public' loop execute format('alter table public.%I owner to postgres',r.tablename);end loop;
       for r in select p.oid::regprocedure::text identity from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' loop execute 'alter function '||r.identity||' owner to postgres';end loop;
     end $$;`);
   const result=sql(assertions);
+  sql(readFileSync('supabase/tests/standalone_release_notices_archive.integration.sql','utf8'));
   if(!result.includes('Standalone release notice assertions passed'))throw Error('Missing SQL assertions');
   const publish=actor=>new Promise((resolve,reject)=>{
-    const child=spawn('docker',['exec','-i',container,'psql','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose'],{stdio:['pipe','pipe','pipe']});
+    const child=spawn('docker',['exec','-i',container,'psql','-h','127.0.0.1','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose'],{stdio:['pipe','pipe','pipe']});
     let output='',error='';child.stdout.on('data',chunk=>{output+=chunk;});child.stderr.on('data',chunk=>{error+=chunk;});child.on('error',reject);
     child.on('close',code=>resolve({code,output,error}));
     child.stdin.end(`begin;select set_config('request.jwt.claim.sub',release_test_id(${actor})::text,true);set local role authenticated;

@@ -48,6 +48,7 @@ export default function WhatsNewConfigurationPage() {
       } else apply(state);
       setConfirmOpen(false);
       await client.invalidateQueries({ queryKey: ['release-notice'] });
+      await client.invalidateQueries({ queryKey: ['release-notice-history'] });
       toast.success(action === 'save' ? 'Draft disimpan.' : action === 'publish' ? 'Pengumuman diterbitkan.' : 'Pengumuman ditarik.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Pengumuman belum dapat disimpan.'); }
     finally { lock.current = false; setSaving(false); }
