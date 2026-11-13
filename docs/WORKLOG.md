@@ -1,5 +1,38 @@
 # Worklog
 
+### 2026-11-13 [Codex] NTF-08 Staging And Production Completed
+
+- Supersedes the pending status below. PR #950 staged the popup repair; #951
+  selectively released NTF08 to main; #952 synchronized main ancestry to staging.
+  Live staging b268714f5975791e0d19b66146cfd06d267d13c3 contained main before
+  production cutover. Production runs 5d22942cee604b9eaa74d1c5bba54dabefc92e6f.
+- Deploy staging 43356381089 and parity rollout 43357333053 passed. Production
+  43357736026 attempt 2 passed all jobs with exact migration acknowledgement.
+  Attempt 1 stopped before deployment because the hosted runner's public version
+  request timed out; ordinary probes stayed healthy. No timeout/guard was changed.
+- Migration 20261112140000 applied to production after double-apply rollback
+  rehearsal and exact staging checksum verification. Ledger267->268, ACLs and
+  existing business-row hashes verified; staging ledger271. No mass subscription
+  reset, key rotation, business approval, vendor POST or historical push resend.
+- 453 affected Vitest tests plus real PostgreSQL authorization/concurrency tests,
+  lint, typecheck and build passed. Audit high/critical gate passed; 18 existing
+  moderate advisories remain. No dependency or worker source change.
+- Isolated persistent Chrome QA profile reproduced stale-key status and renewed
+  through the real activation component. One direct push received FCM201; a
+  canonical Tester P3 calendar reminder generated exactly one in-app notification
+  and one successful new-subscription delivery on attempt1. ServiceWorker reported
+  the canonical popup and /notifications/open click route. Existing stale Tester
+  P3 subscription independently still returned403 until its real browser renews.
+  Test entry soft-deleted, reminder cancelled, QA subscription disabled; history kept.
+- Public production assets matched running-container SHA256 for reminder and key
+  repair bundles; root/calendar/status/live/ready200 and anonymous subscribe401.
+  Production server VAPID pair matches. All non-app worker/container IDs unchanged.
+  Automatic retention finished after health/smoke: one eligible old image removed,
+  513818624 bytes freed; unused build cache older than7 days reclaimed0B.
+- No release blocker remains for NTF08. Browsers with granted permission renew
+  stale subscriptions on app reload; denied permission is never silently changed.
+  Delivery still depends on browser/OS notification settings and provider reachability.
+
 ### 2026-11-13 [Codex] NTF-08 Popup Repair And Selective Production Authorization
 
 - User agreed to complete stale VAPID subscription repair, staging verification,

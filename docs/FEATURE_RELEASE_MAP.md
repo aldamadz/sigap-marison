@@ -1,5 +1,22 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-13 [Codex] NTF-08 Production Runtime Verified
+
+Released selectively through PR #951, after staging popup and canonical reminder
+acceptance; PR #952 supplied live-staging ancestry. Production runtime
+5d22942cee604b9eaa74d1c5bba54dabefc92e6f, staging
+b268714f5975791e0d19b66146cfd06d267d13c3. Production deploy43357736026 attempt2
+SUCCESS; first attempt stopped before deployment on a hosted public-probe timeout.
+Migration20261112140000 verified both environments with owner-only reminder ACLs
+and preservation checks. DefaultOFF per-item schedules replace automatic reminders;
+ordinary workflow notifications and explicit manual follow-up remain unchanged.
+Obsolete browser push keys renew under existing granted permission, without
+rotating server keys or resetting other browsers. Real isolated Chrome receipt,
+FCM201 and exactly-one canonical Tester P3 reminder passed; test data cleaned
+without deleting history. Public assets, health/smoke and anonymous401 verified;
+workers unchanged. No business approval, vendor sending or historical push resend.
+Production delivery to individual devices remains subject to browser/OS settings.
+
 ### 2026-11-13 [Codex] NTF-08 Popup Repair And Production Scope
 
 User authorizes stale-key push registration repair, staging validation then
