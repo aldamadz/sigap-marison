@@ -1,10 +1,11 @@
+import type { ReleaseNotice } from './release-notice.service';
+export type { ReleaseNotice } from './release-notice.service';
 export type MaintenanceSchedule = {
   id?: string; category: 'repair'|'development'|'update'; impact: 'full'|'disruption';
   message: string; startsAt: string; endsAt?: string; duration: number; unit: 'minutes'|'hours'|'days';
   status?: 'published'|'completed'|'cancelled';
   whatsNew?: string;
 };
-export type ReleaseNotice = {id:string;completedAt:string;expiresAt:string;items:string[]};
 export type MaintenanceState = { revision:number; schedule:MaintenanceSchedule|null; phase?:'none'|'scheduled'|'announced'|'maintenance'|'disruption'; serverNow?:string;
   release?:ReleaseNotice;
   history?:{revision:number;actorId:string;action:string;at:string;before:MaintenanceSchedule|null;after:MaintenanceSchedule}[] };

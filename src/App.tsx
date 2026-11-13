@@ -8,6 +8,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from "@/lib/supabase";
 import { AppDialogProvider } from "@/components/app/AppDialogProvider";
 import { MaintenanceNotice } from "@/components/app/MaintenanceNotice";
+import { ReleaseNoticeController } from "@/components/app/ReleaseNoticeController";
 import { notificationReturnPath } from "@/lib/notification-target";
 import { SubmissionStatusRedirect } from "@/components/layout/SubmissionStatusRedirect";
 
@@ -58,6 +59,7 @@ const MarisonIntegrationPage = lazy(() => import("./pages/admin/MarisonIntegrati
 const ConfigurationLayout = lazy(() => import("./components/configuration/ConfigurationLayout"));
 const AccessConfigurationPage = lazy(() => import("./pages/admin/AccessConfigurationPage"));
 const MaintenanceConfigurationPage = lazy(() => import("./pages/admin/MaintenanceConfigurationPage"));
+const WhatsNewConfigurationPage = lazy(() => import("./pages/admin/WhatsNewConfigurationPage"));
 
 // Konfigurasi Query Client
 const queryClient = new QueryClient({
@@ -181,6 +183,7 @@ const App = () => {
       <Toaster />
       <Sonner position="top-right" closeButton />
       {isAuth && <MaintenanceNotice key={session.user.id} userId={session.user.id} />}
+      {isAuth && <ReleaseNoticeController key={`release:${session.user.id}`} userId={session.user.id} />}
 
       <Suspense fallback={<PageLoader />}>
         <Routes location={location}>
@@ -243,6 +246,7 @@ const App = () => {
   <Route path="email" element={<EmailNotificationSettingsPage embedded />} />
   <Route path="access" element={<AccessConfigurationPage />} />
   <Route path="maintenance" element={<MaintenanceConfigurationPage />} />
+  <Route path="whats-new" element={<WhatsNewConfigurationPage />} />
 </Route>
         </Route>
 

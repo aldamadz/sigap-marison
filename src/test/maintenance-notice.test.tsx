@@ -13,6 +13,15 @@ const mount=(userId='actor-1',path='/dashboard')=>render(<MemoryRouter initialEn
 beforeEach(()=>{mocks.status.mockResolvedValue(state);localStorage.clear();});
 afterEach(()=>{cleanup();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('maintenance advance notice',()=>{
+  it('does not publish or display legacy release notes from maintenance state',async()=>{
+    mocks.status.mockResolvedValue({...state,schedule:{...state.schedule,status:'completed'},release:{id:'legacy',completedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString(),items:['Old maintenance notes']}});
+    mount();await waitFor(()=>expect(mocks.status).toHaveBeenCalled());expect(screen.queryByRole('dialog')).toBeNull();
+  });
+  it('maintenance form has no editable Whats New field',async()=>{
+    mocks.admin.mockResolvedValue({revision:3,schedule:null,history:[]});
+    render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MaintenanceConfigurationPage /></QueryClientProvider>);
+    await screen.findByText('Tidak ada maintenance terjadwal');expect(screen.queryByLabelText(/What's New/)).toBeNull();
+  });
   it('shows start/end in WIB and preserves access for disruption, closing is not persisted without checkbox',async()=>{
     const view=mount();await screen.findByRole('dialog');expect(screen.getByText(/SIGAP tetap dapat digunakan/)).toBeInTheDocument();
     expect(screen.getByText('Mulai')).toBeInTheDocument();expect(screen.getByText('Perkiraan selesai')).toBeInTheDocument();

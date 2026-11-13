@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## OPS-18 Standalone What's New (2026-11-13, [Codex], #958)
+
+Staging-only candidate. Configuration has a dedicated What's New editor,
+saved draft, safe preview, atomic publication, withdrawal and immutable audit.
+Announcements no longer depend on maintenance publish/complete. Existing edge
+maintenance schedules/history remain unchanged; legacy note values are retained
+for rollback but the new popup reads only the independent canonical notice.
+Migration20261113110000 adds private singleton state/events, authenticated active
+notice RPC and active-admin command/read RPC with optimistic revision locking.
+Server owns actor, publication UUID/time and next-midnight-WIB expiry. Existing
+per-user/session dismissals remain valid. No external notifications, business
+document changes, Worker deployment or production release authorized. Withdraw
+by reverting the independent editor/controller; retain state, audit and prefs.
+
 ## MRN-20 Fund Payload Whitespace (2026-11-13, [Codex], #954)
 
 Staging candidate: normalize pasted tabs/repeated whitespace in outbound Fund
