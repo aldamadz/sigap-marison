@@ -28,13 +28,16 @@ describe("What's New release notice",()=>{
     const notice={...release,items:['<img src=x onerror=alert(1)>']};
     const view=mount('user-a',notice);await screen.findByRole('dialog');
     expect(screen.getByText(notice.items[0])).toBeInTheDocument();expect(document.querySelector('img')).toBeNull();
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    expect(screen.getByRole('link',{name:'Lihat riwayat pembaruan'})).toHaveAttribute('href','/docs/versi/changelog');
     fireEvent.click(screen.getByRole('button',{name:'Mengerti'}));expect(screen.queryByRole('dialog')).toBeNull();
     expect(sessionStorage.getItem(releaseSessionKey('user-a',release.id))).toBe('1');expect(mocks.dismiss).not.toHaveBeenCalled();
     view.unmount();const again=mount();expect(screen.queryByRole('dialog')).toBeNull();again.unmount();
     mount('user-b');expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
   it('stores explicit opt-out for the authenticated account with no arbitrary actor argument',async()=>{
-    mount();await screen.findByRole('dialog');fireEvent.click(screen.getByRole('button',{name:'Jangan tampilkan lagi'}));
+    mount();await screen.findByRole('dialog');fireEvent.click(screen.getByRole('checkbox',{name:'Jangan tampilkan lagi untuk pembaruan ini'}));
+    expect(mocks.dismiss).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Mengerti'}));
     await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
     expect(mocks.dismiss).toHaveBeenCalledWith('dismiss_release_notice',{p_release_id:release.id});
   });
@@ -46,8 +49,21 @@ describe("What's New release notice",()=>{
   });
   it('failed opt-out remains visible and does not falsely record session dismissal',async()=>{
     mocks.dismiss.mockResolvedValue({error:new Error('offline')});mount();await screen.findByRole('dialog');
-    fireEvent.click(screen.getByRole('button',{name:'Jangan tampilkan lagi'}));await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('checkbox'));fireEvent.click(screen.getByRole('button',{name:'Mengerti'}));await screen.findByRole('alert');
     expect(screen.getByRole('dialog')).toBeInTheDocument();expect(sessionStorage.length).toBe(0);
+  });
+  it('unchecking before acknowledging does not persist an opt-out',async()=>{
+    mount();await screen.findByRole('dialog');const checkbox=screen.getByRole('checkbox');
+    fireEvent.click(checkbox);fireEvent.click(checkbox);fireEvent.click(screen.getByRole('button',{name:'Mengerti'}));
+    expect(mocks.dismiss).not.toHaveBeenCalled();expect(screen.queryByRole('dialog')).toBeNull();
+  });
+  it('close button honors the checkbox and duplicate acknowledgements only write once',async()=>{
+    let finish!: (value: {error:null})=>void;
+    mocks.dismiss.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    mount();await screen.findByRole('dialog');fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button',{name:'Close'}));fireEvent.click(screen.getByRole('button',{name:'Mengerti'}));
+    expect(mocks.dismiss).toHaveBeenCalledOnce();finish({error:null});
+    await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
   });
   it('does not show expired or empty notices',()=>{
     const first=mount('user-a',release,Date.parse(release.expiresAt));expect(screen.queryByRole('dialog')).toBeNull();first.unmount();

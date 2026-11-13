@@ -2,6 +2,14 @@
 
 ## OPS-18 Standalone What's New (2026-11-13, [Codex], #958)
 
+Follow-up: popup opt-out is a default-unchecked checkbox, committed on close or
+acknowledgement. Reuse `/docs/versi/changelog` for the latest 50 published notices,
+including expired notices, independent of dismissal preferences. Migration
+20261113130000 adds active-authenticated read-only history RPC with explicit
+content allowlist; drafts, actor details and withdrawn notices remain private.
+Existing static documentation changelog stays available publicly. No new menu,
+external publication or production rollout authorized.
+
 Follow-up: popup and admin preview share a safe plain-text list renderer. Lines
 starting with `- `, `* ` or a pasted bullet render as round bullets; `1. ` / `1) `
 render as numbered lists. Other lines stay paragraphs. No HTML/Markdown execution,

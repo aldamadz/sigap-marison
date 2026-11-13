@@ -1,6 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {spawn, spawnSync} from 'node:child_process';
 const migration=readFileSync('supabase/migrations/20261113110000_standalone_release_notices.sql','utf8');
+const archive=readFileSync('supabase/migrations/20261113130000_standalone_release_notices_archive.sql','utf8');
 const preferences=readFileSync('supabase/migrations/20261105061000_release_notice_preferences.sql','utf8');
 const assertions=readFileSync('supabase/tests/standalone_release_notices.integration.sql','utf8');
 const container=`sigap-release-notice-test-${process.pid}-${Date.now()}`;
@@ -32,13 +33,14 @@ try {
     insert into public.profiles values(release_test_id(1),'Admin A','admin',true,null),(release_test_id(2),'Admin B','super_admin',true,null),
       (release_test_id(3),'User','user',true,null),(release_test_id(4),'Inactive','admin',false,null),(release_test_id(5),'Deleted','admin',true,now());
     create table public.maintenance_fixture(status text);insert into public.maintenance_fixture values('completed');
-    ${preferences}${migration}${migration}
+    ${preferences}${migration}${migration}${archive}${archive}
     insert into public.release_notice_preferences(user_id,dismissed_release_id) values(release_test_id(3),release_test_id(90));
     do $$declare r record;begin
       for r in select tablename from pg_tables where schemaname='public' loop execute format('alter table public.%I owner to postgres',r.tablename);end loop;
       for r in select p.oid::regprocedure::text identity from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' loop execute 'alter function '||r.identity||' owner to postgres';end loop;
     end $$;`);
   const result=sql(assertions);
+  sql(readFileSync('supabase/tests/standalone_release_notices_archive.integration.sql','utf8'));
   if(!result.includes('Standalone release notice assertions passed'))throw Error('Missing SQL assertions');
   const publish=actor=>new Promise((resolve,reject)=>{
     const child=spawn('docker',['exec','-i',container,'psql','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose'],{stdio:['pipe','pipe','pipe']});
