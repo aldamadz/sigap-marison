@@ -1,6 +1,6 @@
 import { AttentionRequestError, attentionService } from "@/services/attention.service";
 
-export type PushActivationStage = "permission" | "public_key" | "register" | "ready" | "lookup" | "subscribe" | "persist";
+export type PushActivationStage = "permission" | "public_key" | "register" | "ready" | "lookup" | "unsubscribe" | "subscribe" | "persist";
 const errorCodes = ["AbortError", "NotAllowedError", "InvalidStateError", "SecurityError", "NotSupportedError",
   "TypeError", "NetworkError", "TimeoutError", "InvalidCharacterError", "Error"] as const;
 type PushActivationCode = typeof errorCodes[number] | "HttpError" | "UnknownError";
@@ -14,7 +14,7 @@ export type PushActivationDetails = {
 export type PushActivationResult = { enabled: true } | {
   enabled: false;
   reason: "unsupported" | "permission_not_granted" | "server_not_configured" | "worker_not_ready"
-    | "provider_unavailable" | "activation_failed" | "not_subscribed" | "permission_denied";
+    | "provider_unavailable" | "activation_failed" | "not_subscribed" | "permission_denied" | "subscription_outdated";
   details?: PushActivationDetails;
 };
 
@@ -61,6 +61,26 @@ const urlBase64ToUint8Array = (base64String: string) => {
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 };
 
+const matchesApplicationKey = (subscription: PushSubscription, expected: Uint8Array) => {
+  const stored = subscription.options?.applicationServerKey;
+  if (!stored) return false;
+  const actual = new Uint8Array(stored);
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+};
+
+let activationInFlight: Promise<PushActivationResult> | null = null;
+const withSubscriptionLock = async <T>(action: () => Promise<T>): Promise<T> => {
+  if (!navigator.locks?.request) return action();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    return await navigator.locks.request('sigap-push-subscription', { signal: controller.signal }, () => {
+      clearTimeout(timer);
+      return action();
+    });
+  } finally { clearTimeout(timer); }
+};
+
 export const pushService = {
   isSupported() {
     return typeof window !== "undefined"
@@ -75,15 +95,21 @@ export const pushService = {
       reason: Notification.permission === 'denied' ? 'permission_denied' : 'permission_not_granted' };
     let stage: PushActivationStage = "lookup";
     try {
+      if (activationInFlight) return await activationInFlight;
+      return await withSubscriptionLock(async (): Promise<PushActivationResult> => {
       const registration = await navigator.serviceWorker.getRegistration('/');
       const subscription = registration?.active ? await registration.pushManager.getSubscription() : null;
       if (!subscription) return { enabled: false, reason: "not_subscribed" };
       stage = "public_key";
       const key = await attentionService.getPushPublicKey();
       if (!key.enabled || !key.publicKey) return { enabled: false, reason: "server_not_configured" };
+      if (!matchesApplicationKey(subscription, urlBase64ToUint8Array(key.publicKey))) {
+        return { enabled: false, reason: 'subscription_outdated' };
+      }
       stage = "persist";
       await attentionService.savePushSubscription(subscription);
       return { enabled: true };
+      });
     } catch (error) { return activationFailure(error, stage); }
   },
 
@@ -121,9 +147,12 @@ export const pushService = {
       }
       if (permission !== "granted") return { enabled: false, reason: "permission_not_granted" };
 
+      if (activationInFlight) return await activationInFlight;
+      const activate = async (): Promise<PushActivationResult> => {
       stage = "public_key";
       const key = await attentionService.getPushPublicKey();
       if (!key.enabled || !key.publicKey) return { enabled: false, reason: "server_not_configured" };
+      const applicationServerKey = urlBase64ToUint8Array(key.publicKey);
 
       stage = "register";
       await navigator.serviceWorker.register(serviceWorkerPath);
@@ -134,16 +163,35 @@ export const pushService = {
       };
       stage = "lookup";
       let subscription = await registration.pushManager.getSubscription();
+      if (subscription && !matchesApplicationKey(subscription, applicationServerKey)) {
+        stage = 'unsubscribe';
+        await attentionService.removePushSubscription(subscription.endpoint);
+        await subscription.unsubscribe();
+        // Another tab may already have replaced this registration.
+        subscription = await registration.pushManager.getSubscription();
+        if (subscription && !matchesApplicationKey(subscription, applicationServerKey)) {
+          throw new DOMException('Subscription replacement incomplete', 'InvalidStateError');
+        }
+      }
       if (!subscription) {
         stage = "subscribe";
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(key.publicKey),
+          applicationServerKey,
         });
+      }
+      if (!matchesApplicationKey(subscription, applicationServerKey)) {
+        stage = 'subscribe';
+        throw new DOMException('Subscription key mismatch', 'InvalidStateError');
       }
       stage = "persist";
       await attentionService.savePushSubscription(subscription);
       return { enabled: true };
+      };
+      activationInFlight = withSubscriptionLock(activate)
+        .catch(error => activationFailure(error, stage))
+        .finally(() => { activationInFlight = null; });
+      return await activationInFlight;
     } catch (error) {
       return activationFailure(error, stage);
     }

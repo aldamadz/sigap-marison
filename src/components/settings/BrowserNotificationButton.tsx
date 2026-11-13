@@ -13,7 +13,7 @@ export function BrowserNotificationButton() {
     const summary=result.reason==='permission_denied'?'Notifikasi diblokir di browser. Ubah izin notifikasi situs menjadi Izinkan.':result.reason==='permission_not_granted'?'Izin notifikasi browser belum diberikan.':result.reason==='server_not_configured'?'Notifikasi browser belum dikonfigurasi di server.':result.reason==='worker_not_ready'?'Layanan notifikasi browser belum siap. Muat ulang halaman, lalu coba lagi.':result.reason==='provider_unavailable'?'Layanan push browser tidak dapat dihubungi. Coba melalui Chrome atau Edge, lalu periksa koneksi Anda.':result.reason==='activation_failed'?'Notifikasi browser belum dapat diaktifkan. Coba lagi.':'Browser ini belum mendukung notifikasi.';
     const details=result.details;
     const context=details?.serverCode==='push_provider_unsupported'?' Penyedia push browser ini belum didukung. Gunakan Chrome, Edge, Firefox, atau Safari yang mendukung Web Push.':details?.serverCode==='push_keys_missing'?' Data langganan dari browser belum lengkap. Periksa izin notifikasi, lalu coba lagi.':'';
-    setMessage(summary+context+(details?` Tahap: ${details.stage}; kode: ${details.serverCode??details.code}${details.httpStatus!==undefined?`; HTTP: ${details.httpStatus}`:''}${details.requestId?`; ID: ${details.requestId}`:''}.`:''));
+    setMessage((result.reason==='subscription_outdated'?'Langganan notifikasi perlu diperbarui. Aktifkan kembali notifikasi browser.':summary)+context+(details?` Tahap: ${details.stage}; kode: ${details.serverCode??details.code}${details.httpStatus!==undefined?`; HTTP: ${details.httpStatus}`:''}${details.requestId?`; ID: ${details.requestId}`:''}.`:''));
    }
  },[]);
  useEffect(()=>{

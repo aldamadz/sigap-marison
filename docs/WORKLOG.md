@@ -1,5 +1,47 @@
 # Worklog
 
+### 2026-11-13 [Codex] NTF-08 Popup Repair And Selective Production Authorization
+
+- User agreed to complete stale VAPID subscription repair, staging verification,
+  then selective production release of personal reminders and this correction.
+  Same feature branch; no whole-staging merge, new permissions, business approval,
+  vendor sending or unrelated features. Existing applied migration stays immutable.
+- Focused regressions reproduced seven failures in old code. Compare the current
+  applicationServerKey, report stale status, retire only the authenticated user's
+  obsolete endpoint, unsubscribe/recreate, and persist only the matching key.
+  Activation single-flight plus origin-scoped Web Locks prevent competing repairs.
+  Permission denied/default remain unchanged unless activation explicitly asks.
+- Local first pass: 112 notification/reminder/activation assertions passed,
+  typecheck passed. Additional gates, staging rollout and provider acceptance
+  pending. Server VAPID keys are not rotated; no mass subscription reset.
+  API reference: MDN PushSubscriptionOptions/applicationServerKey and Web Locks.
+
+### 2026-11-12 [Codex] NTF-08 Staging Deployment / Popup Finding
+
+- PR #949 merged; source 0cba7e97a4ef6806502ce6fbb6a3b9a85013cf18,
+  staging runtime 4a110930b9d19589304beca3b7a7965b031ed48f. PR CI
+  43166362794 and exact-migration deploy 43166770043 SUCCESS. Auto run without
+  migration acknowledgement was cancelled before deployment (43166725262).
+- Migration 20261112140000 applied and verified on staging, ledger 271, ACL and
+  existing-row preservation passed, rehearsal digest
+  ca303f9ab11ef1481756a3ce2a9f59e2336a7488c28a18323c2ce890d9989a55.
+- App 7f2afd52a125 healthy; PDF/external/sync/outbound worker IDs unchanged.
+  Public root, calendar, status-pengajuan, health/live, health/ready returned 200;
+  health/version exactly matches runtime SHA. No production changes.
+- Actual staging Tester P3 role/RLS acceptance passed save/reopen, reschedule,
+  cancel, stale-version rejection, default off and dedupe in rollback transaction.
+  One live tester-only schedule produced exactly one in-app notification through
+  the ordinary server-clock scheduler. Popup failed HTTP 403; same-notification
+  diagnostic retry also 403, provider indicates VAPID credential mismatch.
+  Server VAPID keypair matches; this tester subscription had a 403 on Nov 9 too.
+- Test schedule cancelled and test calendar entry soft-deleted through canonical
+  RPC; notification history retained. No submission approval or vendor POST.
+- Browser popup acceptance remains unresolved: re-registration with the current
+  server key is needed. Existing push service reuses an existing subscription
+  without comparing its applicationServerKey. Do not claim popup success or a
+  live authenticated browser visual test (CUA URL-validation stopped access).
+  Issue #948 remains open for this follow-up; production not requested.
+
 ## 2026-11-12 [Codex] NTF-08 / Issue #948
 
 - User clarification: reminder is per pekerjaan/pengajuan, default OFF, not a

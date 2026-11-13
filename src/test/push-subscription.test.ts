@@ -22,7 +22,7 @@ beforeEach(() => {
     getSubscription: vi.fn().mockRejectedValue(new DOMException('No active worker', 'InvalidStateError')),
   } });
   getSubscription.mockResolvedValue(null);
-  subscribe.mockResolvedValue({ endpoint: 'https://push.example.invalid/test' });
+  subscribe.mockResolvedValue({ endpoint: 'https://push.example.invalid/test', options: { applicationServerKey: new Uint8Array([4]).buffer } });
   requestPermission.mockResolvedValue('granted');
   vi.stubGlobal('PushManager', function PushManager() {});
   vi.stubGlobal('Notification', { permission: 'granted', requestPermission });
@@ -50,7 +50,7 @@ describe('first browser push activation', () => {
   });
 
   it('reuses an existing active subscription without requesting permission again', async () => {
-    const existing = { endpoint: 'https://push.example.invalid/existing' };
+    const existing = { endpoint: 'https://push.example.invalid/existing', options: { applicationServerKey: new Uint8Array([4]).buffer } };
     getSubscription.mockResolvedValue(existing);
     await expect(pushService.ensureSubscription()).resolves.toEqual({ enabled: true });
     expect(subscribe).not.toHaveBeenCalled();
@@ -149,7 +149,7 @@ describe('first browser push activation', () => {
   });
 
   it('keeps an existing subscription retryable when persistence fails', async () => {
-    getSubscription.mockResolvedValue({ endpoint: 'https://push.example.invalid/existing' });
+    getSubscription.mockResolvedValue({ endpoint: 'https://push.example.invalid/existing', options: { applicationServerKey: new Uint8Array([4]).buffer } });
     h.save.mockRejectedValueOnce(new AttentionRequestError(500, 'push_req-1234'));
     expect(await pushService.ensureSubscription()).toMatchObject({ enabled: false, details: { stage: 'persist' } });
     await expect(pushService.ensureSubscription()).resolves.toEqual({ enabled: true });
