@@ -132,4 +132,13 @@ export const attentionService = {
     });
     return readJsonResponse<{ ok: boolean }>(response);
   },
+
+  async removePushSubscription(endpoint: string) {
+    const response = await fetch('/api/push/unsubscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ endpoint }),
+    });
+    return readJsonResponse<{ ok: boolean }>(response);
+  },
 };

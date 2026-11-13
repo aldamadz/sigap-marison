@@ -8,6 +8,15 @@ beforeEach(() => { h.status.mockReset().mockResolvedValue({ enabled: false, reas
 afterEach(cleanup);
 
 describe('browser activation rehydration', () => {
+  it('explains an outdated subscription and allows explicit repair without claiming success',async()=>{
+    h.status.mockResolvedValue({enabled:false,reason:'subscription_outdated'});
+    render(<BrowserNotificationButton />);
+    expect(await screen.findByRole('status')).toHaveTextContent('Langganan notifikasi perlu diperbarui');
+    expect(screen.getByRole('button',{name:'Aktifkan notifikasi browser'})).toBeEnabled();
+    expect(h.activate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Aktifkan notifikasi browser'}));
+    expect(await screen.findByRole('button',{name:'Notifikasi browser aktif'})).toBeDisabled();
+  });
   it('synchronizes all controls with background activation and ignores older initial checks', async () => {
     let resolve!: (value: unknown) => void;
     h.status.mockReturnValue(new Promise(done => { resolve = done; }));

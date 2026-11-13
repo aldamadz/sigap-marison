@@ -1,5 +1,21 @@
 # Worklog
 
+### 2026-11-13 [Codex] NTF-08 Popup Repair And Selective Production Authorization
+
+- User agreed to complete stale VAPID subscription repair, staging verification,
+  then selective production release of personal reminders and this correction.
+  Same feature branch; no whole-staging merge, new permissions, business approval,
+  vendor sending or unrelated features. Existing applied migration stays immutable.
+- Focused regressions reproduced seven failures in old code. Compare the current
+  applicationServerKey, report stale status, retire only the authenticated user's
+  obsolete endpoint, unsubscribe/recreate, and persist only the matching key.
+  Activation single-flight plus origin-scoped Web Locks prevent competing repairs.
+  Permission denied/default remain unchanged unless activation explicitly asks.
+- Local first pass: 112 notification/reminder/activation assertions passed,
+  typecheck passed. Additional gates, staging rollout and provider acceptance
+  pending. Server VAPID keys are not rotated; no mass subscription reset.
+  API reference: MDN PushSubscriptionOptions/applicationServerKey and Web Locks.
+
 ### 2026-11-12 [Codex] NTF-08 Staging Deployment / Popup Finding
 
 - PR #949 merged; source 0cba7e97a4ef6806502ce6fbb6a3b9a85013cf18,

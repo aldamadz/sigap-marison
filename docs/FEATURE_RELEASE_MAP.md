@@ -1,5 +1,14 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-13 [Codex] NTF-08 Popup Repair And Production Scope
+
+User authorizes stale-key push registration repair, staging validation then
+selective production promotion of NTF08. Public status checks must not claim
+an obsolete subscription is active. Only replace the current browser's obsolete
+registration under existing notification permission; preserve valid subscriptions
+and owner-scoped server authorization. No VAPID rotation or bulk reset. The prior
+staging-only deployment remains live until this candidate passes acceptance.
+
 ### 2026-11-12 [Codex] NTF-08 Staging Runtime Verified
 
 PR #949 / deploy 43166770043 SUCCESS, staging runtime 4a110930b9d19589304beca3b7a7965b031ed48f;
