@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## MRN-20 Fund Payload Whitespace (2026-11-13, [Codex], #954)
+
+Staging candidate: normalize pasted tabs/repeated whitespace in outbound Fund
+title, item names and units; normalize horizontal whitespace in description
+without removing paragraph breaks. Applies to operational/production/marketing
+Fund builders, not source documents, signed PDFs or frozen dispatch bodies.
+Amounts, quantities, inventory references, approvals and file links stay intact.
+No schema, worker protocol, automatic recovery or vendor POST. User authorizes
+staging then selective production release, without resending028. Vendor's
+`validation.max.string` response does not identify a field/limit; whitespace
+cleanup does not prove vendor acceptance.
+Withdraw by reverting mapper normalization; do not rewrite historical jobs.
+
 ### 2026-11-13 [Codex] NTF-08 Popup Repair And Production Scope
 
 User authorizes stale-key push registration repair, staging validation then

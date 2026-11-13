@@ -6,6 +6,8 @@ import { itemQuantityTotal, parseItemQuantity } from "@sigap/shared";
 
 const text = (value) => String(value ?? "").trim();
 const nullableText = (value) => text(value) || null;
+const singleLineText = (value) => text(value).replace(/\s+/gu, " ");
+const descriptionText = (value) => text(value).replace(/[^\S\r\n]+/gu, " ") || null;
 const normalizedNik = (value) => text(value).toUpperCase().replace(/\s+/gu, " ");
 const positiveQuantity = (value) => parseItemQuantity(value) ?? 0;
 const nonNegativeInteger = (value) => {
@@ -14,9 +16,9 @@ const nonNegativeInteger = (value) => {
 };
 
 const normalizeFundItems = (items) => (Array.isArray(items) ? items : []).map((item) => ({
-  nama_barang: text(item?.nama_barang ?? item?.item_name ?? item?.nama ?? item?.name),
+  nama_barang: singleLineText(item?.nama_barang ?? item?.item_name ?? item?.nama ?? item?.name),
   jumlah: positiveQuantity(item?.jumlah ?? item?.quantity),
-  satuan: text(item?.satuan ?? item?.sat ?? item?.unit),
+  satuan: singleLineText(item?.satuan ?? item?.sat ?? item?.unit),
   nominal: nonNegativeInteger(item?.nominal ?? item?.subtotal ?? item?.nilai),
 }));
 
@@ -103,8 +105,8 @@ export const mapMarisonFundSubmission = ({ request, projectId, branchId, divisio
     type: text(request?.type),
     branch_id: Number(branchId),
     division: text(division),
-    title: text(request?.title),
-    description: nullableText(request?.description),
+    title: singleLineText(request?.title),
+    description: descriptionText(request?.description),
     amount: request?.amount == null ? items.reduce((total, item) => total + item.nominal, 0) : nonNegativeInteger(request.amount),
     items,
     attachments: Array.isArray(attachments) ? attachments : [],
