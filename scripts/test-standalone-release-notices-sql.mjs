@@ -11,15 +11,16 @@ const run=(args,input)=>{
   if(result.status!==0)throw Error(result.stderr||result.stdout||'Docker fixture failed');
   return String(result.stdout||'')+String(result.stderr||'');
 };
-const sql=input=>run(['exec','-i',container,'psql','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],input);
+const sql=input=>run(['exec','-i',container,'psql','-h','127.0.0.1','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],input);
 let created=false;
 try {
   run(['run','--detach','--name',container,'--network','none','--memory','256m','--cpus','1',
     '-e','POSTGRES_USER=sigap_fixture_root','-e','POSTGRES_PASSWORD=disposable-fixture-only','postgres:17-alpine']);
   created=true;
   let ready=false;
+  // initdb's temporary socket-only server restarts before the final TCP listener.
   for(let attempt=0;attempt<40;attempt++){
-    const result=spawnSync('docker',['exec',container,'pg_isready','-U','sigap_fixture_root'],{stdio:'ignore'});
+    const result=spawnSync('docker',['exec',container,'pg_isready','-h','127.0.0.1','-U','sigap_fixture_root'],{stdio:'ignore'});
     if(result.status===0){ready=true;break;}
     await new Promise(resolve=>setTimeout(resolve,500));
   }
@@ -43,7 +44,7 @@ try {
   sql(readFileSync('supabase/tests/standalone_release_notices_archive.integration.sql','utf8'));
   if(!result.includes('Standalone release notice assertions passed'))throw Error('Missing SQL assertions');
   const publish=actor=>new Promise((resolve,reject)=>{
-    const child=spawn('docker',['exec','-i',container,'psql','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose'],{stdio:['pipe','pipe','pipe']});
+    const child=spawn('docker',['exec','-i',container,'psql','-h','127.0.0.1','-X','-qAt','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose'],{stdio:['pipe','pipe','pipe']});
     let output='',error='';child.stdout.on('data',chunk=>{output+=chunk;});child.stderr.on('data',chunk=>{error+=chunk;});child.on('error',reject);
     child.on('close',code=>resolve({code,output,error}));
     child.stdin.end(`begin;select set_config('request.jwt.claim.sub',release_test_id(${actor})::text,true);set local role authenticated;
