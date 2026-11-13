@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase', () => ({
   supabase: { auth: { getSession: vi.fn(async () => ({ data: { session: { access_token: 'fixture-session' } } })) } },
 }));
 const fetchMock = vi.fn();
-const subscription = { toJSON: () => ({ endpoint: 'https://push.example.invalid/fixture', keys: { auth: 'fixture-auth', p256dh: 'fixture-key' } }) } as unknown as PushSubscription;
+const subscription = { options: { applicationServerKey: new Uint8Array([4]).buffer }, toJSON: () => ({ endpoint: 'https://push.example.invalid/fixture', keys: { auth: 'fixture-auth', p256dh: 'fixture-key' } }) } as unknown as PushSubscription;
 
 beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -87,7 +87,7 @@ describe('sanitized push HTTP diagnostics', () => {
     vi.stubGlobal('navigator', { serviceWorker: {
       getRegistration: vi.fn(async () => undefined), register: vi.fn(async () => registration), ready: Promise.resolve(registration),
     } });
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ enabled: true, publicKey: 'fixture-public' })))
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ enabled: true, publicKey: 'BA' })))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         error: 'https://private.invalid/endpoint?key=private', requestId: 'push_req-1234',
         keys: { auth: 'fixture-auth', p256dh: 'fixture-key' },
@@ -101,5 +101,13 @@ describe('sanitized push HTTP diagnostics', () => {
     expect(screen.getByRole('button', { name: 'Aktifkan notifikasi browser' })).toBeEnabled();
     expect(registration.pushManager.subscribe).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retires an obsolete endpoint through the existing authenticated owner-scoped route',async()=>{
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ok:true})));
+    await expect(attentionService.removePushSubscription('https://fcm.googleapis.com/old')).resolves.toEqual({ok:true});
+    expect(fetchMock).toHaveBeenCalledWith('/api/push/unsubscribe',expect.objectContaining({method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer fixture-session'},
+      body:JSON.stringify({endpoint:'https://fcm.googleapis.com/old'})}));
   });
 });

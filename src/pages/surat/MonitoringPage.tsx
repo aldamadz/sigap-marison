@@ -1,5 +1,6 @@
 import { useDeferredValue, useState, useEffect } from 'react';
 import {ReceivingPeriodNotice} from '@/components/surat/ReceivingPeriodNotice';
+import { PersonalReminderButton } from '@/components/notifications/PersonalReminderButton';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -490,15 +491,16 @@ const MonitoringPage = () => {
         }}
       >
         <DialogContent className="flex max-h-[94dvh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden border-border bg-card p-0 sm:w-[calc(100vw-2rem)]">
-          <DialogHeader className="shrink-0 border-b border-border bg-muted/20 px-5 py-4 pr-12 sm:px-7">
+          <DialogHeader className="shrink-0 border-b border-border bg-muted/20 px-5 py-4 pr-12 sm:px-7 sm:pr-14">
             <div className="flex items-center gap-4">
               <div className="bg-primary/10 p-2 rounded-lg"><Info className="text-primary" size={20} /></div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <DialogTitle className="text-base font-semibold">Detail pengajuan</DialogTitle>
                 <DialogDescription className="mt-1 text-xs text-muted-foreground sm:text-sm">
                   Ringkasan isi, berkas, dan progres persetujuan
                 </DialogDescription>
               </div>
+              {selectedSurat && ['PROSES','MENUNGGU_PERBAIKAN'].includes(selectedSurat.status) && <PersonalReminderButton kind="surat" targetId={selectedSurat.id} />}
             </div>
           </DialogHeader>
 

@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('VITE_APP_PUBLIC_URL', 'https://sigap.marison-testing.biz.id');
   h.key.mockResolvedValue({ enabled: true, publicKey: 'BA' }); h.save.mockResolvedValue({ ok: true });
-  getRegistration.mockResolvedValue(registration); getSubscription.mockResolvedValue({ endpoint: 'fixture' });
+  getRegistration.mockResolvedValue(registration); getSubscription.mockResolvedValue({ endpoint: 'fixture', options: { applicationServerKey: new Uint8Array([4]).buffer } });
   register.mockResolvedValue(registration); requestPermission.mockResolvedValue('granted'); showNotification.mockResolvedValue(undefined);
   vi.stubGlobal('PushManager', function PushManager() {});
   vi.stubGlobal('Notification', { permission: 'granted', requestPermission });
@@ -25,7 +25,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers();
 describe('persisted browser activation status', () => {
   it('checks the existing subscription and server registration without prompting or subscribing', async () => {
     await expect(pushService.getSubscriptionStatus()).resolves.toEqual({ enabled: true });
-    expect(h.save).toHaveBeenCalledExactlyOnceWith({ endpoint: 'fixture' });
+    expect(h.save).toHaveBeenCalledExactlyOnceWith({ endpoint: 'fixture', options: { applicationServerKey: new Uint8Array([4]).buffer } });
     expect(requestPermission).not.toHaveBeenCalled(); expect(register).not.toHaveBeenCalled(); expect(subscribe).not.toHaveBeenCalled();
   });
   it.each([undefined, { active: null }])('does not activate a missing worker', async worker => {

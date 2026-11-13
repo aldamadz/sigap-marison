@@ -1,5 +1,36 @@
 # SIGAP Feature and Release Map
 
+### 2026-11-13 [Codex] NTF-08 Popup Repair And Production Scope
+
+User authorizes stale-key push registration repair, staging validation then
+selective production promotion of NTF08. Public status checks must not claim
+an obsolete subscription is active. Only replace the current browser's obsolete
+registration under existing notification permission; preserve valid subscriptions
+and owner-scoped server authorization. No VAPID rotation or bulk reset. The prior
+staging-only deployment remains live until this candidate passes acceptance.
+
+### 2026-11-12 [Codex] NTF-08 Staging Runtime Verified
+
+PR #949 / deploy 43166770043 SUCCESS, staging runtime 4a110930b9d19589304beca3b7a7965b031ed48f;
+migration 20261112140000 applied (ledger 271). Per-item scheduling defaults off;
+Tester P3 scoped save/reopen/cancel and one real in-app reminder passed. Existing
+browser subscription rejects push with HTTP 403 / VAPID credential mismatch
+(also recorded before this release); popup re-registration remains a follow-up,
+not a passed acceptance check. Test entry soft-deleted, notification history kept.
+Production unchanged and requires explicit authorization.
+
+## NTF-08 Personal Item Reminders (2026-11-12, [Codex], #948)
+
+User selects one future reminder per own calendar work item or visible submitted
+surat; default off, optional browser popup, recipient is always the scheduling
+user. Retires automatic hourly team and 15/30-minute calendar reminder generation,
+not transactional notifications or explicit manual follow-up. Canonical RPC,
+owner-only RLS, version checks, due-row locking and server-owned push receipts.
+Migration 20261112140000. Staging target only; development/tests in progress,
+not applied or deployed. Production requires separate explicit authorization.
+Withdraw UI scheduling plus disable the personal planner without restoring old
+automatic defaults; retain notification history and ordinary workflow delivery.
+
 ## SUR-49 Shared HRD GA Examination / Internal Goods (2026-11-12, [Codex], #938)
 
 Supersedes the abandoned six-purpose scratch plan (never applied). New HRD GA

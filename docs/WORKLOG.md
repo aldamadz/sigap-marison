@@ -1,5 +1,88 @@
 # Worklog
 
+### 2026-11-13 [Codex] NTF-08 Popup Repair And Selective Production Authorization
+
+- User agreed to complete stale VAPID subscription repair, staging verification,
+  then selective production release of personal reminders and this correction.
+  Same feature branch; no whole-staging merge, new permissions, business approval,
+  vendor sending or unrelated features. Existing applied migration stays immutable.
+- Focused regressions reproduced seven failures in old code. Compare the current
+  applicationServerKey, report stale status, retire only the authenticated user's
+  obsolete endpoint, unsubscribe/recreate, and persist only the matching key.
+  Activation single-flight plus origin-scoped Web Locks prevent competing repairs.
+  Permission denied/default remain unchanged unless activation explicitly asks.
+- Local first pass: 112 notification/reminder/activation assertions passed,
+  typecheck passed. Additional gates, staging rollout and provider acceptance
+  pending. Server VAPID keys are not rotated; no mass subscription reset.
+  API reference: MDN PushSubscriptionOptions/applicationServerKey and Web Locks.
+
+### 2026-11-12 [Codex] NTF-08 Staging Deployment / Popup Finding
+
+- PR #949 merged; source 0cba7e97a4ef6806502ce6fbb6a3b9a85013cf18,
+  staging runtime 4a110930b9d19589304beca3b7a7965b031ed48f. PR CI
+  43166362794 and exact-migration deploy 43166770043 SUCCESS. Auto run without
+  migration acknowledgement was cancelled before deployment (43166725262).
+- Migration 20261112140000 applied and verified on staging, ledger 271, ACL and
+  existing-row preservation passed, rehearsal digest
+  ca303f9ab11ef1481756a3ce2a9f59e2336a7488c28a18323c2ce890d9989a55.
+- App 7f2afd52a125 healthy; PDF/external/sync/outbound worker IDs unchanged.
+  Public root, calendar, status-pengajuan, health/live, health/ready returned 200;
+  health/version exactly matches runtime SHA. No production changes.
+- Actual staging Tester P3 role/RLS acceptance passed save/reopen, reschedule,
+  cancel, stale-version rejection, default off and dedupe in rollback transaction.
+  One live tester-only schedule produced exactly one in-app notification through
+  the ordinary server-clock scheduler. Popup failed HTTP 403; same-notification
+  diagnostic retry also 403, provider indicates VAPID credential mismatch.
+  Server VAPID keypair matches; this tester subscription had a 403 on Nov 9 too.
+- Test schedule cancelled and test calendar entry soft-deleted through canonical
+  RPC; notification history retained. No submission approval or vendor POST.
+- Browser popup acceptance remains unresolved: re-registration with the current
+  server key is needed. Existing push service reuses an existing subscription
+  without comparing its applicationServerKey. Do not claim popup success or a
+  live authenticated browser visual test (CUA URL-validation stopped access).
+  Issue #948 remains open for this follow-up; production not requested.
+
+## 2026-11-12 [Codex] NTF-08 / Issue #948
+
+- User clarification: reminder is per pekerjaan/pengajuan, default OFF, not a
+  global schedule. One-shot date/time WIB and optional popup; self only.
+- Branch codex/user-reminder-settings-20261112, base main 664928e. Staging only.
+- Canonical versioned RPC, owner-only read RLS, bounded due scheduler, explicit
+  popup receipt; old automatic generators retired, normal process/manual
+  notifications unchanged. Migration 20261112140000 not applied yet.
+- Local disposable PostgreSQL passes: double apply, access checks, cancellation,
+  scope loss/completion, popup consent/dedupe and transactional isolation.
+  UI tests, visual acceptance and staging rollout still pending.
+
+### 2026-11-12 [Codex] NTF-08 Local Verification
+
+- Related Vitest: 19 files / 337 tests passed, plus 73 architecture boundary
+  checks. Lint, typecheck and build passed. Real PostgreSQL includes two scheduler
+  connections competing for one reminder, exactly one notification, and existing
+  manual follow-up / workflow delivery regressions.
+- Playwright checked actual calendar detail + reminder popover at 1280x720 and
+  390x844 with isolated local API fixtures: default off, popup off, save/reopen
+  retains WIB date/time, mobile has no horizontal overflow. Fixture files removed.
+- Staging preflight matches 270 ledger versions; double-apply rollback rehearsal
+  preserves existing business/notification rows and validates ACL. Digest
+  cc936758e9a839a828a107f0551945e8caf908ec41785291ef366c4e4cf12423.
+  Apply/deploy and authenticated staging acceptance still pending. No production
+  changes; no real notification or outbound sent during local tests.
+
+### 2026-11-12 [Codex] NTF-08 Legacy Header Compatibility
+
+- Found the old header still calls generate_work_calendar_notifications. Preserve
+  its authenticated signature as a no-op so old browser bundles cannot create
+  implicit reminders. Retire only exact legacy calendar namespaced popup events;
+  existing notifications remain stored and workflow delivery remains enabled.
+- Updated migration (not yet applied) re-rehearsed twice with rollback on staging,
+  ledger still 270; preserved rows/ACL passed. Replaces the prior rehearsal digest:
+  ca303f9ab11ef1481756a3ce2a9f59e2336a7488c28a18323c2ce890d9989a55.
+- PR #949 created via GitHub CLI, no manual Submit needed. Browser acceptance
+  cannot use the user Chrome session because CUA could not validate its URL;
+  local Playwright visual proof and scoped staging database acceptance are used
+  separately, without claiming a live authenticated browser test.
+
 ### 2026-11-12 [Codex] SUR-49 Stock GA Clarification
 
 - Latest user decision: GA bulk stock purchase uses the EXISTING Pengajuan Dana
