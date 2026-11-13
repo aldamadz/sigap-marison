@@ -17,6 +17,44 @@ const approval = {
 };
 
 describe("Marison Fund Submission mapper", () => {
+  it.each(["operational", "production_cost", "marketing_cost"])("normalizes display whitespace without losing inventory references for %s", (type) => {
+    const itemName = "Permohonan Service AC Kantor 4 Titik  No Inventaris - 000000001\t\t\t\t\t\t\t  No Inventaris -000000002\t\t\t\t\t\t\t  No Inventaris -000000003\t\t\t\t\t\t\t  No Inventaris -000000004";
+    const request = {
+      submissionNumber: "028/TEST/XI/2026", type,
+      title: `Pengajuan Dana Operasional: ${itemName} KC. Uji`,
+      description: `  ${itemName}\r\n\r\nRincian:\n\t1.  Filter AC\n\t2.\tPembersihan  rutin  `,
+      amount: 280000,
+      items: [{ nama_barang: itemName, jumlah: 4, satuan: "  Unit\t ", nominal: 280000 }],
+    };
+    const before = structuredClone(request);
+    const attachments = [{ name: "Lampiran asli", link: "https://sigap.example.test/file.pdf?reference=a%20b" }];
+    const sourceApproval = { ...approval, notes: "Catatan\t\tpenandatangan\nTetap asli" };
+    const result = mapMarisonFundSubmission({ request, branchId: 10, projectId: 18,
+      division: "Umum & Keuangan", attachments, approvals: [sourceApproval],
+      mainDocument: "https://sigap.example.test/main.pdf?reference=a%20b" });
+    const normalizedName = "Permohonan Service AC Kantor 4 Titik No Inventaris - 000000001 No Inventaris -000000002 No Inventaris -000000003 No Inventaris -000000004";
+    expect(result.payload.title).toBe(`Pengajuan Dana Operasional: ${normalizedName} KC. Uji`);
+    expect(result.payload.items).toEqual([{ nama_barang: normalizedName, jumlah: 4, satuan: "Unit", nominal: 280000 }]);
+    expect(result.payload.description).toBe(`${normalizedName}\r\n\r\nRincian:\n 1. Filter AC\n 2. Pembersihan rutin`);
+    expect(result.payload).toMatchObject({ amount: 280000, type, branch_id: 10, project_id: 18,
+      main_document: "https://sigap.example.test/main.pdf?reference=a%20b", attachments });
+    expect(result.payload.approvals[0].notes).toBe(sourceApproval.notes);
+    expect(request).toEqual(before);
+  });
+
+  it("normalizes pasted nonbreaking spaces and line breaks in single-line text only", () => {
+    const request = { submissionNumber: "WHITESPACE", type: "operational", title: "  Service\t\n AC\u00a0\u00a0kantor ",
+      description: "\t \u00a0", items: [{ item_name: "Service\r\n\t AC\u00a0 kantor", quantity: 1, unit: "Unit\t kerja", subtotal: 1000 }] };
+    const options = { branchId: 1, division: "Teknik", approvals: [approval] };
+    const mapped = mapMarisonFundSubmission({ request, ...options });
+    expect(mapped.payload.title).toBe("Service AC kantor");
+    expect(mapped.payload.description).toBeNull();
+    expect(mapped.payload.items[0]).toEqual({ nama_barang: "Service AC kantor", jumlah: 1, satuan: "Unit kerja", nominal: 1000 });
+    const again = mapMarisonFundSubmission({ request: { ...request, title: mapped.payload.title,
+      description: mapped.payload.description, items: mapped.payload.items as unknown[] }, ...options });
+    expect(again.payload).toEqual(mapped.payload);
+  });
+
   it("preserves decimal Fund quantities and rounds KEU line amounts consistently", () => {
     const items = mapKeu1ItemsForFund([{ keterangan: "Sewa", jumlah: "1,5", satuan: "hari", estimasi_harga_satuan: 1001 }]);
     expect(items).toEqual([{ nama_barang: "Sewa", jumlah: 1.5, satuan: "hari", nominal: 1502 }]);
