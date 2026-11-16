@@ -36,8 +36,17 @@ jobs:
       - name: Resolve the production commit under test
         id: resolve
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resolve changes since live SIGAP production
+        run: bash scripts/quality-live-base.sh production
+      - name: Separate independent status release from SIGAP app rollout
+        id: scope
+        run: node scripts/status-release-scope.mjs "$BASE_SHA" >> "$GITHUB_OUTPUT"
       - name: Confirm live staging contains main
         id: parity
+        if: steps.scope.outputs.status_only != 'true'
         run: bash scripts/check-staging-parity.sh
 
   quality:

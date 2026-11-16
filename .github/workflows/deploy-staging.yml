@@ -19,6 +19,8 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    outputs:
+      status_only: ${{ steps.scope.outputs.status_only }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,12 +31,15 @@ jobs:
           cache: npm
       - run: npm ci --workspaces --include-workspace-root
       - run: bash scripts/quality-live-base.sh staging
+      - name: Separate independent status release from SIGAP app rollout
+        id: scope
+        run: node scripts/status-release-scope.mjs "$BASE_SHA" >> "$GITHUB_OUTPUT"
       - run: npm run quality:changed
       - run: npm audit --audit-level=high
 
   deploy:
     needs: quality
-    if: github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging' && needs.quality.outputs.status_only != 'true'
     runs-on: [self-hosted, linux, x64, sigap-deploy]
     environment: staging
     timeout-minutes: 30

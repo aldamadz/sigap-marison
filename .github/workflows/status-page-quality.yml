@@ -1,0 +1,34 @@
+name: Status Page Quality
+
+on:
+  pull_request:
+    paths:
+      - ops/status-page/**
+      - scripts/status-release-scope*
+      - .github/workflows/status-page-quality.yml
+      - .github/workflows/deploy-staging.yml
+      - .github/workflows/deploy-production.yml
+  push:
+    branches: [staging, main]
+    paths:
+      - ops/status-page/**
+      - scripts/status-release-scope*
+      - .github/workflows/status-page-quality.yml
+      - .github/workflows/deploy-staging.yml
+      - .github/workflows/deploy-production.yml
+
+permissions:
+  contents: read
+
+jobs:
+  status-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: php -r 'exit(extension_loaded("sodium") ? 0 : 1);'
+      - run: php -l ops/status-page/cpanel/public/index.php
+      - run: php -l ops/status-page/cpanel/cron.php
+      - run: STATUS_PHP_TEST=1 node --test scripts/status-release-scope.test.mjs ops/status-page/*.test.mjs ops/status-page/cpanel/*.test.mjs
