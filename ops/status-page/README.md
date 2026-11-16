@@ -1,5 +1,14 @@
 # Marison Cloud public status
 
+## Production Hosting Notice (2026-11-16)
+
+The public status service now runs independently on cPanel, using private SQLite
+and shared snapshots. Use [the cPanel runbook](cpanel/README.md) for current
+operations. The Cloudflare/D1 instructions below describe the preserved legacy
+implementation and rollback source only. Do not re-enable its status probe crons
+or collector destinations as part of an ordinary release. The main site's legal
+Worker routes remain active and are not part of the retired status probes.
+
 ## 2026-11-05 [Codex] CCTV Public Availability
 
 The existing SIGAP components remain active; CCTV is a fifth top-level component.
