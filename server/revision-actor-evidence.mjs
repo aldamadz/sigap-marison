@@ -40,7 +40,7 @@ export async function enrichRevisionActors(supabase, source, histories = []) {
     // A requester may only confirm a signer's proposal, not author the changes.
     const proposal=changes.signer_full_proposal===true || changes.signer_revision_required===true || changes.keu10_finance_proposal===true;
     const requesterEdit=changes.requester_edit_required===true;
-    return { ...history, revision_mode:event ? (proposal ? "signer_proposal" : requesterEdit ? "requester_edit" : undefined) : undefined,
+    return { ...history, revision_mode:event ? (changes.signer_direct_approval===true ? "signer_direct" : proposal ? "signer_proposal" : requesterEdit ? "requester_edit" : undefined) : undefined,
       requested_by_name: event ? nameFor(event.actor_id, history) : undefined,
       submitted_by_name: nameFor(history.submitted_by, history) };
   }) };

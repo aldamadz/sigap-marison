@@ -88,6 +88,7 @@ import { Keu10SubmissionSummary } from "@/components/surat/Keu10SubmissionSummar
 import { FundItemChecklist } from "@/components/surat/FundItemChecklist";
 import { Keu10SubmissionEditor } from "@/components/surat/Keu10SubmissionEditor";
 import { SignerRevisionEditor } from "@/components/surat/SignerRevisionEditor";
+import { SignerRevisionFinalApprover } from "@/components/surat/SignerRevisionFinalApprover";
 import { RequesterRevisionSummary } from "@/components/surat/RequesterRevisionSummary";
 import { normalizeSignerRevisionForm, signerRevisionForm, signerRevisionIssue, type SignerRevisionForm } from "@/lib/signer-revision-form";
 import { validateKeu10SubmissionItems, type Keu10SubmissionItem } from "@/features/surat/registration/lib/keu10-form";
@@ -153,6 +154,7 @@ export default function InboxPage() {
   const [revisionNote, setRevisionNote] = useState("");
   const [requesterRevisionMode, setRequesterRevisionMode] = useState<"general" | "items">("general");
   const [fullRevisionForm, setFullRevisionForm] = useState<SignerRevisionForm | null>(null);
+  const [fullRevisionDirectorId, setFullRevisionDirectorId] = useState("");
   const [keu10RevisionItems, setKeu10RevisionItems] = useState<Keu10SubmissionItem[]>([]);
   const [revisionRows, setRevisionRows] = useState<Array<{
     index: number;
@@ -1185,6 +1187,7 @@ const handleApprove = async (item: any) => {
     const requestedUnitCount = getRequestedUnitCount(item);
     setRevisionDialogItem(item);
     setFullRevisionForm(signerRevisionForm(getInboxSurat(item)));
+    setFullRevisionDirectorId("");
     if (isVerificationTask(item) && isSharedExamination(item)) setRevisionTarget("requester");
     setRequesterRevisionMode("general");
     setRevisionNote(notes[item.id] || "");
@@ -1326,6 +1329,25 @@ const handleApprove = async (item: any) => {
 
     setProcessingId(item.id);
     try {
+      if (fullProposal && proposedForm) {
+        if (keu10 && !fullRevisionDirectorId) throw new Error("Pilih penyetuju akhir yang memenuhi nominal revisi.");
+        const blockers = getApprovalBlockers(item);
+        if (blockers.length) throw new Error(`Belum siap: ${blockers.join(", ")}.`);
+        const confirmed = await appDialog.confirm({
+          title: "Simpan revisi dan setujui?",
+          description: "Perubahan dan persetujuan dicatat atas nama Anda. Pengajuan diteruskan, dan pemohon diberi tahu tanpa diminta konfirmasi.",
+          confirmText: "Simpan revisi dan setujui", cancelText: "Periksa lagi",
+        });
+        if (!confirmed) return;
+        await suratApprovalApi.reviseAndApprove({ suratId: item.surat_id, signatureId: item.id, reason: note, form: proposedForm,
+          ...(keu10 ? { finalSignerId: fullRevisionDirectorId } : {}) });
+        toast.success("Revisi dan persetujuan tersimpan", { description: "Pemohon diberi tahu dan pengajuan diteruskan sesuai alurnya." });
+        setRevisionDialogItem(null);
+        finishCompletedTask(item);
+        refreshInboxAfterAction();
+        void queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] });
+        return;
+      }
       const restartStep = target === "signer"
         ? Math.max(1, Number(item.step_order || 1) - 1)
         : Number(item.step_order || 1);
@@ -3080,7 +3102,9 @@ const handleApprove = async (item: any) => {
             <DialogDescription>
               {isGeneralRequesterRevision(revisionDialogItem)
                   ? "Pemohon melengkapi data atau lampiran melalui Tindak Lanjut. Setelah dikirim ulang, pengajuan kembali ke tahap ini."
-                : "Usulan revisi menunggu konfirmasi pemohon sebelum proses dilanjutkan."}
+                : isRequesterRevision(revisionDialogItem)
+                  ? "Revisi disimpan bersama persetujuan. Pemohon mendapat pemberitahuan, tanpa perlu mengonfirmasi."
+                  : "Perbaikan dikirim ke tahap yang dipilih sebelum proses dilanjutkan."}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
@@ -3096,7 +3120,7 @@ const handleApprove = async (item: any) => {
                     <RadioGroupItem value="general" id="requester-revision-general" />
                     <Label htmlFor="requester-revision-general">Minta Perbaikan Pemohon</Label>
                   </div>
-                  {(
+                  {!isVerificationTask(revisionDialogItem) && (
                     <div className="flex items-center gap-2">
                       <RadioGroupItem value="items" id="requester-revision-items" />
                       <Label htmlFor="requester-revision-items">Revisi oleh Penandatangan</Label>
@@ -3126,6 +3150,9 @@ const handleApprove = async (item: any) => {
                   <SignerRevisionEditor value={fullRevisionForm} onChange={setFullRevisionForm}
                     form={revisionDialogItem?.surat_registrasi?.location_snapshot?.form || revisionDialogItem?.surat_registrasi?.data_snapshot?.form} />
                   <RequesterRevisionSummary baseline={{ formData: signerRevisionForm(getInboxSurat(revisionDialogItem)) }} current={{ formData: fullRevisionForm }} />
+                  {isKeu10Revision(revisionDialogItem) && <SignerRevisionFinalApprover signatureId={revisionDialogItem.id}
+                    policy={getInboxSurat(revisionDialogItem)?.policy_snapshot} signatures={getInboxSurat(revisionDialogItem)?.surat_signatures}
+                    items={fullRevisionForm.form_input_data.items} value={fullRevisionDirectorId} onChange={setFullRevisionDirectorId} />}
                   <div className="space-y-2"><Label htmlFor="signer-full-revision-reason">Alasan revisi</Label>
                     <Textarea id="signer-full-revision-reason" value={revisionNote} onChange={event => setRevisionNote(event.target.value)} minLength={5} maxLength={1000} required />
                   </div>
@@ -3238,7 +3265,7 @@ const handleApprove = async (item: any) => {
             </Button>
             <Button type="button" disabled={!revisionDialogItem || processingId === revisionDialogItem?.id} onClick={() => revisionDialogItem && handleReturnForRevision(revisionDialogItem)}>
               {processingId === revisionDialogItem?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              {isGeneralRequesterRevision(revisionDialogItem) ? "Minta perbaikan" : isRequesterRevision(revisionDialogItem) ? "Kirim usulan revisi" : "Kirim revisi"}
+              {isGeneralRequesterRevision(revisionDialogItem) ? "Minta perbaikan" : isRequesterRevision(revisionDialogItem) ? "Simpan revisi dan setujui" : "Kirim revisi"}
             </Button>
           </DialogFooter>
         </DialogContent>
