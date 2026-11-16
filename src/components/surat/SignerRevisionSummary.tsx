@@ -43,16 +43,25 @@ export function SignerRevisionSummary({ revision, suratId }: { revision?: Active
     </div>}
     {evidence?.histories.map(history => {
       const requester = revisionSubmitterName(history);
-      const event = evidence.events.find(event => event.id === history.revision_event_id && event.actor_id === history.requested_by);
+      const event = evidence.events.find(event => event.id === history.revision_event_id && event.actor_id === history.requested_by
+        && (!event.surat_id || event.surat_id === suratId));
       const requestingActor = event?.actor_name?.trim();
       const direct = event?.changes?.signer_direct_approval === true && history.submitted_by === event.actor_id;
+      const proposal = event?.changes?.signer_full_proposal === true || event?.changes?.signer_revision_required === true
+        || event?.changes?.keu10_finance_proposal === true;
+      const requesterEdit = event?.changes?.requester_edit_required === true;
+      const historyHeading = direct ? `Direvisi dan disetujui oleh ${requestingActor || "penandatangan"}`
+        : proposal ? `Direvisi oleh ${requestingActor || "penandatangan"}`
+          : requesterEdit && requester ? `Diperbaiki oleh ${requester}` : "Perbaikan pengajuan";
       return <div key={history.id} className="space-y-2 border-t pt-3">
-        <h4 className="text-sm font-semibold">{direct ? `Direvisi dan disetujui oleh ${requestingActor || "penandatangan"}` : requester ? `${fullProposal && history.revision_event_id === revision.event_id ? 'Dikonfirmasi' : 'Perbaikan'} oleh ${requester}` : "Perbaikan pengajuan"}</h4>
+        <h4 className="text-sm font-semibold">{historyHeading}</h4>
         <p className="text-xs text-muted-foreground">
-          {!direct && requestingActor ? `Diminta oleh ${requestingActor} · ` : ""}
+          {!direct && !proposal && requestingActor ? `Diminta oleh ${requestingActor} · ` : ""}
           {new Date(history.submitted_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}
         </p>
         {direct && <p className="text-xs text-muted-foreground">Pemohon diberi tahu; konfirmasi tidak diperlukan.</p>}
+        {!direct && proposal && requester && <p className="text-xs text-muted-foreground">Dikirim kembali oleh pemohon: {requester} (riwayat alur sebelumnya).</p>}
+        {!direct && !proposal && !requesterEdit && requester && <p className="text-xs text-muted-foreground">Dikirim oleh pemohon: {requester}.</p>}
         <p className="whitespace-pre-wrap break-words text-sm">Alasan: {history.reason}</p>
         {history.requester_note && <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">Catatan pemohon: {history.requester_note}</p>}
         <RequesterRevisionSummary baseline={revisionSnapshotForDisplay(history.before_snapshot)}

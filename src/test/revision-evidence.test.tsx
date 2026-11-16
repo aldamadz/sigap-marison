@@ -11,6 +11,30 @@ const history = { id:"history",revision_event_id:"event",requested_by:"actor",su
   after_snapshot:{document:{created_by:"owner",requester_snapshot:{full_name:"Pemohon Contoh"},form_input_data:{items:[{id:"a",nama_barang:"Komputer Baru",jumlah:3,status:2}]}},attachments:[{file_url:"new",file_name:"RAB.pdf"}]},
 };
 describe("named revision evidence",()=>{
+  it("keeps the BM as author of an older proposal when the current revision is direct approval",async()=>{
+    load.mockResolvedValue({events:[
+      {id:"event",surat_id:"document",actor_id:"actor",actor_name:"BM Contoh",changes:{signer_full_proposal:true,signer_revision_required:true,requester_edit_required:false}},
+      {id:"latest",surat_id:"document",actor_id:"actor",actor_name:"BM Contoh",changes:{signer_direct_approval:true}},
+    ],histories:[history,{...history,id:"latest-history",revision_event_id:"latest",submitted_by:"actor",requester_note:null}]});
+    render(<SignerRevisionSummary suratId="document" revision={{event_id:"latest",reason:"Perubahan terbaru",changes:{signer_direct_approval:true}}} />);
+    expect(await screen.findByRole("heading",{name:"Direvisi oleh BM Contoh",level:4})).toBeInTheDocument();
+    expect(screen.getByRole("heading",{name:"Direvisi dan disetujui oleh BM Contoh",level:4})).toBeInTheDocument();
+    expect(screen.queryByRole("heading",{name:/oleh Pemohon Contoh/})).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dikonfirmasi oleh/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Dikirim kembali oleh pemohon: Pemohon Contoh/)).toBeInTheDocument();
+  });
+  it("retains genuine requester-authored repairs",async()=>{
+    load.mockResolvedValue({events:[{id:"event",surat_id:"document",actor_id:"actor",actor_name:"Pemeriksa Contoh",changes:{requester_edit_required:true}}],histories:[history]});
+    render(<SignerRevisionSummary suratId="document" revision={{event_id:"event",reason:"Pemohon memperbaiki data"}} />);
+    expect(await screen.findByRole("heading",{name:"Diperbaiki oleh Pemohon Contoh",level:4})).toBeInTheDocument();
+  });
+  it("does not attribute a historical edit using an event from another document",async()=>{
+    load.mockResolvedValue({events:[{id:"event",surat_id:"other",actor_id:"actor",actor_name:"Nama asing",changes:{signer_full_proposal:true}}],histories:[history]});
+    render(<SignerRevisionSummary suratId="document" revision={{event_id:"event",reason:"Perbaikan"}} />);
+    expect(await screen.findByRole("heading",{name:"Perbaikan pengajuan",level:4})).toBeInTheDocument();
+    expect(screen.queryByText(/Nama asing/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading",{name:/oleh Pemohon Contoh/})).not.toBeInTheDocument();
+  });
   it("attributes direct edits to the signer without claiming requester confirmation",async()=>{
     load.mockResolvedValue({events:[{id:"event",surat_id:"document",actor_id:"actor",actor_name:"Pemeriksa Contoh",changes:{signer_direct_approval:true}}],
       histories:[{...history,submitted_by:"actor",requester_note:null}]});
@@ -23,7 +47,8 @@ describe("named revision evidence",()=>{
     load.mockResolvedValue({events:[{id:"event",surat_id:"document",actor_id:"actor",actor_name:"Pemeriksa Contoh"}],histories:[history]});
     render(<SignerRevisionSummary suratId="document" revision={{event_id:"event",reason:"Lengkapi spesifikasi",changes:{signer_revision_required:true}}} />);
     expect(await screen.findByRole("heading",{name:"Revisi oleh Pemeriksa Contoh"})).toBeInTheDocument();
-    expect(screen.getByRole("heading",{name:"Perbaikan oleh Pemohon Contoh"})).toBeInTheDocument();
+    expect(screen.getByRole("heading",{name:"Perbaikan pengajuan",level:4})).toBeInTheDocument();
+    expect(screen.getByText("Dikirim oleh pemohon: Pemohon Contoh.")).toBeInTheDocument();
     for(const name of ["Komputer Baru","Foto lama.pdf","RAB.pdf"]) expect(screen.getAllByText(new RegExp(name.replace('.','\\.'))).length).toBeGreaterThan(0);
     expect(screen.queryByText("Revisi oleh Penandatangan")).not.toBeInTheDocument();
   });
