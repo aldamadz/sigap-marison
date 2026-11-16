@@ -2253,3 +2253,17 @@ verifikasi juga runtime, database, worker, dan smoke test.
   visually. Runtime worker render smoke and five production public readiness
   probes passed. Hosted CI remains blocked before execution by GitHub billing.
   No live submission, historical PDF rewrite or outbound resend was performed.
+
+## OPS-16 Independent Status Hosting (2026-11-16, [Codex], #962)
+
+User authorized full status.marisoncloud.com migration from Workers/D1 to
+independent cPanel: private SQLite, minute probes, signed internal telemetry,
+maintenance sync, incident CLI, shared snapshots, RSS/Atom and unchanged UI.
+Imports only ops/status-page from existing production status feature bff1018;
+does not include that branch's unrelated commits or deploy SIGAP applications.
+Eight-table original export independently verified by counts/content digests and
+schema on Windows and hosting. Hosted suite 61/61 passed, including real PHP/Node
+fixture ingestion. Preview cycle/backup passed. Public routing, collector change
+and legacy cron shutdown remain pending; source/test completion is not a public
+release. Preserve D1, old Worker configuration and original exports for rollback.
+See ops/status-page/cpanel/README.md for cutover guards and current evidence.
