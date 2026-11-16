@@ -26,6 +26,19 @@ Forward migration `20261116100000`. Depends on SUR-51 readable audit presentatio
 (currently staging-only); selective production requires both and explicit user
 authorization. No live approval, vendor POST or historical document rewrite.
 
+## SUR-53 Per-Entry Revision Authorship (2026-11-16, [Codex], #976)
+
+Follow-up to SUR-51/SUR-52, staging then production authorized. Each history
+entry resolves its own canonical event and actor, not the current revision's
+proposal flag. A signer's older proposal remains attributed to that signer;
+requester resubmission in the previous flow is a separate historical note, never
+a claim that the requester authored the edit or must confirm the new flow.
+Direct signer approval remains attributed to the signer with notification only.
+Genuine requester edits retain requester attribution; missing or cross-document
+provenance uses neutral wording. App-only presentation correction; no migration,
+immutable history rewrite, signed PDF regeneration, approval or external resend.
+PDF enrichment already resolves each event independently and is unchanged.
+
 ## MRN-20 Fund Payload Whitespace (2026-11-13, [Codex], #954)
 
 Staging candidate: normalize pasted tabs/repeated whitespace in outbound Fund
