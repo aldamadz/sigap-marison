@@ -28,7 +28,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: php -r 'exit(extension_loaded("sodium") ? 0 : 1);'
+      - run: |
+          php -r 'exit(extension_loaded("sodium") ? 0 : 1);'
       - run: php -l ops/status-page/cpanel/public/index.php
       - run: php -l ops/status-page/cpanel/cron.php
       - run: STATUS_PHP_TEST=1 node --test scripts/status-release-scope.test.mjs ops/status-page/*.test.mjs ops/status-page/cpanel/*.test.mjs
