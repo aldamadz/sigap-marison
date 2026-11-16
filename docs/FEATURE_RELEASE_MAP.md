@@ -2261,9 +2261,14 @@ independent cPanel: private SQLite, minute probes, signed internal telemetry,
 maintenance sync, incident CLI, shared snapshots, RSS/Atom and unchanged UI.
 Imports only ops/status-page from existing production status feature bff1018;
 does not include that branch's unrelated commits or deploy SIGAP applications.
-Eight-table original export independently verified by counts/content digests and
-schema on Windows and hosting. Hosted suite 61/61 passed, including real PHP/Node
-fixture ingestion. Preview cycle/backup passed. Public routing, collector change
-and legacy cron shutdown remain pending; source/test completion is not a public
-release. Preserve D1, old Worker configuration and original exports for rollback.
-See ops/status-page/cpanel/README.md for cutover guards and current evidence.
+Released via #963 (staging), #964 (selective main a4606fea) and #965 (ancestry
+sync e2280e2a). Live public hostname now uses proxied cPanel plus exact-host
+Strict TLS; collector and serialized minute cron are active. Eight-table export
+counts/digests/schema independently match on Windows and hosting. Hosted status
+suite 62/62 and collector5/5 passed, authentic ingestion204, public feeds/API200,
+private paths404. Existing history and old D1/Worker rollback evidence retained.
+Both legacy probe cron schedules removed/saved and absent after settings reload;
+their scheduler propagation/tail checkpoints are recorded on #962. Main-host
+legal Worker routes and SIGAP app runtimes remain unchanged. See
+ops/status-page/cpanel/README.md for evidence, rollback and independent-release
+SHA handling. No business data, approvals or vendor requests changed.

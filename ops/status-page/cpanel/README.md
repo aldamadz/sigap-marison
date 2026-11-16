@@ -1,5 +1,9 @@
 # Independent cPanel status runtime (OPS-16 / #962)
 
+Production status now uses this runtime. The old Cloudflare status databases are
+archives/rollback inputs, not the live status store. Do not re-enable their probe
+cron schedules or restore old collector destinations during an ordinary release.
+
 This runtime removes D1 from status reads and writes, not just from its frontend.
 It does not deploy SIGAP or access business records. The existing probe,
 maintenance validator, Ed25519 report verifier, incident validator, status UI and
@@ -137,3 +141,61 @@ method/path/host restrictions, and public reads with the database removed.
   not mean public cutover, live collector migration or old cron shutdown occurred.
 - Public cutover remains gated on SSL installation/verification and the remaining
   cutover acceptance steps above. Do not mark OPS-16 complete from source alone.
+
+## Public cutover evidence, 16 November 2026
+
+The initial preview gates above were subsequently passed:
+
+- PR #963 staged the feature, #964 selectively released it to main (`a4606fea`),
+  and #965 synchronized main ancestry to staging (`e2280e2a`). Hosted quality,
+  dependency audit and dedicated status gates passed. SIGAP deployment jobs were
+  intentionally skipped by the narrow status-only guard, not bypassed manually.
+- The independent cPanel release is artifact `46ceacd`. Actual hosted Node/PHP
+  suite: 62/62 passed, zero skipped; collector tests: 5/5 passed. Tests include
+  preservation/idempotency of provider web rules and existing unrelated cron jobs.
+- Final pre-cutover SQL SHA256:
+  `3c2e7fb5bbc8ca25eb677c7b6d2b8eaa6ac437b4f7bbe78ebb146dee4078d4be`.
+  Import preserved 21,571 legacy and 111,177 component checks, 123 daily rows,
+  three maintenance records and the source revision. All eight table digests and
+  schema match a separate local import of that same export.
+- `status.marisoncloud.com` is proxied A -> `210.16.64.51`. Nameservers remain
+  Cloudflare. Configuration rule `c42fc06de87c4788b2ab94fa0b653de6` applies Strict
+  TLS only to that exact hostname. Its Origin CA certificate matches the hostname
+  and expires 16 November 2027; direct origin checks use the official CA root.
+- The old page Worker's status custom domain was detached; its
+  `marisoncloud.com/*` and `marisoncloud.com/terms*` routes remain unchanged.
+  Main landing, privacy and terms all returned HTTP200 after cutover.
+- Live files reside under `/home/wurdgtgl/status-private`; public gateway only
+  under `/home/wurdgtgl/status.marisoncloud.com/public`. Existing provider PHP
+  directives were preserved. Private files are mode0600 under a mode0700 parent.
+- Cron installation preserved the original three-line crontab SHA256
+  `0a0a9e869c397f85b38825f4e9f34a252c905cb210df09669239b98ac7cd18b1`.
+  The managed new crontab is
+  `01586acf37c65aa28dd0b03fbec7269bcd3f64651c8c18349bd7018a6669e452`;
+  private exact backups exist before any change. Multiple automatic minute cycles
+  and a checked daily SQLite backup succeeded.
+- Proxmox collector now sends only to `https://status.marisoncloud.com/report`.
+  Original configuration/source were backed up; its private signing key is
+  unchanged. Authentic origin and public ingestion returned204; the unchanged
+  systemd timer repeatedly published successfully after cutover.
+- Public root/API/logo/scripts/RSS/Atom returned200, feeds parsed as XML,
+  private configuration/database paths returned404, and signature/method/stale
+  behavior passed actual PHP/Node fixture tests. Browser checks passed theme
+  toggles, subscription dialog URLs, service expansion and all three maintenance
+  histories. Existing percentages/history were preserved, never reset to100%.
+- Both legacy status probe cron schedules were removed and saved, then confirmed
+  absent after reloading their Cloudflare settings. Changes may take up to
+  15 minutes to reach all schedulers; final settled D1 checkpoints/tail exports
+  are recorded in Issue #962. D1 data and Worker source are NOT deleted.
+- Post-cutover exports are also archived privately on both machines. A checked
+  append-only reconciliation restored 18 missing cutover-window observations
+  (2 legacy, 16 component), without replacing overlapping new-origin samples;
+  repeating the merge did not change raw rows or daily counters. A pre-merge
+  SQLite backup and per-table audit manifest remain private.
+- SIGAP runtime remains production `53994df14f0b3501d43bf1a302f9121aee414f0e`
+  and staging `debdf3c82c10f2e063b49d72ea4310bbb674e584`; both readiness checks
+  returned200. No SIGAP restart, business data change or vendor resend occurred.
+
+For this independent release, Git main/staging include status-only source newer
+than the SIGAP runtime SHAs by design. The status artifact is separately tested
+and deployed; this does not assert that SIGAP runtimes contain the status commit.
