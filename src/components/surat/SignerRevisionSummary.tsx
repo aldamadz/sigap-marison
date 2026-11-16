@@ -22,7 +22,7 @@ export function SignerRevisionSummary({ revision, suratId }: { revision?: Active
   const isProposal = revision.changes?.signer_revision_required === true || rows.length > 0;
   const actor = evidence?.events.find(event => event.id === revision.event_id
     && (!event.surat_id || event.surat_id === suratId))?.actor_name?.trim();
-  const heading = isProposal ? "Revisi" : "Permintaan perbaikan";
+  const heading = revision.changes?.signer_direct_approval === true ? "Direvisi dan disetujui" : isProposal ? "Revisi" : "Permintaan perbaikan";
   const fullProposal = revision.changes?.signer_full_proposal === true;
   return <section className="space-y-3 border-t pt-4" aria-label="Catatan perbaikan pengajuan">
     <h3 className="text-sm font-semibold">{actor ? `${heading} oleh ${actor}` : heading}</h3>
@@ -43,14 +43,16 @@ export function SignerRevisionSummary({ revision, suratId }: { revision?: Active
     </div>}
     {evidence?.histories.map(history => {
       const requester = revisionSubmitterName(history);
-      const requestingActor = evidence.events.find(event => event.id === history.revision_event_id
-        && event.actor_id === history.requested_by)?.actor_name?.trim();
+      const event = evidence.events.find(event => event.id === history.revision_event_id && event.actor_id === history.requested_by);
+      const requestingActor = event?.actor_name?.trim();
+      const direct = event?.changes?.signer_direct_approval === true && history.submitted_by === event.actor_id;
       return <div key={history.id} className="space-y-2 border-t pt-3">
-        <h4 className="text-sm font-semibold">{requester ? `${fullProposal && history.revision_event_id === revision.event_id ? 'Dikonfirmasi' : 'Perbaikan'} oleh ${requester}` : "Perbaikan pengajuan"}</h4>
+        <h4 className="text-sm font-semibold">{direct ? `Direvisi dan disetujui oleh ${requestingActor || "penandatangan"}` : requester ? `${fullProposal && history.revision_event_id === revision.event_id ? 'Dikonfirmasi' : 'Perbaikan'} oleh ${requester}` : "Perbaikan pengajuan"}</h4>
         <p className="text-xs text-muted-foreground">
-          {requestingActor ? `Diminta oleh ${requestingActor} · ` : ""}
+          {!direct && requestingActor ? `Diminta oleh ${requestingActor} · ` : ""}
           {new Date(history.submitted_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}
         </p>
+        {direct && <p className="text-xs text-muted-foreground">Pemohon diberi tahu; konfirmasi tidak diperlukan.</p>}
         <p className="whitespace-pre-wrap break-words text-sm">Alasan: {history.reason}</p>
         {history.requester_note && <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">Catatan pemohon: {history.requester_note}</p>}
         <RequesterRevisionSummary baseline={revisionSnapshotForDisplay(history.before_snapshot)}

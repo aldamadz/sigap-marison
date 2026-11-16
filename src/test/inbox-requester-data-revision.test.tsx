@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   kpi: [] as Record<string,unknown>[],
   noop: vi.fn(),
   requestRevision: vi.fn(),
+  reviseAndApprove: vi.fn(),
   saveDraft: vi.fn(async (_signature: string, _payload: unknown, _note?: string) => ({})),
   prompt: vi.fn(),
   error: vi.fn(),
@@ -71,8 +72,14 @@ vi.mock("@/lib/supabase", () => ({
   supabase: {auth:{getSession:async()=>({data:{session:{access_token:'fixture'}}})},channel:()=>{const channel={on:()=>channel,subscribe:()=>channel};return channel;},removeChannel:()=>undefined},
   onRealtimeReconnect:()=>({unsubscribe:()=>undefined}),
 }));
+vi.mock("@/components/surat/SignerRevisionFinalApprover", async () => {
+  const { useEffect }=await import('react');
+  return {SignerRevisionFinalApprover:({onChange}:{onChange:(id:string)=>void})=>{
+    useEffect(()=>onChange('director'),[onChange]); return null;
+  }};
+});
 vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({
-  suratApprovalApi: { requestProcessRevision: mocks.requestRevision, saveVerificationDraft:mocks.saveDraft,
+  suratApprovalApi: { requestProcessRevision: mocks.requestRevision, reviseAndApprove: mocks.reviseAndApprove, saveVerificationDraft:mocks.saveDraft,
     claimExamination: mocks.claim,
     approveSurat: mocks.approve, rejectSurat: mocks.reject, verifySignature: mocks.verify },
 }));
@@ -109,6 +116,7 @@ beforeEach(() => {
   mocks.kpi=[];
   mocks.currentUser=null;mocks.detailError=false;
   mocks.requestRevision.mockResolvedValue({ id: "revision" });
+  mocks.reviseAndApprove.mockReset().mockResolvedValue({ success: true });
   mocks.prompt.mockResolvedValue(reason);
   Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
   vi.stubGlobal("ResizeObserver", class {
@@ -373,30 +381,27 @@ describe("Inbox requester data and attachment revision", () => {
     expect(mocks.error).toHaveBeenCalledWith("Catatan revisi minimal 5 karakter.");
   });
 
-  it("validates full signer proposals and sends all edited fields without applying them", async () => {
+  it("validates signer edits and atomically saves revision and approval", async () => {
     renderInbox();
     const dialog = openRevision();
     fireEvent.click(dialog.getByRole("radio", { name: "Revisi oleh Penandatangan" }));
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "0" } });
     fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: reason } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan setujui" }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
     expect(mocks.error).toHaveBeenCalledWith(expect.stringContaining("Jumlah"));
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2.5" } });
     fireEvent.change(dialog.getByLabelText("Nama Barang"), { target: { value: "Laptop revisi" } });
     fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: "abcd" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan setujui" }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
     fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: reason } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
-    await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
-    const payload = mocks.requestRevision.mock.calls[0][0];
-    expect(payload).toMatchObject({ targetType: "requester", reason, changes: {
-      requires_resign: true, restart_step: 3, signer_revision_required: true,
-      signer_proposed_form: { form_input_data: { items: [{ nama_barang: "Laptop revisi", jumlah: 2.5 }] } },
-    } });
-    expect(payload.changes).not.toHaveProperty("requester_edit_required");
-    expect(payload.changes).not.toHaveProperty("external_submission_revision");
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan setujui" }));
+    await waitFor(() => expect(mocks.reviseAndApprove).toHaveBeenCalledOnce());
+    expect(mocks.reviseAndApprove).toHaveBeenCalledWith(expect.objectContaining({suratId:'surat',signatureId:'signature',reason,
+      form:expect.objectContaining({form_input_data:expect.objectContaining({items:[expect.objectContaining({nama_barang:'Laptop revisi',jumlah:2.5})]})})}));
+    expect(mocks.requestRevision).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
     expect(mocks.fixture.surat_registrasi.form_input_data.items[0]).toEqual({ nama_barang: "Laptop", jumlah: "3" });
   });
 
@@ -462,25 +467,21 @@ describe("Inbox requester data and attachment revision", () => {
     }));
   });
 
-  it("retains validated KEU10 proposals for the formal verifier in item mode", async () => {
+  it("atomically revises KEU10 using the chosen eligible final signer", async () => {
     useKeu10();
     renderInbox();
     const dialog = openRevision();
     fireEvent.click(dialog.getByRole("radio", { name: "Revisi oleh Penandatangan" }));
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "0" } });
     fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: reason } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan setujui" }));
     expect(mocks.requestRevision).not.toHaveBeenCalled();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
-    await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
-    const payload = mocks.requestRevision.mock.calls[0][0];
-    expect(payload.changes).toMatchObject({ requires_resign: true, restart_step: 3,
-      signer_revision_required: true, signer_proposed_form: { form_input_data: {
-        items: [expect.objectContaining({ jumlah: "2", total: 300_000 })], fund_amount: 300_000,
-      } },
-    });
-    expect(payload.changes).not.toHaveProperty("requester_edit_required");
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan setujui" }));
+    await waitFor(() => expect(mocks.reviseAndApprove).toHaveBeenCalledOnce());
+    expect(mocks.reviseAndApprove).toHaveBeenCalledWith(expect.objectContaining({finalSignerId:'director',
+      form:expect.objectContaining({form_input_data:expect.objectContaining({items:[expect.objectContaining({jumlah:'2',total:300_000})],fund_amount:300_000})})}));
+    expect(mocks.requestRevision).not.toHaveBeenCalled();
     expect(mocks.fixture.surat_registrasi.form_input_data.items[0].jumlah).toBe(3);
   });
 

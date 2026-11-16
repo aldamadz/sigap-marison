@@ -49,3 +49,88 @@ test('full signer proposal keeps signer, confirmer and all edited fields in PDF 
  assert.ok(rendered.includes('Penandatangan Contoh')&&rendered.includes('Pemohon Contoh'));
  assert.equal((await renderPgdPdf(data)).subarray(0,5).toString(),'%PDF-');
 });
+
+test('cash revision uses readable rupiah, grouped item names and explicit deletion details',()=>{
+ const items=[
+  {id:'one',keterangan:'Transport petugas',jumlah:1,satuan:'hari',estimasi_harga_satuan:2000,total:2000},
+  {id:'two',keterangan:'Konsumsi petugas',jumlah:2,satuan:'hari',estimasi_harga_satuan:3000,total:6000},
+  {id:'three',keterangan:'Biaya parkir',jumlah:2,satuan:'hari',estimasi_harga_satuan:4500,total:9000},
+ ];
+ const history={submitted_by_name:'Pemohon Contoh',requested_by_name:'Pemeriksa Contoh',revision_mode:'requester_edit',
+  submitted_at:'2026-11-16T03:00:00Z',reason:'Sesuaikan kebutuhan',requester_note:'Sudah diperbaiki',
+  before_snapshot:{document:{form_input_data:{fund_amount:17000,items}}},
+  after_snapshot:{document:{form_input_data:{fund_amount:16500,items:[{...items[1],jumlah:1,total:3000},{...items[2],jumlah:3,total:13500}]}}}};
+ const original=structuredClone(history);
+ const entries=revisionHistoryEntries({revision_history:[history]});
+ const report=JSON.stringify(revisionAppendixBlock(entries,'001/UJI'));
+ for(const expected of ['Rp 17.000','Rp 16.500','Rp 2.000','Rp 3.000','Rp 13.500',
+  '1 hari','2 hari','3 hari','Transport petugas','Konsumsi petugas','Biaya parkir',
+  'Total item','Perubahan oleh pemohon: Pemohon Contoh','Diminta oleh: Pemeriksa Contoh',
+  '1 item dihapus','2 item diubah','Item dihapus dari pengajuan','WIB']) assert.ok(report.includes(expected),expected);
+ assert.ok(!report.includes(' - total'));
+ assert.deepEqual(history,original);
+});
+
+test('signer proposals distinguish the author from the requester who confirms',()=>{
+ const history={revision_mode:'signer_proposal',requested_by_name:'Penandatangan Contoh',submitted_by_name:'Pemohon Contoh',
+  before_snapshot:before,after_snapshot:after};
+ const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries({revision_history:[history]})));
+ assert.ok(report.includes('Usulan perubahan oleh penandatangan: Penandatangan Contoh'));
+ assert.ok(report.includes('Dikonfirmasi oleh pemohon: Pemohon Contoh'));
+ assert.ok(!report.includes('Perubahan oleh pemohon: Pemohon Contoh'));
+});
+
+test('missing provenance never attributes a signer proposal to the requester',()=>{
+ const history={submitted_by_name:'Pemohon Contoh',requested_by_name:'Penandatangan Contoh',before_snapshot:before,after_snapshot:after};
+ const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries({revision_history:[history]})));
+ assert.ok(report.includes('Dikirim oleh: Pemohon Contoh'));
+ assert.ok(!report.includes('Perubahan oleh pemohon:'));
+ assert.ok(!report.includes('Usulan perubahan oleh penandatangan:'));
+});
+
+test('removing one item field is not reported as deleting the entire item',()=>{
+ const old={id:'a',nama_barang:'Komputer',jumlah:1,spesifikasi:'RAM 8GB'};
+ const entries=revisionHistoryEntries({revision_history:[{before_snapshot:{document:{form_input_data:{items:[old]}}},
+  after_snapshot:{document:{form_input_data:{items:[{id:'a',nama_barang:'Komputer',jumlah:1}]}}}}]});
+ const report=JSON.stringify(revisionAppendixBlock(entries));
+ assert.ok(report.includes('Spesifikasi'));
+ assert.ok(report.includes('1 item diubah'));
+ assert.ok(!report.includes('Item dihapus dari pengajuan'));
+});
+
+test('long named items keep complete evidence outside repeated table headers',async()=>{
+ const name='Rincian komputer dengan spesifikasi panjang '.repeat(30)+'AKHIR NAMA ITEM';
+ const input=items=>({document:{form_input_data:{items}}});
+ const histories=Array.from({length:4},(_,index)=>({before_snapshot:input([{id:'a',nama_barang:name,jumlah:index+1}]),
+  after_snapshot:input([{id:'a',nama_barang:name,jumlah:index+2}])}));
+ const definition=revisionAppendixBlock(revisionHistoryEntries({revision_history:histories}));
+ const tables=definition.filter(node=>node.table);
+ assert.equal(tables.length,4);
+ for(const node of tables) {
+  assert.ok(node.table.body[0][0].text.length<220);
+  assert.ok(node.table.body[2][0].text.endsWith('AKHIR NAMA ITEM'));
+ }
+ assert.equal((await renderPgdPdf(normalizePgdDocumentData({...source,revision_history:histories}))).subarray(0,5).toString(),'%PDF-');
+});
+
+test('immutable direct approval snapshot renders signer authorship without inventing requester confirmation',()=>{
+ const doc={data_snapshot:{applied_revision:{event_id:'direct',reason:'Sesuaikan kebutuhan',actor_name:'Penandatangan Contoh',
+  changes:{signer_direct_approval:true,signer_proposal_before:before,signer_proposal_after:after}}}};
+ const entries=revisionHistoryEntries(doc);
+ const text=JSON.stringify(revisionAppendixBlock(entries));
+ assert.ok(text.includes('Perubahan dan persetujuan oleh penandatangan: Penandatangan Contoh'));
+ assert.ok(text.includes('konfirmasi tidak diperlukan'));
+ assert.ok(text.includes('Komputer'));
+ assert.ok(!text.includes('Dikonfirmasi oleh pemohon'));
+ assert.equal(revisionHistoryEntries({...doc,revision_history:[{revision_event_id:'direct',revision_mode:'signer_direct',before_snapshot:before,after_snapshot:after}]}).length,1);
+});
+
+test('frozen PDF keeps consecutive revisions and canonical evidence is not duplicated',()=>{
+ const first={revision_event_id:'one',revision_mode:'signer_direct',submitted_by_name:'Pemeriksa Contoh',before_snapshot:before,after_snapshot:after};
+ const second={...first,revision_event_id:'two',submitted_by_name:'Penyetuju Contoh',before_snapshot:after,after_snapshot:before};
+ const snapshot={data_snapshot:{revision_history:[first,second]}};
+ assert.equal(revisionHistoryEntries(snapshot).length,2);
+ assert.equal(revisionHistoryEntries({...snapshot,revision_history:[first,second]}).length,2);
+ const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries(snapshot)));
+ assert.match(report,/Pemeriksa Contoh/);assert.match(report,/Penyetuju Contoh/);
+});

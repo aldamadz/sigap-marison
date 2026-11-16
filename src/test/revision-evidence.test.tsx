@@ -11,6 +11,14 @@ const history = { id:"history",revision_event_id:"event",requested_by:"actor",su
   after_snapshot:{document:{created_by:"owner",requester_snapshot:{full_name:"Pemohon Contoh"},form_input_data:{items:[{id:"a",nama_barang:"Komputer Baru",jumlah:3,status:2}]}},attachments:[{file_url:"new",file_name:"RAB.pdf"}]},
 };
 describe("named revision evidence",()=>{
+  it("attributes direct edits to the signer without claiming requester confirmation",async()=>{
+    load.mockResolvedValue({events:[{id:"event",surat_id:"document",actor_id:"actor",actor_name:"Pemeriksa Contoh",changes:{signer_direct_approval:true}}],
+      histories:[{...history,submitted_by:"actor",requester_note:null}]});
+    render(<SignerRevisionSummary suratId="document" revision={{event_id:"event",reason:"Spesifikasi disesuaikan",changes:{signer_direct_approval:true}}} />);
+    expect(await screen.findByRole("heading",{name:"Direvisi dan disetujui oleh Pemeriksa Contoh",level:4})).toBeInTheDocument();
+    expect(screen.getByText("Pemohon diberi tahu; konfirmasi tidak diperlukan.")).toBeInTheDocument();
+    expect(screen.queryByText(/Dikonfirmasi oleh|Diminta oleh|Perbaikan oleh Pemohon Contoh/)).not.toBeInTheDocument();
+  });
   it("shows actual actor and complex recorded before/after changes",async()=>{
     load.mockResolvedValue({events:[{id:"event",surat_id:"document",actor_id:"actor",actor_name:"Pemeriksa Contoh"}],histories:[history]});
     render(<SignerRevisionSummary suratId="document" revision={{event_id:"event",reason:"Lengkapi spesifikasi",changes:{signer_revision_required:true}}} />);
