@@ -3,7 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 
 const read = (path) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
 const fundRabParity = process.argv.includes("--fund-rab-parity");
-const fullSignerRevision = process.argv.includes("--full-signer-revision");
+const directSignerRevision = process.argv.includes("--direct-signer-revision");
+const fullSignerRevision = process.argv.includes("--full-signer-revision") || directSignerRevision;
 const revisionRecovery = process.argv.includes("--revision-recovery") || fullSignerRevision;
 const stageOverlay = process.argv.includes("--stageoverlay");
 const stageRead = (file) => {
@@ -355,6 +356,30 @@ try {
           run(psqlArgs, keu1Totals);
         }
         process.stdout.write(run(psqlArgs, read('supabase/tests/full_signer_revision_keu1_totals.integration.sql')));
+        if (directSignerRevision) {
+          run(psqlArgs, "alter table public.surat_recommendation_tasks add column if not exists status text default 'submitted';");
+          const direct=read(migrationRoot+'20261116100000_direct_signer_revision_approval.sql');
+          run(psqlArgs,direct);
+          run(psqlArgs,direct);
+          process.stdout.write(run(psqlArgs,read('supabase/tests/direct_signer_revision.integration.sql')));
+          run(psqlArgs,'select keu10_test.direct_doc(15500);');
+          const revise = () => new Promise((resolve,reject) => {
+            const child=spawn('docker',psqlArgs);let stderr='';
+            child.stdout.on('data',()=>{});
+            child.stderr.on('data',data=>{stderr+=data;});
+            child.on('error',reject);child.on('close',code=>resolve({code,stderr}));
+            child.stdin.end(`set role authenticated;select set_config('request.jwt.claim.sub',keu10_test.id(3)::text,false);
+              select public.revise_and_approve_surat(keu10_test.id(15500),keu10_test.id(15502),'Uji persetujuan bersamaan.',
+                jsonb_set(keu10_test.full_form(keu10_test.id(15500)),'{judul_surat}','"Revisi tunggal"'));`);
+          });
+          const attempts=await Promise.all([revise(),revise()]);
+          if(attempts.filter(row=>row.code===0).length!==1 || attempts.filter(row=>row.code!==0).length!==1)
+            throw new Error(`Direct revision concurrency failed: ${JSON.stringify(attempts)}`);
+          run(psqlArgs,`select keu10_test.assert((select count(*)=1 from public.surat_requester_revision_history where surat_id=keu10_test.id(15500))
+            and (select count(*)=1 from public.notifications where user_id=keu10_test.id(1) and data->>'surat_id'=keu10_test.id(15500)::text),
+            'Concurrent approval saves one audit entry and one requester notification');`);
+          process.stdout.write('Direct signer concurrency: one approval, one immutable history and one requester notification.\n');
+        }
         if (process.argv.includes('--claim-full-revision')) {
           run(psqlArgs, canonical('20260618120000_form_usage_step_verification.sql', 'verify_surat_signature'));
           run(psqlArgs, canonical('20260707113000_save_surat_verification_draft.sql', 'save_surat_verification_draft'));

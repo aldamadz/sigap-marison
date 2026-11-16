@@ -69,6 +69,18 @@ test("canonical event distinguishes signer authorship from requester confirmatio
 test("the worker's attribution helper is packaged in the runtime image",()=>{
   assert.match(readFileSync(new URL("../dockerfile",import.meta.url),"utf8"),/COPY server\/revision-actor-evidence\.mjs \.\/server\/revision-actor-evidence\.mjs/);
 });
+
+test("direct revision uses canonical signer attribution without requester confirmation",async()=>{
+  const history={revision_event_id:eventId,requested_by:actorId,submitted_by:actorId,
+    before_snapshot:{document:{form_input_data:{items:[{id:"a",nama_barang:"Komputer",jumlah:2}]}}},
+    after_snapshot:{document:{form_input_data:{items:[{id:"a",nama_barang:"Komputer",jumlah:1}]}}}};
+  const result=await enrichRevisionActors(client([{id:eventId,surat_id:"document",actor_id:actorId,changes:{signer_direct_approval:true}}],
+    [{id:actorId,full_name:"Pemeriksa Contoh"}]),source(),[history]);
+  const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries(result)));
+  assert.equal(result.revision_history[0].revision_mode,"signer_direct");
+  assert.match(report,/Perubahan dan persetujuan oleh penandatangan: Pemeriksa Contoh/);
+  assert.doesNotMatch(report,/Dikonfirmasi oleh pemohon|Perubahan oleh pemohon/);
+});
 test("shared image and revision helpers require coordinated worker rollout",()=>{
   const deploy=readFileSync(new URL("../scripts/deploy-app.sh",import.meta.url),"utf8");
   assert.match(deploy,/worker_changes=[\s\S]*dockerfile document-revision-notes\.mjs server\/revision-actor-evidence\.mjs/);

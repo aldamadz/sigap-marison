@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useEffect } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InboxPage from "@/pages/surat/InboxPage";
@@ -19,7 +20,7 @@ const mocks = vi.hoisted(() => {
       surat_signatures: [], surat_attachments: [],
     },
   };
-  return { fixture, noop: vi.fn(), save: vi.fn(), requestRevision: vi.fn().mockResolvedValue({ id: "revision" }), pdfTables: vi.fn<(doc: unknown, options: { head?: unknown; body?: unknown }) => void>(), empty: [] };
+  return { fixture, noop: vi.fn(), save: vi.fn(), reviseAndApprove: vi.fn().mockResolvedValue({success:true}), requestRevision: vi.fn().mockResolvedValue({ id: "revision" }), pdfTables: vi.fn<(doc: unknown, options: { head?: unknown; body?: unknown }) => void>(), empty: [] };
 });
 
 vi.mock("@tanstack/react-query", () => ({
@@ -37,12 +38,15 @@ vi.mock("@/features/surat/inbox/lib/use-inbox-pagination", () => ({
   }),
 }));
 vi.mock("@/providers/AttentionProvider", () => ({ useAttention: () => ({ refetch: mocks.noop }) }));
-vi.mock("@/components/app/AppDialogProvider", () => ({ useAppDialog: () => ({ confirm: mocks.noop }) }));
+vi.mock("@/components/app/AppDialogProvider", () => ({ useAppDialog: () => ({ confirm: async () => true }) }));
+vi.mock("@/components/surat/SignerRevisionFinalApprover", () => ({ SignerRevisionFinalApprover: ({onChange}:{onChange:(id:string)=>void}) => {
+  useEffect(()=>onChange("director"),[onChange]);return null;
+} }));
 vi.mock("@/hooks/useDocumentOpener", () => ({
   useDocumentOpener: () => ({ openPdf: mocks.noop, openFile: mocks.noop, isOpening: () => false }), documentOperationKey: { pdf: () => "document", file: () => "file" },
 }));
 vi.mock("@/lib/supabase", () => ({ supabase: {} }));
-vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({ suratApprovalApi: { requestProcessRevision: mocks.requestRevision } }));
+vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({ suratApprovalApi: { requestProcessRevision: mocks.requestRevision, reviseAndApprove: mocks.reviseAndApprove } }));
 vi.mock("jspdf", () => ({
   jsPDF: class {
     lastAutoTable = { finalY: 160 };
@@ -136,7 +140,7 @@ describe("KEU 10 inbox display and summary export", () => {
       changes: { note: "Perbaiki rincian dan lampiran.", requested_by: "approval_inbox", requires_resign: true, restart_step: step, requester_edit_required: true },
     }));
   });
-  it("the formal Finance verifier proposes validated full form data for requester confirmation", async () => {
+  it("the formal Finance verifier validates full form data before revising and approving atomically", async () => {
     mocks.fixture.role_name = "verifikator";
     mocks.fixture.step_order = 4;
     render(<MemoryRouter><InboxPage /></MemoryRouter>);
@@ -147,18 +151,17 @@ describe("KEU 10 inbox display and summary export", () => {
     expect(dialog.queryByRole("combobox")).not.toBeInTheDocument();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "0" } });
     fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: "Koreksi jumlah menjadi dua dokumen." } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
-    expect(mocks.requestRevision).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan setujui" }));
+    expect(mocks.reviseAndApprove).not.toHaveBeenCalled();
     fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Kirim usulan revisi" }));
-    await waitFor(() => expect(mocks.requestRevision).toHaveBeenCalledOnce());
-    expect(mocks.requestRevision).toHaveBeenCalledWith(expect.objectContaining({
-      targetType: "requester", targetStep: null,
-      changes: expect.objectContaining({ requires_resign: true, restart_step: 4, signer_revision_required: true,
-        signer_proposed_form: expect.objectContaining({ form_input_data: expect.objectContaining({
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan setujui" }));
+    await waitFor(() => expect(mocks.reviseAndApprove).toHaveBeenCalledOnce());
+    expect(mocks.requestRevision).not.toHaveBeenCalled();
+    expect(mocks.reviseAndApprove).toHaveBeenCalledWith(expect.objectContaining({
+      signatureId:"signature",suratId:"surat",finalSignerId:"director",
+      form: expect.objectContaining({ form_input_data: expect.objectContaining({
           items: [expect.objectContaining({ jumlah: "2", total: 300_000 })], fund_amount: 300_000,
-        }) }),
-      }),
+      }) }),
     }));
     expect(mocks.fixture.surat_registrasi.form_input_data.items[0].jumlah).toBe(3);
   });

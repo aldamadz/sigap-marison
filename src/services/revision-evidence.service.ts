@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import type { RequesterRevisionSnapshot } from "@/lib/requester-revision-summary";
 
 export type RevisionEventEvidence = {
-  id: string; surat_id?: string; actor_id?: string; actor_name?: string | null;
+  id: string; surat_id?: string; actor_id?: string; actor_name?: string | null; changes?: Record<string, unknown>;
 };
 export type RevisionHistoryEvidence = {
   id: string; revision_event_id: string; requested_by: string; submitted_by: string;

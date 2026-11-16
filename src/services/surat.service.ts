@@ -1834,6 +1834,16 @@ export const suratService = {
     return data;
   },
 
+  async reviseAndApprove(input: { suratId: string; signatureId: string; reason: string; form: Record<string, unknown>; finalSignerId?: string }) {
+    const { data, error } = await supabase.rpc("revise_and_approve_surat", {
+      p_surat_id: input.suratId, p_sig_id: input.signatureId, p_reason: input.reason, p_form: input.form,
+      p_final_signer_id: input.finalSignerId || null,
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.success) throw new Error("Gagal menyimpan revisi dan persetujuan.");
+    return data;
+  },
+
   async requestProcessRevision(input: {
     suratId: string;
     signatureId?: string | null;

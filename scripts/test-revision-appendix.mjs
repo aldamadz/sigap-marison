@@ -112,3 +112,25 @@ test('long named items keep complete evidence outside repeated table headers',as
  }
  assert.equal((await renderPgdPdf(normalizePgdDocumentData({...source,revision_history:histories}))).subarray(0,5).toString(),'%PDF-');
 });
+
+test('immutable direct approval snapshot renders signer authorship without inventing requester confirmation',()=>{
+ const doc={data_snapshot:{applied_revision:{event_id:'direct',reason:'Sesuaikan kebutuhan',actor_name:'Penandatangan Contoh',
+  changes:{signer_direct_approval:true,signer_proposal_before:before,signer_proposal_after:after}}}};
+ const entries=revisionHistoryEntries(doc);
+ const text=JSON.stringify(revisionAppendixBlock(entries));
+ assert.ok(text.includes('Perubahan dan persetujuan oleh penandatangan: Penandatangan Contoh'));
+ assert.ok(text.includes('konfirmasi tidak diperlukan'));
+ assert.ok(text.includes('Komputer'));
+ assert.ok(!text.includes('Dikonfirmasi oleh pemohon'));
+ assert.equal(revisionHistoryEntries({...doc,revision_history:[{revision_event_id:'direct',revision_mode:'signer_direct',before_snapshot:before,after_snapshot:after}]}).length,1);
+});
+
+test('frozen PDF keeps consecutive revisions and canonical evidence is not duplicated',()=>{
+ const first={revision_event_id:'one',revision_mode:'signer_direct',submitted_by_name:'Pemeriksa Contoh',before_snapshot:before,after_snapshot:after};
+ const second={...first,revision_event_id:'two',submitted_by_name:'Penyetuju Contoh',before_snapshot:after,after_snapshot:before};
+ const snapshot={data_snapshot:{revision_history:[first,second]}};
+ assert.equal(revisionHistoryEntries(snapshot).length,2);
+ assert.equal(revisionHistoryEntries({...snapshot,revision_history:[first,second]}).length,2);
+ const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries(snapshot)));
+ assert.match(report,/Pemeriksa Contoh/);assert.match(report,/Penyetuju Contoh/);
+});

@@ -39,6 +39,20 @@ source snapshot rewrite, historical PDF replacement or external send. PGD/KEU
 appendices share the change; recommendation PDFs remain history-free. Requires
 coordinated app/PDF worker staging rollout; production not authorized.
 
+## SUR-52 Direct Signer Revision And Approval (2026-11-16, [Codex], #972)
+
+User selects all submission types, staging only. A current assigned signer may
+save a full form revision and approve atomically; requester receives a canonical
+notification and immutable before/after history without confirmation. Existing
+return-to-requester and already-open proposal confirmation flows remain intact.
+Reuse hardened form validation and canonical approval gates; never forge the
+requester's identity or bypass examination, recommendation, intake or KEU10
+amount/director eligibility. Changes requiring renewed Unit allocation or item
+recommendation must use the existing return route, not the approval shortcut.
+Forward migration `20261116100000`. Depends on SUR-51 readable audit presentation
+(currently staging-only); selective production requires both and explicit user
+authorization. No live approval, vendor POST or historical document rewrite.
+
 ## MRN-20 Fund Payload Whitespace (2026-11-13, [Codex], #954)
 
 Staging candidate: normalize pasted tabs/repeated whitespace in outbound Fund
