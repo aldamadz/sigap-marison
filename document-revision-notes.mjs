@@ -59,6 +59,9 @@ const labels = {
   catatan: "Catatan", status: "Status", fund_amount: "Total dana", free_cash: "Free Cash",
   keu1_free_cash: "Free Cash", rab_not_required: "Tidak memerlukan RAB", request_date: "Tanggal",
   request_place: "Tempat", judul_surat: "Judul pengajuan", fund_type: "Jenis dana",
+  total: "Total item", subtotal: "Subtotal", amount: "Total dana", harga_satuan: "Harga satuan",
+  quantity: "Jumlah", spesifikasi: "Spesifikasi", item_name: "Nama pekerjaan",
+  free_cash_sisa_bulan_lalu: "Sisa kas bulan lalu", kebutuhan_dana: "Kebutuhan dana",
 };
 const ignored = /(^id$|_id$|file_url|storage_|file_path|pdf_path|token|secret|password|revision|generation|^linked_|^request_category$)/i;
 const label = key => labels[key] || key.replaceAll("_", " ");
@@ -71,15 +74,28 @@ const plain = value => {
   // A file-view bearer is not revision evidence and must not leak into a report.
   return String(value).replace(/https?:\/\/\S*\/api\/files\/view\/\S+/g, "[Tautan file privat]");
 };
+const moneyField = /(^|_)(nominal|harga|biaya|amount|price|subtotal|total)(_|$)|^(free_cash|keu1_free_cash|free_cash_sisa_bulan_lalu|kebutuhan_dana)$/;
+const displayValue = (value, key, item = {}) => {
+  if (value == null || value === "") return "-";
+  const raw = String(value).trim();
+  if (moneyField.test(key) && /^-?\d+(?:\.\d+)?$/.test(raw) && Number.isFinite(Number(raw)))
+    return `Rp ${Number(raw).toLocaleString("id-ID")}`;
+  if (["jumlah","quantity"].includes(key) && (item.satuan || item.sat))
+    return `${plain(value)} ${plain(item.satuan || item.sat)}`;
+  return plain(value);
+};
+const describeItem = item => Object.entries(item).filter(([key]) => !ignored.test(key))
+  .map(([key,value]) => `${label(key)}: ${displayValue(value,key,item)}`).join("\n") || "-";
 const equivalent = (a,b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const inputOf = snapshot => object(object(snapshot).document).form_input_data || object(snapshot).form_input_data || {};
 const describeFile = file => [file.file_name || file.name || "Lampiran",file.file_type || "",
   Number.isFinite(Number(file.file_size)) ? `${Math.round(Number(file.file_size)/1024)} KB` : "",
   file.requirement_label || file.requirement_key || file.stage || ""].filter(Boolean).join(" | ");
-const diffRecord = (before,after,prefix,result) => {
+const diffRecord = (before,after,prefix,result,group) => {
   for (const key of new Set([...Object.keys(before),...Object.keys(after)])) {
     if (ignored.test(key) || key === "items" || equivalent(before[key],after[key])) continue;
-    result.push({ field: `${prefix}${label(key)}`, before: plain(before[key]), after: plain(after[key]),
+    result.push({ field: `${prefix}${label(key)}`, label: label(key), group,
+      before: displayValue(before[key],key,before), after: displayValue(after[key],key,after),
       action: before[key] == null ? "Ditambahkan" : after[key] == null ? "Dihapus" : "Diubah" });
   }
 };
@@ -107,11 +123,15 @@ export function revisionHistoryEntries(source = {}) {
       const nextIndex = item.id ? afterItems.findIndex(next => next.id === item.id)
         : afterItems[itemIndex] && !afterItems[itemIndex].id ? itemIndex : -1;
       const next = nextIndex >= 0 ? afterItems[nextIndex] : null;
-      if (!next) changes.push({field:`Item ${itemIndex+1}`,before:plain(item),after:"-",action:"Dihapus"});
-      else { matched.add(nextIndex);diffRecord(item,next,`Item ${itemIndex+1} (${item.nama_barang || item.keterangan || next.nama_barang || next.keterangan || "Rincian"}) - `,changes); }
+      const name=plain(item.nama_barang || item.keterangan || next?.nama_barang || next?.keterangan || "Rincian");
+      const group={key:`item-before-${itemIndex}`,title:`Item ${itemIndex+1}: ${name}`,action:next ? "Diubah" : "Dihapus"};
+      if (!next) changes.push({field:`Item ${itemIndex+1}`,label:"Rincian item",group,before:describeItem(item),after:"-",action:"Dihapus"});
+      else { matched.add(nextIndex);diffRecord(item,next,`Item ${itemIndex+1} (${name}) - `,changes,group); }
     });
     afterItems.forEach((item,itemIndex) => {
-      if (!matched.has(itemIndex)) changes.push({field:`Item ${itemIndex+1}`,before:"-",after:plain(item),action:"Ditambahkan"});
+      if (!matched.has(itemIndex)) changes.push({field:`Item ${itemIndex+1}`,label:"Rincian item",
+        group:{key:`item-after-${itemIndex}`,title:`Item ${itemIndex+1}: ${plain(item.nama_barang || item.keterangan || "Rincian")}`,action:"Ditambahkan"},
+        before:"-",after:describeItem(item),action:"Ditambahkan"});
     });
     const oldFiles = rows(object(entry.before_snapshot).attachments);
     const newFiles = rows(object(entry.after_snapshot).attachments);
@@ -130,7 +150,8 @@ export function revisionHistoryEntries(source = {}) {
     for (const key of ["judul_surat","request_date","request_place"]) if (key in documentBefore && !equivalent(documentBefore[key],documentAfter[key]))
       changes.push({field:label(key),before:plain(documentBefore[key]),after:plain(documentAfter[key]),action:"Diubah"});
     return { title:`Perbaikan ${index+1}`,reason:plain(entry.reason),note:plain(entry.requester_note),
-      at:entry.submitted_at || "",actor:entry.submitted_by_name || "",requestedBy:entry.requested_by_name || "",changes };
+      at:entry.submitted_at || "",actor:entry.submitted_by_name || "",requestedBy:entry.requested_by_name || "",
+      mode:entry.revision_mode,changes };
   });
   if (!entries.length) {
     const notes = signerRevisionNotes(source);
@@ -149,18 +170,50 @@ export function revisionHistoryEntries(source = {}) {
 export function revisionAppendixBlock(entries = [], noSurat = "") {
   if (!entries.length) return [];
   const cell = text => ({text,fontSize:8,margin:[0,3,0,3]});
+  const tables = changes => {
+    const groups=new Map();
+    for (const change of changes) {
+      const group=change.group || {key:"document",title:changes.some(row=>!row.group && row.field==="Lampiran") ? "Data pengajuan dan lampiran" : "Data pengajuan"};
+      if (!groups.has(group.key)) groups.set(group.key,{...group,changes:[]});
+      groups.get(group.key).changes.push(change);
+    }
+    return [...groups.values()].map(group=>({table:{headerRows:2,keepWithHeaderRows:1,widths:["30%","35%","35%"],body:[
+      [{...cell(`${group.title.length>180 ? `${group.title.slice(0,177)}...` : group.title}${group.action ? ` - ${group.action}` : ""}`),bold:true,fillColor:"#e2f0d9",colSpan:3},{},{}],
+      ["Bagian yang diubah","Sebelum perbaikan","Sesudah perbaikan"].map(text=>({...cell(text),bold:true,fillColor:"#f1f5f9"})),
+      ...(group.title.length>180 ? [[{...cell(group.title),colSpan:3},{},{}]] : []),
+      ...group.changes.map(change=>[
+        change.label || change.field,
+        change.action==="Ditambahkan" && change.label==="Rincian item" ? "Item belum ada" : change.before,
+        change.action==="Dihapus" ? (change.label==="Rincian item" ? "Item dihapus dari pengajuan" : "Dihapus") : change.after,
+      ].map(cell)),
+    ]},layout:{hLineWidth:()=>0.4,vLineWidth:()=>0.4,hLineColor:()=>"#94a3b8",vLineColor:()=>"#94a3b8"},margin:[0,2,0,10]}));
+  };
+  const summary = changes => {
+    const items=new Map(changes.filter(change=>change.group).map(change=>[change.group.key,change.group.action]));
+    return [
+      ...[["Ditambahkan","ditambahkan"],["Diubah","diubah"],["Dihapus","dihapus"]].map(([action,word])=>{
+        const count=[...items.values()].filter(value=>value===action).length;
+        return count ? `${count} item ${word}` : "";
+      }),
+      changes.some(change=>!change.group && change.field!=="Lampiran") ? "data pengajuan diperbarui" : "",
+      changes.some(change=>change.field==="Lampiran") ? "lampiran diperbarui" : "",
+    ].filter(Boolean).join("; ");
+  };
   return [
     {text:entries.some(entry=>entry.title==="Pemeriksaan kesiapan unit") ? "RIWAYAT PERBAIKAN DAN PEMERIKSAAN" : "RIWAYAT PERBAIKAN PENGAJUAN",pageBreak:"before",bold:true,fontSize:14,margin:[0,0,0,4]},
     {text:noSurat,fontSize:9,margin:[0,0,0,12]},
     ...entries.flatMap(entry => [
-      {text:[entry.title,entry.actor,entry.at ? new Date(entry.at).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"}) : ""].filter(Boolean).join(" | "),bold:true,fontSize:10,margin:[0,5,0,4]},
-      ...(entry.requestedBy ? [{text:`Diminta oleh: ${entry.requestedBy}`,fontSize:8,margin:[0,0,0,4]}] : []),
+      {text:[entry.title,entry.at && Number.isFinite(Date.parse(entry.at)) ? `${new Date(entry.at).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"})} WIB` : ""].filter(Boolean).join(" | "),bold:true,fontSize:10,margin:[0,5,0,4]},
+      ...(entry.mode==="signer_proposal" ? [
+        {text:`Usulan perubahan oleh penandatangan: ${entry.requestedBy || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},
+        {text:`Dikonfirmasi oleh pemohon: ${entry.actor || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},
+      ] : [
+        ...(entry.actor ? [{text:`${entry.title==="Pemeriksaan kesiapan unit" ? "Diperiksa oleh" : entry.mode==="requester_edit" ? "Perubahan oleh pemohon" : "Dikirim oleh"}: ${entry.actor}`,fontSize:8,margin:[0,0,0,4]}] : []),
+        ...(entry.requestedBy ? [{text:`Diminta oleh: ${entry.requestedBy}`,fontSize:8,margin:[0,0,0,4]}] : []),
+      ]),
       {text:`Alasan: ${entry.reason}`,fontSize:8,margin:[0,0,0,4]},
       ...(entry.note && entry.note!=="-" ? [{text:`Catatan pemohon: ${entry.note}`,fontSize:8,margin:[0,0,0,4]}] : []),
-      ...(entry.changes.length ? [{table:{headerRows:1,widths:["24%","12%","32%","32%"],body:[
-        ["Data / Lampiran","Perubahan","Sebelum","Sesudah"].map(text=>({...cell(text),bold:true,fillColor:"#e2f0d9"})),
-        ...entry.changes.map(change=>[change.field,change.action,change.before,change.after].map(cell)),
-      ]},layout:{hLineWidth:()=>0.4,vLineWidth:()=>0.4,hLineColor:()=>"#94a3b8",vLineColor:()=>"#94a3b8"},margin:[0,2,0,10]}]
+      ...(entry.changes.length ? [{text:`Ringkasan: ${summary(entry.changes)}.`,fontSize:8,margin:[0,2,0,5]},...tables(entry.changes)]
         : (entry.legacyNotes || ["Rincian sebelum/sesudah tidak tersedia pada riwayat lama."]).map(text=>({text,fontSize:8,margin:[0,0,0,4]}))),
     ]),
   ];

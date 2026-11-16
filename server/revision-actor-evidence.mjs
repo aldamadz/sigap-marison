@@ -16,7 +16,7 @@ export async function enrichRevisionActors(supabase, source, histories = []) {
   const ids = [...new Set([...revisions.map(eventId), ...histories.map(row => row.revision_event_id)].filter(uuid))];
   if (!ids.length) return histories.length ? { ...source, revision_history: histories } : source;
   const { data: events, error } = await supabase.from("surat_revision_events")
-    .select("id,surat_id,actor_id").eq("surat_id", source.id).in("id", ids);
+    .select("id,surat_id,actor_id,changes").eq("surat_id", source.id).in("id", ids);
   if (error) throw error;
   const matchingEvents = list(events).filter(event => event.surat_id === source.id && ids.includes(event.id));
   const actorIds = [...new Set([...matchingEvents.map(row => row.actor_id), ...histories.map(row => row.submitted_by)].filter(uuid))];
@@ -36,7 +36,12 @@ export async function enrichRevisionActors(supabase, source, histories = []) {
     ...(snapshot.applied_revision ? { applied_revision: withActor(record(snapshot.applied_revision)) } : {}),
   }, revision_history: histories.map(history => {
     const event = matchingEvents.find(row => row.id === history.revision_event_id && row.actor_id === history.requested_by);
-    return { ...history, requested_by_name: event ? nameFor(event.actor_id, history) : undefined,
+    const changes=record(event?.changes);
+    // A requester may only confirm a signer's proposal, not author the changes.
+    const proposal=changes.signer_full_proposal===true || changes.signer_revision_required===true || changes.keu10_finance_proposal===true;
+    const requesterEdit=changes.requester_edit_required===true;
+    return { ...history, revision_mode:event ? (proposal ? "signer_proposal" : requesterEdit ? "requester_edit" : undefined) : undefined,
+      requested_by_name: event ? nameFor(event.actor_id, history) : undefined,
       submitted_by_name: nameFor(history.submitted_by, history) };
   }) };
 }
