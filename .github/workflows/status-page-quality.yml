@@ -33,4 +33,5 @@ jobs:
       - run: php -l ops/status-page/cpanel/public/index.php
       - run: php -l ops/status-page/cpanel/cron.php
       - run: php -l ops/status-page/cpanel/install.php
+      - run: python3 ops/status-page/collector_test.py
       - run: STATUS_PHP_TEST=1 node --test scripts/status-release-scope.test.mjs ops/status-page/*.test.mjs ops/status-page/cpanel/*.test.mjs

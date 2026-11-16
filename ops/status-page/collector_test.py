@@ -10,6 +10,14 @@ spec.loader.exec_module(collector)
 
 
 class CollectorTests(unittest.TestCase):
+    def test_cpanel_destination_is_explicitly_allowlisted_and_unsafe_endpoints_rejected(self):
+        self.assertIn('status.marisoncloud.com', collector.ALLOWED_AUDIENCES)
+        for endpoint in ['http://status.marisoncloud.com/report', 'https://untrusted.example/report',
+                         'https://status.marisoncloud.com/report?redirect=other', 'https://status.marisoncloud.com/admin']:
+            with patch.object(collector, 'secure_file', return_value=pathlib.Path('/unused')):
+                with self.assertRaises(ValueError):
+                    collector.publish({}, {'privateKey': '/unused', 'endpoints': [endpoint]})
+
     def test_queries_are_read_only_and_never_claim_jobs(self):
         sql = collector.SQL.lower()
         self.assertIn('begin read only', sql)

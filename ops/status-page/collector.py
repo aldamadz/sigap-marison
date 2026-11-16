@@ -19,6 +19,7 @@ CONTAINERS = {
     'sigap_external': 'agenda-flow-external-api',
 }
 ALLOWED_AUDIENCES = {
+    'status.marisoncloud.com',
     'marison-status-probe-staging.aldamaaa-id.workers.dev',
     'marison-status-probe.aldamaaa-id.workers.dev',
 }
