@@ -1,5 +1,17 @@
 # SIGAP Feature and Release Map
 
+## SUR-51 Readable Revision Appendix (2026-11-16, [Codex], #969)
+
+Staging-only candidate. Group before/after changes per named item, use readable
+field labels and rupiah/quantity-with-unit values, retain deleted/added item
+details, and show a concise item-change count. Distinguish canonical signer
+proposals from requester edits and label the requester's confirmation separately.
+Only matching server-owned revision events determine proposal attribution;
+missing provenance uses neutral submitter wording. No migration, approval,
+source snapshot rewrite, historical PDF replacement or external send. PGD/KEU
+appendices share the change; recommendation PDFs remain history-free. Requires
+coordinated app/PDF worker staging rollout; production not authorized.
+
 ## MRN-20 Fund Payload Whitespace (2026-11-13, [Codex], #954)
 
 Staging candidate: normalize pasted tabs/repeated whitespace in outbound Fund

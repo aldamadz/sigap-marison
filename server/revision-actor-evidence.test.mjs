@@ -44,6 +44,28 @@ test("unrevised immutable snapshot is returned unchanged without new lookups",as
 test("lookup errors cannot manufacture an attribution",async()=>{
   await assert.rejects(enrichRevisionActors(client([],[],new Error("Metadata unavailable")),source()),/Metadata unavailable/);
 });
+
+test("canonical event distinguishes signer authorship from requester confirmation",async()=>{
+  const history={revision_event_id:eventId,requested_by:actorId,submitted_by:ownerId,
+    before_snapshot:{document:{created_by:ownerId,requester_snapshot:{full_name:"Pemohon Contoh"},form_input_data:{items:[]}}},
+    after_snapshot:{document:{form_input_data:{items:[]}}}};
+  for (const flag of ["signer_full_proposal","signer_revision_required","keu10_finance_proposal"]) {
+    const result=await enrichRevisionActors(client([{id:eventId,surat_id:"document",actor_id:actorId,changes:{[flag]:true}}],
+      [{id:actorId,full_name:"Penandatangan Contoh"}]),source(),[history]);
+    const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries(result)));
+    assert.equal(result.revision_history[0].revision_mode,"signer_proposal");
+    assert.match(report,/Usulan perubahan oleh penandatangan: Penandatangan Contoh/);
+    assert.match(report,/Dikonfirmasi oleh pemohon: Pemohon Contoh/);
+    assert.doesNotMatch(report,/Perubahan oleh pemohon:/);
+  }
+  const requester=await enrichRevisionActors(client([{id:eventId,surat_id:"document",actor_id:actorId,changes:{requester_edit_required:true}}],[]),source(),[history]);
+  assert.equal(requester.revision_history[0].revision_mode,"requester_edit");
+  const unknown=await enrichRevisionActors(client([{id:eventId,surat_id:"document",actor_id:actorId,changes:{}}],[]),source(),[history]);
+  assert.equal(unknown.revision_history[0].revision_mode,undefined);
+  const foreign=await enrichRevisionActors(client([{id:eventId,surat_id:"other",actor_id:actorId,changes:{signer_full_proposal:true}}],[]),source(),
+    [{...history,revision_mode:"signer_proposal"}]);
+  assert.equal(foreign.revision_history[0].revision_mode,undefined);
+});
 test("the worker's attribution helper is packaged in the runtime image",()=>{
   assert.match(readFileSync(new URL("../dockerfile",import.meta.url),"utf8"),/COPY server\/revision-actor-evidence\.mjs \.\/server\/revision-actor-evidence\.mjs/);
 });
