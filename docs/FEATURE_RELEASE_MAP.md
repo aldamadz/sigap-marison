@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## OPS-20 Hosted Maintenance Authority (2026-11-17, [Codex], #987)
+
+User authorized independent cPanel maintenance control, production reopening and
+incident/maintenance history after the Durable Objects Free request quota caused
+fail-closed public503. Preserve the old namespace/audit and all three completed
+status maintenance records. Explicit operator bootstrap is not legacy audit.
+Reuse existing Ed25519 signers, bounded private SQLite authority and authenticated
+optimistic commands. Origin guard must be live before excluding API/static
+requests from the edge Worker; HTML outage fallback remains. New schedules need
+30 seconds lead for five-second caches. Staging and production cutover, signature
+tests, actual API/maintenance acceptance and public recovery remain required.
+No business DB changes, approval, outbound resend or paid upgrade authorized.
+
 ## SUR-54 HRD GA Examiner Direct Revision (2026-11-17, [Codex], #980)
 
 Production promotion authorized on 2026-11-17 for examiner revision and revision

@@ -83,6 +83,12 @@ export function buildCommand(command, input, now = Date.now()) {
       WHERE id = ? AND cancelled_at IS NULL AND ends_at > ?`,
     params: [String(now), maintenanceId, String(now)] };
   }
+  if (command === 'maintenance-complete') {
+    const maintenanceId = id(input.maintenanceId);
+    return { id: maintenanceId, sql: `UPDATE maintenance SET lifecycle_status='completed', closed_at=?
+      WHERE id=? AND lifecycle_status='published' AND cancelled_at IS NULL AND starts_at<=?`,
+    params:[String(now),maintenanceId,String(now)] };
+  }
   throw new Error('Unsupported command');
 }
 

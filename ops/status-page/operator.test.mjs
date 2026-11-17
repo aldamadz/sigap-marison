@@ -38,6 +38,8 @@ test('update and cancel use guarded statements', () => {
   assert.equal(update.params.at(-1), '3');
   const cancel = buildCommand('maintenance-cancel', { maintenanceId: id }, NOW);
   assert.match(cancel.sql, /cancelled_at IS NULL/);
+  const complete=buildCommand('maintenance-complete',{maintenanceId:id},NOW);
+  assert.match(complete.sql,/lifecycle_status='completed'/);assert.match(complete.sql,/starts_at<=\?/);
   assert.throws(() => buildCommand('incident-update', { incidentId: 'not-a-uuid',
     phase: 'resolved', message: 'Layanan pulih sepenuhnya' }, NOW), /UUID/);
 });

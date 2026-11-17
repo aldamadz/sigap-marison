@@ -112,7 +112,7 @@ for (const file of allChangedFiles) {
   if (/weekly_department_sla.*\.sql$/u.test(file)) gates.add('department-weekly-sql');
   if (/signer_organization_monitoring.*\.sql$/u.test(file)) gates.add('signer-organization-monitoring-sql');
   if (/verified_fund_outbound_replacement.*\.sql$|verified_fund_replacement.*\.sql$/u.test(file)) gates.add('fund-outbound-replacement-sql');
-  if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs)/u.test(file)) gates.add('maintenance-edge');
+  if (/^(ops\/maintenance\/|scripts\/build-maintenance-edge\.mjs|backend\/src\/(lib|plugins)\/hosted-maintenance\.ts)/u.test(file)) gates.add('maintenance-edge');
   if (/release_notice_preferences\.sql$|release-notice-sql\.test\.mjs$/u.test(file)) gates.add('release-notice-sql');
   if (/actionable_role_dashboard.*\.sql$|test-actionable-dashboard-sql\.mjs$/u.test(file)) gates.add('actionable-dashboard-sql');
   if (/recommendation_internal_(office_reservation|active_actor).*\.sql$|test-recommendation-office-reservation-sql\.mjs$/u.test(file)) gates.add('recommendation-office-reservation-sql');
@@ -241,7 +241,7 @@ for (const gate of gates) {
     continue;
   }
   if (gate === 'maintenance-edge') {
-    run('node', ['--test', 'ops/maintenance/edge-worker.test.mjs', 'ops/maintenance/server.test.mjs']);
+    run('node', ['--test', 'ops/maintenance/edge-worker.test.mjs', 'ops/maintenance/hosting-edge.test.mjs', 'ops/maintenance/server.test.mjs']);
     run('node', ['scripts/build-maintenance-edge.mjs']);
     continue;
   }

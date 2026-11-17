@@ -9,6 +9,7 @@ import page, { buildStatus, loadStatus, loadFeed, renderHtml, renderRss, renderA
 import { runChecks, syncSigapMaintenance } from '../probe.mjs';
 import { receiveTelemetry } from '../telemetry.mjs';
 import { buildCommand } from '../operator.mjs';
+import { backupControl } from './maintenance-control.mjs';
 
 const ORIGIN = 'https://status.marisoncloud.com';
 const ASSETS = ['/app.js', '/theme.js', '/logo.png', '/terms', '/privacy', '/terms/theme.js', '/terms/logo.png'];
@@ -116,6 +117,10 @@ async function main() {
           SIGAP_EDGE: { fetch: request => fetch(request, { redirect: 'error' }) } });
       } catch { console.warn('Maintenance sync unavailable; preserving previous schedule'); }
       await publishSnapshot(db, config.snapshots);
+      if(config.maintenanceControlConfig) {
+        const control=JSON.parse(await readFile(config.maintenanceControlConfig,'utf8'));
+        await backupControl(control.database,control.backups);
+      }
       await mkdir(config.backups, { recursive: true, mode: 0o700 });
       const day = new Date().toISOString().slice(0, 10);
       const destination = resolve(config.backups, `status-${day}.sqlite`);

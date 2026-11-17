@@ -22,6 +22,11 @@ try {
     if (strtolower($_SERVER['HTTP_HOST'] ?? '') !== 'status.marisoncloud.com') fail(404);
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
     $method = $_SERVER['REQUEST_METHOD'] ?? '';
+    if (str_starts_with((string)$path, '/sigap-maintenance/')) {
+        if (!isset($config['maintenanceGateway'],$config['maintenanceControlConfig'])) fail(503);
+        require $config['maintenanceGateway'];
+        exit;
+    }
     if ($path === '/report') {
         if ($method !== 'POST') fail(405);
         $stamp = $_SERVER['HTTP_X_SIGAP_TIMESTAMP'] ?? '';
