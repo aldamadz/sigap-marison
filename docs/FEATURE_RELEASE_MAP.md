@@ -27,6 +27,18 @@ per-user/session dismissals remain valid. No external notifications, business
 document changes, Worker deployment or production release authorized. Withdraw
 by reverting the independent editor/controller; retain state, audit and prefs.
 
+## SUR-54 HRD GA Examiner Direct Revision (2026-11-17, [Codex], #980)
+
+Staging candidate. The claimed shared HRD GA examiner can edit the full form and
+finish examination atomically without requester confirmation or manager approval.
+The manager remains unsigned at the same stage; requester and manager receive
+canonical notifications. Private claim ownership, active stage/profile, receiving
+hold and existing form/examination/recommendation guards remain mandatory.
+Forward migration `20261117090000`; original return-to-requester remains available.
+Immutable before/after evidence and PDFs distinguish examiner edits from signer
+approval. Coordinated app/PDF rollout required. No existing history rewrite,
+live business approval, external send, or production authorization.
+
 ## SUR-51 Readable Revision Appendix (2026-11-16, [Codex], #969)
 
 Staging-only candidate. Group before/after changes per named item, use readable

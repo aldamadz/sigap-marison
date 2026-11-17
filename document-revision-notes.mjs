@@ -108,11 +108,11 @@ export function revisionHistoryEntries(source = {}) {
   const applied = Object.keys(current).length ? current : object(object(source.data_snapshot).applied_revision);
   const baseline = object(object(applied.changes).requester_revision_base);
   const eventId = applied.event_id || applied.revision_event_id || applied.id;
-  if (object(applied.changes).signer_direct_approval===true
+  if ((object(applied.changes).signer_direct_approval===true || object(applied.changes).examiner_direct_revision===true)
     && !history.some(entry=>entry.revision_event_id===eventId)
     && object(applied.changes).signer_proposal_before && object(applied.changes).signer_proposal_after) {
     history.push({revision_event_id:eventId,reason:applied.reason,submitted_at:applied.submitted_at,
-      submitted_by_name:applied.actor_name,revision_mode:"signer_direct",
+      submitted_by_name:applied.actor_name,revision_mode:object(applied.changes).examiner_direct_revision===true ? "examiner_direct" : "signer_direct",
       before_snapshot:applied.changes.signer_proposal_before,after_snapshot:applied.changes.signer_proposal_after});
   }
   if (!history.some(entry => entry.revision_event_id && entry.revision_event_id === eventId)
@@ -213,7 +213,10 @@ export function revisionAppendixBlock(entries = [], noSurat = "") {
     {text:noSurat,fontSize:9,margin:[0,0,0,12]},
     ...entries.flatMap(entry => [
       {text:[entry.title,entry.at && Number.isFinite(Date.parse(entry.at)) ? `${new Date(entry.at).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"})} WIB` : ""].filter(Boolean).join(" | "),bold:true,fontSize:10,margin:[0,5,0,4]},
-      ...(entry.mode==="signer_direct" ? [
+      ...(entry.mode==="examiner_direct" ? [
+        {text:`Perubahan oleh pemeriksa: ${entry.actor || entry.requestedBy || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},
+        {text:"Pemohon diberi tahu tanpa konfirmasi. Persetujuan tetap oleh penandatangan.",fontSize:8,margin:[0,0,0,4]},
+      ] : entry.mode==="signer_direct" ? [
         {text:`Perubahan dan persetujuan oleh penandatangan: ${entry.actor || entry.requestedBy || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},
         {text:"Pemohon diberi tahu; konfirmasi tidak diperlukan.",fontSize:8,margin:[0,0,0,4]},
       ] : entry.mode==="signer_proposal" ? [

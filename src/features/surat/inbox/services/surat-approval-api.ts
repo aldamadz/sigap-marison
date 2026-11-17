@@ -17,6 +17,8 @@ export const suratApprovalApi = {
     suratService.requestProcessRevision(...args),
   reviseAndApprove: (...args: Parameters<typeof suratService.reviseAndApprove>) =>
     suratService.reviseAndApprove(...args),
+  reviseAndCompleteExamination: (...args: Parameters<typeof suratService.reviseAndCompleteExamination>) =>
+    suratService.reviseAndCompleteExamination(...args),
   resolveProcessRevision: (...args: Parameters<typeof suratService.resolveProcessRevision>) =>
     suratService.resolveProcessRevision(...args),
   acceptProcessRevision: (...args: Parameters<typeof suratService.acceptProcessRevision>) =>
