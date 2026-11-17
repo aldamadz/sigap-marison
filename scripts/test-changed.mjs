@@ -98,6 +98,7 @@ if (changesGlobalTestInfrastructure) {
 
 const gates = new Set();
 if (allChangedFiles.some(file => /standalone_release_notices.*\.sql$|test-standalone-release-notices-sql\.mjs$/u.test(file))) gates.add('standalone-release-notices-sql');
+if (allChangedFiles.some(file => /master_entities_admin_writes.*\.sql$|test-master-entities-admin-sql\.mjs$/u.test(file))) gates.add('master-entities-admin-sql');
 if (allChangedFiles.some(file => /monitoring_readable_details.*\.sql$/u.test(file))) gates.add('monitoring-readable-details-sql');
 if (allChangedFiles.some(file => /configured_signer_removal.*\.sql$/u.test(file))) gates.add('configured-signer-removal-sql');
 if (allChangedFiles.some(file => /hrd_ga_review.*\.sql$/u.test(file))) gates.add('hrd-ga-review-sql');
@@ -163,6 +164,10 @@ if (allChangedFiles.some(file => /hrd_examiner_direct_revision/.test(file))) gat
 for (const gate of gates) {
   if (gate === 'standalone-release-notices-sql') {
     run('node', ['scripts/test-standalone-release-notices-sql.mjs']);
+    continue;
+  }
+  if (gate === 'master-entities-admin-sql') {
+    run('node', ['scripts/test-master-entities-admin-sql.mjs']);
     continue;
   }
   if (gate === 'pdf-publication-sql') {
