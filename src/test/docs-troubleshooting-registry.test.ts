@@ -46,8 +46,8 @@ describe("docs-troubleshooting-registry D2C", () => {
     expect(getDocsEntrySections(fallback).map((section) => section.title)).toEqual(["Fungsi utama", "Alur penggunaan", "Contoh penggunaan", "Kendala umum"]);
   });
 
-  it("matches documentation content after SUR-39 user scope guidance", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("470471976ba8546dd02aa9518e8e72a06bfbb172fcccec6f813ee4208b92a372");
+  it("matches documentation content after SUR-54 examiner revision guidance", () => {
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("ef84c9b0e9e76c41d7b05496441cd01f40b5c1d73596b842bc8641d1a2fed6a5");
   });
 
   it("keeps facade and imports acyclic", () => {
