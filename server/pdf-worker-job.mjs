@@ -43,6 +43,62 @@ export const processPdfJobBatch = (jobs, processJob, onFailure) => Promise.allSe
   catch (error) { await onFailure(job, error); return null; }
 }));
 
+export const pdfPublicationError = error => error?.code === 'PT409' && error?.details === 'PDF_SOURCE_CHANGED'
+  ? Object.assign(new Error('Sumber versi PDF sudah berubah. Job lama tidak boleh dipublikasikan.'), { code: 'PDF_SOURCE_CHANGED' })
+  : error;
+
+const waitForPoolWake = async (active, timeoutMs, signal) => {
+  let timer, wake;
+  const waiting = new Promise(resolve => {
+    wake = resolve;
+    if (signal?.aborted) resolve();
+    else signal?.addEventListener('abort', resolve, { once: true });
+    if (timeoutMs !== null) timer = setTimeout(resolve, timeoutMs);
+  });
+  try { await Promise.race([waiting, ...active]); }
+  finally { clearTimeout(timer); signal?.removeEventListener('abort', wake); }
+};
+
+export const runPdfJobPool = async ({ concurrency, claimJobs, processJob, onError = () => {},
+  signal, pollIntervalMs = 2000, maxIdlePollIntervalMs = 5000 }) => {
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw Error('Invalid PDF concurrency');
+  const active = new Set();
+  let idleDelay = pollIntervalMs;
+  const report = (error, phase) => { try { onError(error, phase); } catch { /* Logging must not release a lease slot. */ } };
+  try {
+    while (!signal?.aborted) {
+      const available = concurrency - active.size;
+      if (available === 0) { await waitForPoolWake(active, null, signal); continue; }
+      let jobs;
+      try { jobs = await claimJobs(available); }
+      catch (error) {
+        report(error, 'polling');
+        await waitForPoolWake(active, idleDelay, signal);
+        idleDelay = Math.min(maxIdlePollIntervalMs, idleDelay * 2);
+        continue;
+      }
+      if (!Array.isArray(jobs) || jobs.length > available) throw Error('PDF claim exceeded available slots');
+      if (jobs.length === 0) {
+        await waitForPoolWake(active, idleDelay, signal);
+        idleDelay = Math.min(maxIdlePollIntervalMs, idleDelay * 2);
+        continue;
+      }
+      idleDelay = pollIntervalMs;
+      for (const job of jobs) {
+        const task = Promise.resolve().then(() => processJob(job)).catch(async error => {
+          report(error, 'failure transition');
+          // An unacknowledged completion/failure may still hold its database lease.
+          // Reserve this slot until expiry instead of overclaiming more work.
+          const expires = Date.parse(job.lease_expires_at);
+          const remaining = Number.isFinite(expires) ? Math.max(0, expires - Date.now()) : 300000;
+          await waitForPoolWake([], remaining, signal);
+        }).finally(() => active.delete(task));
+        active.add(task);
+      }
+    }
+  } finally { await Promise.allSettled(active); }
+};
+
 export const safePdfWorkerError = error => ({
   code: /^[A-Z0-9_]{1,32}$/.test(String(error?.code || "")) ? String(error.code) : "PDF_ERROR",
   message: String(error?.message || "Gagal memproses PDF.").replace(/https?:\/\/\S+/g, "[URL]")
