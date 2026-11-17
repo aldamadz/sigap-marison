@@ -11,7 +11,7 @@ const run = (args, input) => {
 };
 const id = run(['run', '-d', '--name', `sigap-entities-test-${randomUUID()}`,
   '-e', 'POSTGRES_PASSWORD=disposable-test-only', '-e', 'POSTGRES_USER=sigap_fixture_root',
-  '--health-cmd', 'pg_isready -U sigap_fixture_root', '--health-interval', '1s',
+  '--health-cmd', 'pg_isready -h 127.0.0.1 -U sigap_fixture_root', '--health-interval', '1s',
   '--health-retries', '30', 'postgres:17-alpine']);
 const psql = ['exec', '-i', id, 'psql', '-X', '-U', 'sigap_fixture_root', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'];
 const read = path => readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
