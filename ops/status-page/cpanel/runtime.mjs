@@ -9,10 +9,22 @@ import page, { buildStatus, loadStatus, loadFeed, renderHtml, renderRss, renderA
 import { runChecks, syncSigapMaintenance } from '../probe.mjs';
 import { receiveTelemetry } from '../telemetry.mjs';
 import { buildCommand } from '../operator.mjs';
-import { backupControl } from './maintenance-control.mjs';
+import { backupControl, readControlStates } from './maintenance-control.mjs';
 
 const ORIGIN = 'https://status.marisoncloud.com';
 const ASSETS = ['/app.js', '/theme.js', '/logo.png', '/terms', '/privacy', '/terms/theme.js', '/terms/logo.png'];
+
+export async function syncMaintenanceControl(db,controlConfigPath,now=Date.now()) {
+  const host='sigap.marisoncloud.com';
+  if(!controlConfigPath)return syncSigapMaintenance({DB:db,SIGAP_MAINTENANCE_HOSTNAME:host,SIGAP_EDGE:{fetch:request=>fetch(request,{redirect:'error'})}},now);
+  const control=JSON.parse(await readFile(controlConfigPath,'utf8'));
+  const revision=db.connection.prepare("SELECT revision FROM status_sources WHERE source='sigap'").get()?.revision ?? -1;
+  const {current,events}=readControlStates(control.database,host,revision,now);
+  const sync=(state,at)=>syncSigapMaintenance({DB:db,SIGAP_MAINTENANCE_HOSTNAME:host,SIGAP_EDGE:{fetch:async()=>Response.json(state)}},at);
+  // Replay each changed schedule so short, successive maintenance windows survive minute polling.
+  for(const event of events)await sync(event.state,event.at);
+  return sync(events.length===100?events.at(-1).state:current,now);
+}
 
 export async function publishSnapshot(db, directory, now = Date.now()) {
   let data, events;
@@ -113,8 +125,7 @@ async function main() {
     if (command === 'cycle') {
       await runChecks({ DB: db });
       try {
-        await syncSigapMaintenance({ DB: db, SIGAP_MAINTENANCE_HOSTNAME: 'sigap.marisoncloud.com',
-          SIGAP_EDGE: { fetch: request => fetch(request, { redirect: 'error' }) } });
+        await syncMaintenanceControl(db,config.maintenanceControlConfig);
       } catch { console.warn('Maintenance sync unavailable; preserving previous schedule'); }
       await publishSnapshot(db, config.snapshots);
       if(config.maintenanceControlConfig) {

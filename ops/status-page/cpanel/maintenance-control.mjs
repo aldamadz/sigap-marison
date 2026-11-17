@@ -4,7 +4,7 @@ import { readFile, mkdir, chmod, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateSchedule, dayInWib } from '../../maintenance/schedule.mjs';
+import { validateSchedule, dayInWib, publicState } from '../../maintenance/schedule.mjs';
 
 export const HOSTS = ['sigap.marisoncloud.com', 'sigap.marison-testing.biz.id'];
 const schema = `CREATE TABLE control_state(hostname TEXT PRIMARY KEY, revision INTEGER NOT NULL, state_json TEXT NOT NULL);
@@ -20,6 +20,21 @@ const stateOf = (db, host) => {
   if (state.revision !== row.revision || !Number.isSafeInteger(state.revision)) throw Error('Control state invalid');
   return state;
 };
+export function readControlStates(path,host,afterRevision,now=Date.now()) {
+  if(!HOSTS.includes(host) || !Number.isSafeInteger(afterRevision) || afterRevision< -1 || !existsSync(path))throw Error('Invalid local control source');
+  const db=new DatabaseSync(path,{readOnly:true});
+  try {
+    db.exec('PRAGMA busy_timeout=3000; BEGIN');
+    const current=publicState(stateOf(db,host),now);
+    const events=db.prepare('SELECT event_json FROM control_events WHERE hostname=? AND revision>? AND revision<=? ORDER BY revision LIMIT 100')
+      .all(host,afterRevision,current.revision).map(row=>{
+        const event=JSON.parse(row.event_json),at=Date.parse(event.at);
+        if(!Number.isFinite(at))throw Error('Invalid local control event');
+        return {state:publicState({revision:event.revision,schedule:event.after},now),at};
+      });
+    db.exec('COMMIT');return {current,events};
+  }finally{db.close();}
+}
 export function bootstrapControl(path, hosts, reason, now = Date.now()) {
   if (existsSync(path) || typeof reason !== 'string' || reason.length < 20) throw Error('Refusing unsafe bootstrap');
   for(const host of HOSTS)if(!hosts[host] || !Number.isSafeInteger(hosts[host].revision) || hosts[host].revision<0 || hosts[host].schedule!==null)throw Error('Explicit reopening state required');
