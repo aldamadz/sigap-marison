@@ -103,6 +103,7 @@ if (allChangedFiles.some(file => /hrd_ga_review.*\.sql$/u.test(file))) gates.add
 if (allChangedFiles.some(file => /hrd_ga_shared_claim.*\.sql$|internal_non_asset_goods.*\.sql$/u.test(file))) gates.add('hrd-ga-claim-sql');
 if (allChangedFiles.some(file => /docker.*retention|production-deploy-lock/.test(file))) gates.add('docker-image-retention');
 for (const file of allChangedFiles) {
+  if (/pdf_superseded_nonretryable.*\.sql$|pdf_publication_supersession\.integration\.sql$/u.test(file)) gates.add('pdf-publication-sql');
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
   if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
   if (/notification_delivery.*\.sql$/u.test(file)) gates.add('notification-delivery-sql');
@@ -159,6 +160,10 @@ if (allChangedFiles.some(file => /direct_signer_revision/.test(file))) gates.add
 if (allChangedFiles.some(file => /hrd_examiner_direct_revision/.test(file))) gates.add('hrd-examiner-revision-sql');
 
 for (const gate of gates) {
+  if (gate === 'pdf-publication-sql') {
+    run('node',['scripts/test-keu10-workflow-sql.mjs','--pdf-publication']);
+    continue;
+  }
   if (gate === 'hrd-examiner-revision-sql') {
     run('node',['scripts/test-keu10-workflow-sql.mjs','--hrd-examiner-revision']);
     continue;
