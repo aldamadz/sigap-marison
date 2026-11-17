@@ -85,3 +85,16 @@ test("shared image and revision helpers require coordinated worker rollout",()=>
   const deploy=readFileSync(new URL("../scripts/deploy-app.sh",import.meta.url),"utf8");
   assert.match(deploy,/worker_changes=[\s\S]*dockerfile document-revision-notes\.mjs server\/revision-actor-evidence\.mjs/);
 });
+
+test("direct examiner revision never implies manager approval or requester confirmation",async()=>{
+  const history={revision_event_id:eventId,requested_by:actorId,submitted_by:actorId,
+    before_snapshot:{document:{form_input_data:{items:[{id:"a",nama_barang:"Kertas",jumlah:30}]}}},
+    after_snapshot:{document:{form_input_data:{items:[{id:"a",nama_barang:"Kertas",jumlah:3}]}}}};
+  const result=await enrichRevisionActors(client([{id:eventId,surat_id:"document",actor_id:actorId,changes:{examiner_direct_revision:true}}],
+    [{id:actorId,full_name:"Usman Huda"}]),source(),[history]);
+  assert.equal(result.revision_history[0].revision_mode,"examiner_direct");
+  const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries(result)));
+  assert.match(report,/Perubahan oleh pemeriksa: Usman Huda/);
+  assert.doesNotMatch(report,/Pemohon diberi tahu|tanpa konfirmasi|konfirmasi tidak diperlukan/);
+  assert.doesNotMatch(report,/Dikonfirmasi|Perubahan dan persetujuan|Perubahan oleh pemohon/);
+});

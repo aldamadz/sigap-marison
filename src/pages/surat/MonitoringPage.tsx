@@ -558,7 +558,7 @@ const MonitoringPage = () => {
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <p className="text-xs font-semibold text-foreground">
-                            {event.actor_name || 'User'} mengembalikan proses
+                            {event.actor_name || 'User'} {event.changes?.examiner_direct_revision ? 'merevisi saat pemeriksaan' : event.changes?.signer_direct_approval ? 'merevisi dan menyetujui' : 'mengembalikan proses'}
                           </p>
                           <p className="mt-1 text-[10px] text-muted-foreground">
                             {event.created_at ? new Date(event.created_at).toLocaleString('id-ID') : '-'}

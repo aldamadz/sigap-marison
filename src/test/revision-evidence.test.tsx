@@ -11,6 +11,15 @@ const history = { id:"history",revision_event_id:"event",requested_by:"actor",su
   after_snapshot:{document:{created_by:"owner",requester_snapshot:{full_name:"Pemohon Contoh"},form_input_data:{items:[{id:"a",nama_barang:"Komputer Baru",jumlah:3,status:2}]}},attachments:[{file_url:"new",file_name:"RAB.pdf"}]},
 };
 describe("named revision evidence",()=>{
+  it("attributes direct examination edits to the examiner without a manager approval or requester confirmation",async()=>{
+    load.mockResolvedValue({events:[{id:"event",surat_id:"document",actor_id:"actor",actor_name:"Usman Huda",changes:{examiner_direct_revision:true}}],
+      histories:[{...history,submitted_by:"actor",requester_note:null}]});
+    render(<SignerRevisionSummary suratId="document" revision={{event_id:"event",reason:"Jumlah stok diperbarui",changes:{examiner_direct_revision:true}}} />);
+    expect(await screen.findByRole("heading",{name:"Direvisi oleh pemeriksa: Usman Huda",level:4})).toBeInTheDocument();
+    expect(screen.getByText(/Pemeriksaan selesai; persetujuan tetap oleh penandatangan/)).toBeInTheDocument();
+    expect(screen.queryByText(/Pemohon diberi tahu|konfirmasi tidak diperlukan|tanpa konfirmasi/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dikonfirmasi|Direvisi dan disetujui|Diperbaiki oleh Pemohon/)).not.toBeInTheDocument();
+  });
   it("keeps the BM as author of an older proposal when the current revision is direct approval",async()=>{
     load.mockResolvedValue({events:[
       {id:"event",surat_id:"document",actor_id:"actor",actor_name:"BM Contoh",changes:{signer_full_proposal:true,signer_revision_required:true,requester_edit_required:false}},
@@ -40,7 +49,7 @@ describe("named revision evidence",()=>{
       histories:[{...history,submitted_by:"actor",requester_note:null}]});
     render(<SignerRevisionSummary suratId="document" revision={{event_id:"event",reason:"Spesifikasi disesuaikan",changes:{signer_direct_approval:true}}} />);
     expect(await screen.findByRole("heading",{name:"Direvisi dan disetujui oleh Pemeriksa Contoh",level:4})).toBeInTheDocument();
-    expect(screen.getByText("Pemohon diberi tahu; konfirmasi tidak diperlukan.")).toBeInTheDocument();
+    expect(screen.queryByText(/Pemohon diberi tahu|konfirmasi tidak diperlukan/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Dikonfirmasi oleh|Diminta oleh|Perbaikan oleh Pemohon Contoh/)).not.toBeInTheDocument();
   });
   it("shows actual actor and complex recorded before/after changes",async()=>{

@@ -83,7 +83,7 @@ export const approvalInboxDocs: DocsEntry = {
           "Periksa progress step sebelumnya dan catatan dari pemohon atau tim pemeriksa.",
           "Jika ada tugas wajib, lengkapi dulu atau minta tim pemeriksa memperbarui data.",
           "Jika surat aset menunggu rekomendasi, cek panel rekomendasi dan arahkan petugas PBO membuka menu Rekomendasi.",
-          "Gunakan Minta Perbaikan Pemohon untuk koreksi rincian, spesifikasi, atau lampiran tanpa mengurangi item. Gunakan Revisi oleh Penandatangan untuk usulan perubahan item/nilai yang perlu dikonfirmasi pemohon.",
+          "Gunakan Minta Perbaikan Pemohon jika pemohon perlu memperbarui data atau lampiran. Gunakan Revisi oleh Penandatangan untuk mengubah rincian, menyimpan revisi sekaligus menyetujui; pemohon diberi tahu tanpa diminta konfirmasi.",
           "Tim pemeriksa hanya muncul sebagai tujuan jika tahap aktif memiliki pemeriksa pada snapshot transaksi.",
           "Isi perubahan item bila ada: tidak berubah, disetujui sebagian, atau tidak disetujui. Nilai diajukan hanya tampil sebagai referensi; signer cukup mengisi nilai disetujui dan alasan jika item berubah.",
           "Gunakan Setujui jika data sudah benar, atau Tolak dengan alasan yang jelas jika pengajuan tidak dapat dilanjutkan.",
@@ -109,7 +109,7 @@ export const approvalInboxDocs: DocsEntry = {
         columns: ["Peran", "Bisa melakukan", "Tidak menggantikan"],
         rows: [
           ["Signer", "Setuju, tolak, membaca dokumen, dan mengembalikan ke tim pemeriksa jika data perlu diperbaiki.", "Pemeriksaan tim pemeriksa yang diwajibkan konfigurasi."],
-          ["Tim pemeriksa", "Pemeriksaan data, mengisi data unit, mengganti lampiran wajib, dan menulis catatan pemeriksaan.", "Keputusan tanda tangan signer."],
+          ["Tim pemeriksa", "Pemeriksaan data, mengisi data unit, mengganti lampiran wajib, dan menulis catatan pemeriksaan. Pemeriksa HRD & GA yang mengambil tugas dapat memakai Revisi pemeriksa untuk memperbarui rincian dan menyelesaikan pemeriksaan, atau memilih Minta Perbaikan Pemohon.", "Keputusan tanda tangan signer; revisi pemeriksa tidak menyetujui atas nama manager."],
           ["Pemohon", "Membuat pengajuan dan memproses revisi miliknya melalui Tindak Lanjut.", "Mengubah proyek Unit di luar revisi eksternal terbuka yang ditujukan kepadanya."],
           ["Petugas rekomendasi", "Mengambil draft rekomendasi aset, mengisi item rekomendasi, dan mengonfirmasi dokumen tertaut.", "Keputusan approval surat induk."],
         ],

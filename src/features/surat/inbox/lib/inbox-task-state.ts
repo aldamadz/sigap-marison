@@ -6,6 +6,9 @@ export const isSharedExamination = (item: any) =>
 export const canEditExamination = (item: any, userId?: string) =>
   !isSharedExamination(item) || Boolean(userId && item?.verification_claimed_by === userId);
 
+export const canReviseExamination = (item: any, userId?: string) =>
+  isVerificationTask(item) && isSharedExamination(item) && canEditExamination(item, userId);
+
 export const examinationClaimantName = (item: any) =>
   item?.verifier_snapshot?.find((person: any) => person.user_id === item?.verification_claimed_by)?.full_name || "pemeriksa lain";
 
