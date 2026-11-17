@@ -1,5 +1,20 @@
 # SIGAP Feature and Release Map
 
+## DOC-15 Nonretryable PDF Supersession and Replenishing Pool (2026-11-17, #1002)
+
+User authorizes staging validation and selective production deployment after the
+controlled production test reproduced a deterministic stale-source retry flood.
+Forward-only migration `20261117110000` changes only seven reviewed PDF rejection
+statements from serialization failure40001 to PT409 with stable source-change
+detail. Existing function identities, ACLs, leases, current-source checks and
+historical signature snapshots are preserved. No blanket serialization remap.
+Worker rechecks native source after render, terminates superseded jobs without
+another attempt, and refills available slots through a bounded pool. Ambiguous
+failure acknowledgement reserves its slot until lease expiry; shutdown drains
+claimed work. Keep production concurrency6 and coordinate app/PDF rollout after
+zero active leases. No approval, historical rewrite, external resend, log
+truncation or database restart. CT110 log retention remains separate OPS-22.
+
 ## DOC-14 PDF Lease and Stale Source Recovery (2026-11-17, [Codex], #996)
 
 User authorized staging then selective production release and recovery of the

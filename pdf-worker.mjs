@@ -16,7 +16,7 @@ import {
   normalizeStoragePathPrefix,
 } from "./storage-path-policy.mjs";
 import { createKeu1JobHandler, createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob,
-  assertPdfJobCurrentSource, createPdfWorkerFetch, withPdfJobLease, processPdfJobBatch, safePdfWorkerError } from "./server/pdf-worker-job.mjs";
+  assertPdfJobCurrentSource, createPdfWorkerFetch, withPdfJobLease, runPdfJobPool, pdfPublicationError, safePdfWorkerError } from "./server/pdf-worker-job.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -55,8 +55,6 @@ if (storageMode !== "self_hosted_supabase" || !storageSupabase || !storagePublic
   throw new Error("Self-hosted storage is required. Configure STORAGE_MODE, STORAGE_SUPABASE_URL, STORAGE_SUPABASE_SERVICE_ROLE_KEY, and STORAGE_PUBLIC_BASE_URL.");
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const useExternalStorage = () => true;
 const uploadStorageClient = () => storageSupabase;
 const publicBaseUrl = (origin) => {
@@ -87,10 +85,10 @@ const downloadStorageFile = async (filePath, label, expectedBucket) => {
   return Buffer.from(await data.arrayBuffer());
 };
 
-const claimJobs = async () => {
+const claimJobs = async (available) => {
   const { data, error } = await supabase.rpc("claim_document_pdf_jobs", {
     p_worker_id: workerId,
-    p_limit: concurrency,
+    p_limit: available,
     p_max_attempts: maxAttempts,
   });
   if (error) throw error;
@@ -163,6 +161,7 @@ const processJob = async (job) => {
   if (!pdfBuffer) {
     throw new Error("Renderer PDF-native tidak tersedia untuk dokumen ini.");
   }
+  await assertPdfJobCurrentSource(supabase, job);
   const isCanonicalRecommendation = isCanonicalRecommendationPdfJob(job, recommendation);
   const defaultPdfPath = applyStoragePathPrefix(`pdf/${job.surat_id}_${Date.now()}.pdf`, storagePathPrefix);
   const unprefixedPdfPath = isCanonicalRecommendation
@@ -191,7 +190,7 @@ const processJob = async (job) => {
       p_pdf_object_path: pdfPath,
       p_pdf_storage_origin: uploadOrigin,
     });
-    if (publishError) throw publishError;
+    if (publishError) throw pdfPublicationError(publishError);
     if (publishedJob?.status !== "done") throw new Error(`Publication transition failed for ${job.id}.`);
   } else {
     const { data: completedJob, error: completionError } = await supabase.rpc("complete_document_pdf_job", {
@@ -199,7 +198,7 @@ const processJob = async (job) => {
       p_pdf_url: publishedUrl,
       p_lease_token: job.lease_token,
     });
-    if (completionError || !completedJob) throw completionError || new Error(`PDF completion transition failed for ${job.id}.`);
+    if (completionError || !completedJob) throw pdfPublicationError(completionError) || new Error(`PDF completion transition failed for ${job.id}.`);
     if (completedJob.status !== "done") throw new Error(`PDF completion transition failed for ${job.id}.`);
   }
 
@@ -209,31 +208,18 @@ const processJob = async (job) => {
 
 console.log(`[${workerId}] PDF worker started. concurrency=${concurrency}`);
 
-let idlePollIntervalMs = pollIntervalMs;
-while (true) {
-  try {
-    const jobs = await claimJobs();
-    if (jobs.length === 0) {
-      await sleep(idlePollIntervalMs);
-      idlePollIntervalMs = Math.min(maxIdlePollIntervalMs, idlePollIntervalMs * 2);
-      continue;
+const shutdown = new AbortController();
+process.once("SIGTERM", () => shutdown.abort());
+process.once("SIGINT", () => shutdown.abort());
+await runPdfJobPool({
+  concurrency, pollIntervalMs, maxIdlePollIntervalMs, signal: shutdown.signal, claimJobs,
+  processJob: async job => {
+    console.log(`[${workerId}] processing ${job.id}`);
+    try { await withPdfJobLease(job, () => processJob(job)); }
+    catch (error) {
+      console.error(`[${workerId}] failed ${job.id}`, safePdfWorkerError(error));
+      await markFailed(job, error);
     }
-
-    idlePollIntervalMs = pollIntervalMs;
-
-    const results = await processPdfJobBatch(jobs, async (job) => {
-        console.log(`[${workerId}] processing ${job.id}`);
-        await withPdfJobLease(job, () => processJob(job));
-      }, async (job, error) => {
-        console.error(`[${workerId}] failed ${job.id}`, safePdfWorkerError(error));
-        await markFailed(job, error);
-      });
-    for (const result of results) {
-      if (result.status === "rejected") console.error(`[${workerId}] failure transition error:`, safePdfWorkerError(result.reason));
-    }
-  } catch (error) {
-    console.error(`[${workerId}] polling error:`, safePdfWorkerError(error));
-    await sleep(idlePollIntervalMs);
-    idlePollIntervalMs = Math.min(maxIdlePollIntervalMs, idlePollIntervalMs * 2);
-  }
-}
+  },
+  onError: (error, phase) => console.error(`[${workerId}] ${phase} error:`, safePdfWorkerError(error)),
+});
