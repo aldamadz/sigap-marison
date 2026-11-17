@@ -8,6 +8,7 @@
  */
 import test from "node:test";
 import "./test-pdf-idle-polling.mjs";
+import "./test-pdf-worker-resilience.mjs";
 import assert from "node:assert/strict";
 import "../server/revision-actor-evidence.test.mjs";
 import "../server/unit-allocation-evidence.test.mjs";

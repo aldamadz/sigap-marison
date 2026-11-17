@@ -1,5 +1,19 @@
 # SIGAP Feature and Release Map
 
+## DOC-14 PDF Lease and Stale Source Recovery (2026-11-17, [Codex], #996)
+
+User authorized staging then selective production release and recovery of the
+missing current PDF for001/UAI/02.1.1/XI/2026. No approvals, external resend,
+bulk retry or historical PDF replacement. Nineteen failed native jobs today
+referenced older document sources;13 of14 documents already have newer done jobs.
+Readonly render of the remaining KEU1 document completed in714ms. Guard native
+source identity before render; bound worker HTTP and job deadlines below lease
+expiry; leave30 seconds for failure publication. Queue owns retries, and failure
+transition errors cannot release an unfinished batch. Existing database lease,
+signature and publication guards remain authoritative. No schema change planned.
+Coordinated app/PDF rollout must preserve PDF concurrency6 and existing secrets,
+drain active leases, retain rollback images and pass real canonical queue smoke.
+
 ## OPS-20 Hosted Maintenance Authority (2026-11-17, [Codex], #987)
 
 User authorized independent cPanel maintenance control, production reopening and
