@@ -157,10 +157,15 @@ for (const file of allChangedFiles) {
 
 if (allChangedFiles.some(file => /full_signer_revision.*\.sql$/u.test(file))) gates.add('full-signer-revision-sql');
 if (allChangedFiles.some(file => /direct_signer_revision/.test(file))) gates.add('direct-signer-revision-sql');
+if (allChangedFiles.some(file => /hrd_examiner_direct_revision/.test(file))) gates.add('hrd-examiner-revision-sql');
 
 for (const gate of gates) {
   if (gate === 'standalone-release-notices-sql') {
     run('node', ['scripts/test-standalone-release-notices-sql.mjs']);
+    continue;
+  }
+  if (gate === 'hrd-examiner-revision-sql') {
+    run('node',['scripts/test-keu10-workflow-sql.mjs','--hrd-examiner-revision']);
     continue;
   }
   if (gate === 'monitoring-readable-details-sql') {

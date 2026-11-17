@@ -3,7 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 
 const read = (path) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
 const fundRabParity = process.argv.includes("--fund-rab-parity");
-const directSignerRevision = process.argv.includes("--direct-signer-revision");
+const examinerRevision = process.argv.includes("--hrd-examiner-revision");
+const directSignerRevision = process.argv.includes("--direct-signer-revision") || examinerRevision;
 const fullSignerRevision = process.argv.includes("--full-signer-revision") || directSignerRevision;
 const revisionRecovery = process.argv.includes("--revision-recovery") || fullSignerRevision;
 const stageOverlay = process.argv.includes("--stageoverlay");
@@ -357,6 +358,14 @@ try {
         }
         process.stdout.write(run(psqlArgs, read('supabase/tests/full_signer_revision_keu1_totals.integration.sql')));
         if (directSignerRevision) {
+          if (examinerRevision) {
+            run(psqlArgs, canonical('20260618120000_form_usage_step_verification.sql', 'verify_surat_signature'));
+            run(psqlArgs, canonical('20260707113000_save_surat_verification_draft.sql', 'save_surat_verification_draft'));
+            run(psqlArgs, read('supabase/tests/hrd_ga_claim_full_revision.before.sql'));
+            run(psqlArgs, read(migrationRoot + '20261111150000_hrd_ga_review_assignment.sql'));
+            const claim=read(migrationRoot+'20261112120000_hrd_ga_shared_claim.sql');
+            run(psqlArgs,claim+claim);
+          }
           run(psqlArgs, "alter table public.surat_recommendation_tasks add column if not exists status text default 'submitted';");
           const direct=read(migrationRoot+'20261116100000_direct_signer_revision_approval.sql');
           run(psqlArgs,direct);
@@ -379,6 +388,31 @@ try {
             and (select count(*)=1 from public.notifications where user_id=keu10_test.id(1) and data->>'surat_id'=keu10_test.id(15500)::text),
             'Concurrent approval saves one audit entry and one requester notification');`);
           process.stdout.write('Direct signer concurrency: one approval, one immutable history and one requester notification.\n');
+          if (examinerRevision) {
+            const migration=read(migrationRoot+'20261117090000_hrd_examiner_direct_revision.sql');
+            run(psqlArgs,migration);
+            run(psqlArgs,migration);
+            process.stdout.write(run(psqlArgs,read('supabase/tests/hrd_examiner_direct_revision.integration.sql')));
+            run(psqlArgs,`select keu10_test.examiner_doc(16400);
+              set role authenticated;select set_config('request.jwt.claim.sub',keu10_test.id(9974)::text,false);
+              select public.claim_hrd_ga_examination(keu10_test.id(16402));`);
+            const reviseExaminer = () => new Promise((resolve,reject) => {
+              const child=spawn('docker',psqlArgs);let stderr='';
+              child.stdout.on('data',()=>{});child.stderr.on('data',data=>{stderr+=data;});
+              child.on('error',reject);child.on('close',code=>resolve({code,stderr}));
+              child.stdin.end(`set role authenticated;select set_config('request.jwt.claim.sub',keu10_test.id(9974)::text,false);
+                select public.revise_and_complete_hrd_examination(keu10_test.id(16400),keu10_test.id(16402),'Revisi pemeriksa bersamaan.',
+                  jsonb_set(keu10_test.full_form(keu10_test.id(16400)),'{form_input_data,items,0,jumlah}','1'));`);
+            });
+            const examinerAttempts=await Promise.all([reviseExaminer(),reviseExaminer()]);
+            if(examinerAttempts.filter(row=>row.code===0).length!==1 || examinerAttempts.filter(row=>row.code!==0).length!==1)
+              throw new Error(`Examiner concurrency failed: ${JSON.stringify(examinerAttempts)}`);
+            run(psqlArgs,`select keu10_test.assert((select count(*)=1 from public.surat_requester_revision_history where surat_id=keu10_test.id(16400))
+              and (select count(*)=1 from public.notifications where user_id=keu10_test.id(1) and data->>'surat_id'=keu10_test.id(16400)::text)
+              and (select not is_signed and verification_status='verified' from public.surat_signatures where id=keu10_test.id(16402)),
+              'Concurrent examination saves one audit and notification, never a manager signature');`);
+            process.stdout.write('HRD examiner concurrency: one revision, one notification and manager unsigned.\n');
+          }
         }
         if (process.argv.includes('--claim-full-revision')) {
           run(psqlArgs, canonical('20260618120000_form_usage_step_verification.sql', 'verify_surat_signature'));

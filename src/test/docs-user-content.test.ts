@@ -107,9 +107,13 @@ describe("docs-user-content D2A characterization", () => {
     }
   });
 
-  it("matches documentation content after SUR-39 signer monitoring scope", () => {
+  it("matches documentation content after SUR-54 examiner revision guidance", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("51a63796d18c004e6317e472618005f850fd11413a7724b01421938cb65019e5");
+      .toBe("d316ce0c8a2617c194bb832fd7d0d1ee3f70bfa862d4f42cd76b15d898a4c6a8");
+    const guidance=JSON.stringify(approvalInboxDocs.sections);
+    expect(guidance).toContain("pemohon diberi tahu tanpa diminta konfirmasi");
+    expect(guidance).toContain("revisi pemeriksa tidak menyetujui atas nama manager");
+    expect(guidance).toContain("Minta Perbaikan Pemohon");
   });
 
   it("keeps ALL_DOCS user prefix and legacy composition", () => {

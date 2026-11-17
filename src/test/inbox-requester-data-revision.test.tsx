@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   noop: vi.fn(),
   requestRevision: vi.fn(),
   reviseAndApprove: vi.fn(),
+  reviseExamination: vi.fn(),
   saveDraft: vi.fn(async (_signature: string, _payload: unknown, _note?: string) => ({})),
   prompt: vi.fn(),
   error: vi.fn(),
@@ -79,7 +80,7 @@ vi.mock("@/components/surat/SignerRevisionFinalApprover", async () => {
   }};
 });
 vi.mock("@/features/surat/inbox/services/surat-approval-api", () => ({
-  suratApprovalApi: { requestProcessRevision: mocks.requestRevision, reviseAndApprove: mocks.reviseAndApprove, saveVerificationDraft:mocks.saveDraft,
+  suratApprovalApi: { requestProcessRevision: mocks.requestRevision, reviseAndApprove: mocks.reviseAndApprove, reviseAndCompleteExamination: mocks.reviseExamination, saveVerificationDraft:mocks.saveDraft,
     claimExamination: mocks.claim,
     approveSurat: mocks.approve, rejectSurat: mocks.reject, verifySignature: mocks.verify },
 }));
@@ -117,6 +118,7 @@ beforeEach(() => {
   mocks.currentUser=null;mocks.detailError=false;
   mocks.requestRevision.mockResolvedValue({ id: "revision" });
   mocks.reviseAndApprove.mockReset().mockResolvedValue({ success: true });
+  mocks.reviseExamination.mockReset().mockResolvedValue({ success: true });
   mocks.prompt.mockResolvedValue(reason);
   Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
   vi.stubGlobal("ResizeObserver", class {
@@ -527,11 +529,33 @@ describe("Inbox requester data and attachment revision", () => {
     expect(screen.getByRole("button", { name: "Selesai pemeriksaan" })).toBeDisabled();
     expect(screen.getByPlaceholderText("Tambahkan catatan pemeriksaan bila diperlukan")).toBeDisabled();
   });
-  it("allows claimant full revision while never exposing manager approval", () => {
+  it("allows claimant to edit and finish examination without returning to requester or approving as manager", async () => {
     sharedTask("usman"); renderInbox();
     expect(screen.getByRole("button", { name: "Selesai pemeriksaan" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Setujui" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Revisi pemeriksa" }));
-    expect(screen.getByRole("dialog", { name: "Perbaikan pengajuan" })).toBeInTheDocument();
+    const dialog = within(screen.getByRole("dialog", { name: "Perbaikan pengajuan" }));
+    expect(dialog.getByRole("radio", { name: "Revisi oleh Pemeriksa" })).toBeChecked();
+    fireEvent.change(dialog.getByLabelText("Jumlah"), { target: { value: "2.5" } });
+    fireEvent.change(dialog.getByLabelText("Alasan revisi"), { target: { value: reason } });
+    fireEvent.click(dialog.getByRole("button", { name: "Simpan revisi dan selesai pemeriksaan" }));
+    await waitFor(() => expect(mocks.reviseExamination).toHaveBeenCalledOnce());
+    expect(mocks.reviseExamination).toHaveBeenCalledWith(expect.objectContaining({signatureId:"signature",reason,
+      form:expect.objectContaining({form_input_data:expect.objectContaining({items:[expect.objectContaining({jumlah:2.5})]})})}));
+    expect(mocks.requestRevision).not.toHaveBeenCalled();
+    expect(mocks.reviseAndApprove).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
+    expect(mocks.finishTask).toHaveBeenCalledWith("verification:signature");
+  });
+  it("still lets the claimant explicitly return to the requester instead of editing", async () => {
+    sharedTask("usman"); renderInbox();
+    fireEvent.click(screen.getByRole("button", {name:"Revisi pemeriksa"}));
+    const dialog=within(screen.getByRole("dialog",{name:"Perbaikan pengajuan"}));
+    fireEvent.click(dialog.getByRole("radio",{name:"Minta Perbaikan Pemohon"}));
+    fireEvent.change(dialog.getByLabelText("Alasan pengembalian"),{target:{value:reason}});
+    fireEvent.click(dialog.getByRole("button",{name:"Minta perbaikan"}));
+    await waitFor(()=>expect(mocks.requestRevision).toHaveBeenCalledOnce());
+    expect(mocks.requestRevision.mock.calls[0][0]).toMatchObject({targetType:"requester",changes:{requester_edit_required:true}});
+    expect(mocks.reviseExamination).not.toHaveBeenCalled();
   });
 });
