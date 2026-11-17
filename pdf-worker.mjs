@@ -15,7 +15,8 @@ import {
   isStoragePathWithinPrefix,
   normalizeStoragePathPrefix,
 } from "./storage-path-policy.mjs";
-import { createKeu1JobHandler, createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob } from "./server/pdf-worker-job.mjs";
+import { createKeu1JobHandler, createKeu10JobHandler, createPgdJobHandler, createRecommendationJobHandler, isCanonicalRecommendationPdfJob, resolveRecommendationPdfJob,
+  assertPdfJobCurrentSource, createPdfWorkerFetch, withPdfJobLease, processPdfJobBatch, safePdfWorkerError } from "./server/pdf-worker-job.mjs";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -42,10 +43,12 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
+  db: { retry: false },
+  global: { fetch: createPdfWorkerFetch() },
 });
 
 const storageSupabase = storageMode === "self_hosted_supabase" && storageSupabaseUrl && storageServiceRoleKey
-  ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false } })
+  ? createClient(storageSupabaseUrl, storageServiceRoleKey, { auth: { persistSession: false }, global: { fetch: createPdfWorkerFetch() } })
   : null;
 
 if (storageMode !== "self_hosted_supabase" || !storageSupabase || !storagePublicBaseUrl) {
@@ -99,7 +102,7 @@ const markFailed = async (job, error) => {
     p_job_id: job.id,
     p_lease_token: job.lease_token,
     p_error_message: error.message || "Gagal membuat PDF.",
-    p_max_attempts: maxAttempts,
+    p_max_attempts: error.code === "PDF_SOURCE_CHANGED" ? Math.max(1, job.attempt_count) : maxAttempts,
   });
   if (transitionError) throw transitionError;
   if (!data?.id) throw new Error(`Failure transition returned no job for ${job.id}.`);
@@ -141,6 +144,7 @@ const renderDirectKeu10Job = createKeu10JobHandler({
 });
 
 const processJob = async (job) => {
+  await assertPdfJobCurrentSource(supabase, job);
   let recommendation = job.render_payload ? await resolveRecommendationPdfJob(supabase, job) : null;
   let pdfBuffer = null;
   if (recommendation) {
@@ -217,17 +221,18 @@ while (true) {
 
     idlePollIntervalMs = pollIntervalMs;
 
-    await Promise.all(jobs.map(async (job) => {
-      try {
+    const results = await processPdfJobBatch(jobs, async (job) => {
         console.log(`[${workerId}] processing ${job.id}`);
-        await processJob(job);
-      } catch (error) {
-        console.error(`[${workerId}] failed ${job.id}`);
+        await withPdfJobLease(job, () => processJob(job));
+      }, async (job, error) => {
+        console.error(`[${workerId}] failed ${job.id}`, safePdfWorkerError(error));
         await markFailed(job, error);
-      }
-    }));
+      });
+    for (const result of results) {
+      if (result.status === "rejected") console.error(`[${workerId}] failure transition error:`, safePdfWorkerError(result.reason));
+    }
   } catch (error) {
-    console.error(`[${workerId}] polling error:`, error);
+    console.error(`[${workerId}] polling error:`, safePdfWorkerError(error));
     await sleep(idlePollIntervalMs);
     idlePollIntervalMs = Math.min(maxIdlePollIntervalMs, idlePollIntervalMs * 2);
   }

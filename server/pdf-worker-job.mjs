@@ -1,6 +1,53 @@
 import { isDeepStrictEqual } from "node:util";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { resolveRecommendationSource } from "../recommendation-pdf.mjs";
 import { enrichRevisionActors } from "./revision-actor-evidence.mjs";
+
+const pdfLeaseContext = new AsyncLocalStorage();
+const deadlineError = () => Object.assign(new Error("Batas waktu pemrosesan PDF sebelum lease berakhir telah tercapai."), { code: "PDF_LEASE_DEADLINE" });
+
+export const createPdfWorkerFetch = (fetcher = fetch, { timeoutMs = 20000 } = {}) => async (input, init = {}) => {
+  const context = pdfLeaseContext.getStore();
+  if (context && Date.now() >= context.deadline) throw deadlineError();
+  const signals = [AbortSignal.timeout(timeoutMs), context?.signal, init.signal,
+    input instanceof Request ? input.signal : null].filter(Boolean);
+  return fetcher(input, { ...init, signal: AbortSignal.any(signals) });
+};
+
+export const withPdfJobLease = async (job, work, { maxMs = 240000 } = {}) => {
+  const expires = Date.parse(job.lease_expires_at);
+  const deadline = Math.min(expires - 30000, Date.now() + maxMs);
+  if (!Number.isFinite(deadline) || deadline <= Date.now()) throw deadlineError();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(deadlineError()), deadline - Date.now());
+  timer.unref?.();
+  try { return await pdfLeaseContext.run({ deadline, signal: controller.signal }, work); }
+  finally { clearTimeout(timer); }
+};
+
+export const assertPdfJobCurrentSource = async (supabase, job) => {
+  if (!String(job.source_file_path || "").startsWith("native://document/")) return;
+  const query = job.signature_id
+    ? supabase.from("surat_signatures").select("file_path_snap,is_signed").eq("surat_id", job.surat_id).eq("id", job.signature_id)
+    : supabase.from("surat_registrasi").select("file_path").eq("id", job.surat_id);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  const source = job.signature_id ? data?.file_path_snap : data?.file_path;
+  if (!data || source !== job.source_file_path || (job.signature_id && data.is_signed !== true)) {
+    throw Object.assign(new Error("Sumber versi PDF sudah berubah. Job lama tidak boleh dipublikasikan."), { code: "PDF_SOURCE_CHANGED" });
+  }
+};
+
+export const processPdfJobBatch = (jobs, processJob, onFailure) => Promise.allSettled(jobs.map(async job => {
+  try { return await processJob(job); }
+  catch (error) { await onFailure(job, error); return null; }
+}));
+
+export const safePdfWorkerError = error => ({
+  code: /^[A-Z0-9_]{1,32}$/.test(String(error?.code || "")) ? String(error.code) : "PDF_ERROR",
+  message: String(error?.message || "Gagal memproses PDF.").replace(/https?:\/\/\S+/g, "[URL]")
+    .replace(/[A-Za-z0-9_/+=-]{70,}/g, "[REDACTED]").slice(0, 240),
+});
 
 export const resolveRecommendationPdfJob = async (supabase, job) => {
   if (job.render_payload?.kind === "keu10") return null;
