@@ -1,5 +1,18 @@
 # SIGAP Feature and Release Map
 
+## ADM-04 Master Entity Active-Admin Writes (2026-11-17, #1010)
+
+Production catalog audit found only an authenticated SELECT policy on
+`master_entities`; INSERT was rejected even for administrators. Restore only
+the three named admin write policies through migration `20261117130000`.
+Authorization requires the caller's authoritative profile role admin, explicit
+active=true and deleted_at=null. Do not change read policies, existing entities,
+profile roles, grants or other master tables, and do not disable RLS. Regression
+coverage uses actual authenticated/anon PostgreSQL roles, active-admin CRUD,
+ordinary/inactive/deleted/null-active/missing/non-admin profiles, forged metadata,
+role revocation and replay/data/ACL preservation. User authorizes staging then
+selective production deployment; live evidence must be recorded separately.
+
 ## DOC-15 Nonretryable PDF Supersession and Replenishing Pool (2026-11-17, #1002)
 
 User authorizes staging validation and selective production deployment after the
