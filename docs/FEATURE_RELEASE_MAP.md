@@ -40,6 +40,12 @@ requests from the edge Worker; HTML outage fallback remains. New schedules need
 tests, actual API/maintenance acceptance and public recovery remain required.
 No business DB changes, approval, outbound resend or paid upgrade authorized.
 
+Independent hosting follow-up: read schedule events locally/read-only during the
+minute status cycle, not through the SIGAP origin. Replay revision checkpoints
+so successive short schedules remain in history even between polling cycles.
+Synthetic offline-origin integration test covers completion timestamps,
+idempotency and unchanged control audit. Hosting-only release; no app/PDF change.
+
 ## SUR-54 HRD GA Examiner Direct Revision (2026-11-17, [Codex], #980)
 
 Production promotion authorized on 2026-11-17 for examiner revision and revision
