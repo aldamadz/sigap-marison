@@ -90,8 +90,9 @@ export const createEdgeHandler = (originFetch = fetch, assets = {}) => {
       if(!await verifyControl(env.CONTROL_PUBLIC_KEY,request.headers.get('x-sigap-signature'),`${timestamp}\n${env.HOSTNAME}\n${text}`))return json({error:'Unauthorized'},401);
       if(hosted) {
         try {
-          const response=await originFetch(new Request(hosted,{method:'POST',body:text,redirect:'error',signal:AbortSignal.timeout(8000),headers:{
+          const response=await originFetch(new Request(hosted,{method:'POST',body:text,redirect:'manual',signal:AbortSignal.timeout(8000),headers:{
             'Content-Type':'application/json','X-SIGAP-Hostname':env.HOSTNAME,'X-SIGAP-Timestamp':timestamp,'X-SIGAP-Signature':request.headers.get('x-sigap-signature')}}));
+          if(response.status>=300 && response.status<400)throw Error('Maintenance authority redirected');
           if(response.ok)readers.get(env.HOSTNAME)?.invalidate();
           return response;
         }catch{return json({error:'Kontrol maintenance sementara tidak tersedia.'},503);}
@@ -108,7 +109,10 @@ export const createEdgeHandler = (originFetch = fetch, assets = {}) => {
         state=publicHostedMaintenance(await readers.get(env.HOSTNAME).read());
       }else{const stored=await control.fetch('https://control/');if(!stored.ok)throw Error();state=publicState(await stored.json());}
     }
-    catch {return unavailable(request,null,true);}
+    catch(error) {
+      console.error('Maintenance authority read failed', {name:error?.name,message:String(error?.message || '').slice(0,160)});
+      return unavailable(request,null,true);
+    }
     if(url.pathname==='/api/maintenance/status')return json(state);
     if(url.pathname==='/.sigap-maintenance/page') {
       if(!['GET','HEAD'].includes(request.method))return json({error:'Method not allowed'},405);
