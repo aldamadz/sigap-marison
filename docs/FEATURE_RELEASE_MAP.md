@@ -29,6 +29,14 @@ by reverting the independent editor/controller; retain state, audit and prefs.
 
 ## SUR-54 HRD GA Examiner Direct Revision (2026-11-17, [Codex], #980)
 
+Production promotion authorized on 2026-11-17 for examiner revision and revision
+history cleanup only. Staging accepted at `2aacb85` with coordinated app/PDF
+rollout, migration `20261117090000`, successful public smoke and Usman UI check.
+Selective main-based branch excludes other staging features. Production release
+requires exact-main live staging parity, CT110 migration audit/rehearsal and
+coordinated CT104 app/PDF deployment with canonical image-retention checks.
+No business approval, external send or historical PDF rewrite is authorized.
+
 Presentation follow-up: omit notification/no-confirmation commentary from both
 the on-screen revision history and future PDF appendices. Actor, reason,
 before/after evidence, actual notifications and approval/examination behavior
