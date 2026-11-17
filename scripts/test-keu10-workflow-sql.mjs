@@ -157,7 +157,27 @@ try {
         'Original config RPC remains private');`);
     process.stdout.write("Related branch officers: canonical KEU10 wrapper preserved; private configuration guard updated.\n");
   }
-  if (process.argv.includes("--additional-signers") || process.argv.includes("--configured-signer-removal") || process.argv.includes("--hrd-ga-review")) {
+  if (process.argv.includes("--pdf-publication")) {
+    run(psqlArgs, `create schema extensions; alter extension pgcrypto set schema extensions;
+      alter table public.surat_registrasi add column pdf_bucket text, add column pdf_object_path text, add column pdf_storage_origin text;
+      alter table public.document_pdf_jobs add column pdf_bucket text, add column pdf_object_path text, add column pdf_storage_origin text;`);
+    run(psqlArgs, canonical("20260810143000_rec03_recommendation_multi_detail_foundation.sql", "recommendation_pdf_render_payload"));
+    run(psqlArgs, canonical("20260810143000_rec03_recommendation_multi_detail_foundation.sql", "recommendation_content_fingerprint"));
+    run(psqlArgs, canonical("20260811140000_rec03_file_link_blockers.sql", "publish_document_pdf_job"));
+    run(psqlArgs, patches("20261008110000_pdf_approval_decision_status.sql").at(-1));
+    run(psqlArgs, `revoke all on function public.publish_document_pdf_job(uuid,text,text,text,uuid,text,text,text) from public,anon,authenticated;
+      grant execute on function public.publish_document_pdf_job(uuid,text,text,text,uuid,text,text,text) to service_role;
+      create table keu10_test.pdf_function_metadata as select oid,proowner,proacl,prosecdef,proconfig from pg_proc where oid in
+       ('public.complete_document_pdf_job(uuid,text,uuid)'::regprocedure,'public.complete_document_pdf_job_pre_keu10(uuid,text,uuid)'::regprocedure,
+        'public.publish_document_pdf_job(uuid,text,text,text,uuid,text,text,text)'::regprocedure,'public.freeze_keu10_pdf_job()'::regprocedure);`);
+    if (!process.argv.includes("--pdf-publication-baseline")) {
+      const migration=read(migrationRoot+"20261117110000_pdf_superseded_nonretryable.sql");
+      run(psqlArgs,migration+migration);
+    }
+    const output=run(psqlArgs,read("supabase/tests/pdf_publication_supersession.integration.sql"));
+    if(!output.includes("PDF supersession: all assertions passed"))throw Error('Missing PDF supersession proof');
+    process.stdout.write(output);
+  } else if (process.argv.includes("--additional-signers") || process.argv.includes("--configured-signer-removal") || process.argv.includes("--hrd-ga-review")) {
     run(psqlArgs, `alter table public.surat_recommendation_tasks add column if not exists required_before_step integer;
       alter table public.surat_linked_documents add column if not exists required_before_step integer;`);
     const migration = read(migrationRoot + "20261026030000_requester_additional_signers.sql");
