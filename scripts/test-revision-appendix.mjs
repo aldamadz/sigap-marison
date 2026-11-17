@@ -119,7 +119,8 @@ test('immutable direct approval snapshot renders signer authorship without inven
  const entries=revisionHistoryEntries(doc);
  const text=JSON.stringify(revisionAppendixBlock(entries));
  assert.ok(text.includes('Perubahan dan persetujuan oleh penandatangan: Penandatangan Contoh'));
- assert.ok(text.includes('konfirmasi tidak diperlukan'));
+ assert.ok(!text.includes('konfirmasi tidak diperlukan'));
+ assert.ok(!text.includes('Pemohon diberi tahu'));
  assert.ok(text.includes('Komputer'));
  assert.ok(!text.includes('Dikonfirmasi oleh pemohon'));
  assert.equal(revisionHistoryEntries({...doc,revision_history:[{revision_event_id:'direct',revision_mode:'signer_direct',before_snapshot:before,after_snapshot:after}]}).length,1);

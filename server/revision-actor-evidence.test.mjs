@@ -95,5 +95,6 @@ test("direct examiner revision never implies manager approval or requester confi
   assert.equal(result.revision_history[0].revision_mode,"examiner_direct");
   const report=JSON.stringify(revisionAppendixBlock(revisionHistoryEntries(result)));
   assert.match(report,/Perubahan oleh pemeriksa: Usman Huda/);
+  assert.doesNotMatch(report,/Pemohon diberi tahu|tanpa konfirmasi|konfirmasi tidak diperlukan/);
   assert.doesNotMatch(report,/Dikonfirmasi|Perubahan dan persetujuan|Perubahan oleh pemohon/);
 });

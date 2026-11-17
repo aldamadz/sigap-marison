@@ -29,6 +29,11 @@ by reverting the independent editor/controller; retain state, audit and prefs.
 
 ## SUR-54 HRD GA Examiner Direct Revision (2026-11-17, [Codex], #980)
 
+Presentation follow-up: omit notification/no-confirmation commentary from both
+the on-screen revision history and future PDF appendices. Actor, reason,
+before/after evidence, actual notifications and approval/examination behavior
+are unchanged. Staging only; no migration or historical PDF rewrite.
+
 Staging candidate. The claimed shared HRD GA examiner can edit the full form and
 finish examination atomically without requester confirmation or manager approval.
 The manager remains unsigned at the same stage; requester and manager receive
