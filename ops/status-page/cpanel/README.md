@@ -199,3 +199,13 @@ The initial preview gates above were subsequently passed:
 For this independent release, Git main/staging include status-only source newer
 than the SIGAP runtime SHAs by design. The status artifact is separately tested
 and deployed; this does not assert that SIGAP runtimes contain the status commit.
+# Hosted Maintenance Synchronization (OPS-20)
+
+With hosting control configured, the minute status cycle reads its private
+control database read-only instead of contacting the SIGAP origin. It replays
+up to100 changed events in revision order, preserving short successive schedules
+and their actual completion timestamps. Checkpoints advance only after each
+status update succeeds; no-event cycles refresh source freshness without
+rewriting the control audit. Origin restarts therefore cannot hide a newly
+published schedule or prevent its completion from reaching status history.
+

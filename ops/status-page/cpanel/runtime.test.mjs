@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { openDatabase, auditDatabase } from './database.mjs';
-import { publishSnapshot, importSql } from './runtime.mjs';
+import { publishSnapshot, importSql, syncMaintenanceControl } from './runtime.mjs';
+import { bootstrapControl, controlCommand, HOSTS } from './maintenance-control.mjs';
+import { DatabaseSync } from 'node:sqlite';
 import { observationStatements, receiveTelemetry } from '../telemetry.mjs';
 import { buildCommand } from '../operator.mjs';
 import { loadStatus } from '../page.mjs';
@@ -26,6 +28,28 @@ async function using(fn) {
   try { await fn(db, directory); }
   finally { db.close(); await rm(directory, { recursive: true, force: true }); }
 }
+
+test('local maintenance sync survives offline origin and preserves successive short schedules',()=>using(async(db,directory)=>{
+  const now=Date.parse('2026-11-17T06:00:00Z'),path=resolve(directory,'control.sqlite'),config=resolve(directory,'control.json');
+  bootstrapControl(path,Object.fromEntries(HOSTS.map(host=>[host,{revision:0,schedule:null}])),'Synthetic operator initialization for offline synchronization',now);
+  await writeFile(config,JSON.stringify({database:path}));
+  const control=new DatabaseSync(path),actorId='00000000-0000-0000-0000-000000000001';
+  try {
+    for(let i=0;i<2;i++) {
+      const at=now+i*180000;
+      assert.equal(controlCommand(control,HOSTS[0],{action:'publish',expectedRevision:i*2,actorId,schedule:{category:'repair',impact:'full',message:`Maintenance fixture ${i}`,startsAt:new Date(at+60000).toISOString(),duration:1,unit:'minutes'}},at).status,200);
+      assert.equal(controlCommand(control,HOSTS[0],{action:'complete',expectedRevision:i*2+1,actorId},at+120000).status,200);
+    }
+    const before=control.prepare('SELECT * FROM control_events ORDER BY revision').all();
+    const network=globalThis.fetch;globalThis.fetch=async()=>{throw Error('Origin offline; network must not be used');};
+    try {await syncMaintenanceControl(db,config,now+360000);await syncMaintenanceControl(db,config,now+420000);}finally{globalThis.fetch=network;}
+    const rows=db.connection.prepare("SELECT lifecycle_status,closed_at FROM maintenance WHERE source='sigap' ORDER BY starts_at").all();
+    assert.equal(rows.length,2);assert.deepEqual(rows.map(row=>row.lifecycle_status),['completed','completed']);
+    assert.equal(rows[0].closed_at,now+120000);assert.equal(rows[1].closed_at,now+300000);
+    assert.equal(db.connection.prepare("SELECT revision FROM status_sources WHERE source='sigap'").get().revision,4);
+    assert.deepEqual(control.prepare('SELECT * FROM control_events ORDER BY revision').all(),before);
+  }finally{control.close();}
+}));
 
 test('adapter binds parameters and rolls an entire failed batch back', () => using(async db => {
   const insert = db.prepare('INSERT INTO status_sources VALUES (?,?,?)');
