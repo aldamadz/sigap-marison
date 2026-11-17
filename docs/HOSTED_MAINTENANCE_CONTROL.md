@@ -13,14 +13,6 @@ status history. Operator maintenance-complete closes a real work record without
 mislabeling it as cancelled. Incident updates must remain factual and must not be
 marked resolved before public recovery is actually verified.
 
-With hosting control configured, the status cycle reads its private control
-database read-only instead of contacting the SIGAP origin. New control events
-are replayed in revision order, at most100 per cycle, preserving short successive
-schedules and their actual completion times. The checkpoint advances only after
-the corresponding status update succeeds. No-event cycles refresh source
-freshness without rewriting control history. Thus origin restarts cannot hide
-a newly published maintenance schedule or prevent its completion from syncing.
-
 ## Request paths
 
 - The edge Worker keeps offline maintenance HTML and origin-outage fallback.
