@@ -54,6 +54,7 @@ import {
   isWaitingVerification,
   shouldSignerInputStageData,
   isSharedExamination,
+  canReviseExamination,
   canEditExamination,
   examinationClaimantName,
 } from "@/features/surat/inbox/lib/inbox-task-state";
@@ -1189,7 +1190,7 @@ const handleApprove = async (item: any) => {
     setFullRevisionForm(signerRevisionForm(getInboxSurat(item)));
     setFullRevisionDirectorId("");
     if (isVerificationTask(item) && isSharedExamination(item)) setRevisionTarget("requester");
-    setRequesterRevisionMode("general");
+    setRequesterRevisionMode(canReviseExamination(item, currentUser?.id) ? "items" : "general");
     setRevisionNote(notes[item.id] || "");
     setKeu10RevisionItems(canProposeKeu10Correction(item) ? normalizeKeu10SubmissionItems(rows) : []);
     if (isKeu10Revision(item)) setRevisionTarget("requester");
@@ -1330,6 +1331,22 @@ const handleApprove = async (item: any) => {
     setProcessingId(item.id);
     try {
       if (fullProposal && proposedForm) {
+        if (canReviseExamination(item, currentUser?.id)) {
+          const confirmed = await appDialog.confirm({
+            title: "Simpan revisi dan selesai pemeriksaan?",
+            description: "Perubahan dicatat atas nama Anda. Pemohon diberi tahu tanpa konfirmasi. Persetujuan tetap menunggu penandatangan tahap ini.",
+            confirmText: "Simpan revisi dan selesai pemeriksaan", cancelText: "Periksa lagi",
+          });
+          if (!confirmed) return;
+          await suratApprovalApi.reviseAndCompleteExamination({ suratId: item.surat_id, signatureId: item.id, reason: note, form: proposedForm });
+          toast.success("Revisi dan pemeriksaan tersimpan", { description: "Pemohon diberi tahu; pengajuan menunggu persetujuan penandatangan." });
+          setRevisionDialogItem(null);
+          finishCompletedTask(item);
+          refreshInboxAfterAction();
+          void queryClient.invalidateQueries({ queryKey: ['surat-revision-history'] });
+          return;
+        }
+        if (isVerificationTask(item)) throw new Error("Revisi langsung tidak tersedia untuk tugas pemeriksaan ini.");
         if (keu10 && !fullRevisionDirectorId) throw new Error("Pilih penyetuju akhir yang memenuhi nominal revisi.");
         const blockers = getApprovalBlockers(item);
         if (blockers.length) throw new Error(`Belum siap: ${blockers.join(", ")}.`);
@@ -3102,6 +3119,8 @@ const handleApprove = async (item: any) => {
             <DialogDescription>
               {isGeneralRequesterRevision(revisionDialogItem)
                   ? "Pemohon melengkapi data atau lampiran melalui Tindak Lanjut. Setelah dikirim ulang, pengajuan kembali ke tahap ini."
+                : canReviseExamination(revisionDialogItem, currentUser?.id)
+                  ? "Revisi dicatat atas nama pemeriksa. Pemohon diberi tahu tanpa konfirmasi; persetujuan tetap dilakukan penandatangan."
                 : isRequesterRevision(revisionDialogItem)
                   ? "Revisi disimpan bersama persetujuan. Pemohon mendapat pemberitahuan, tanpa perlu mengonfirmasi."
                   : "Perbaikan dikirim ke tahap yang dipilih sebelum proses dilanjutkan."}
@@ -3120,10 +3139,10 @@ const handleApprove = async (item: any) => {
                     <RadioGroupItem value="general" id="requester-revision-general" />
                     <Label htmlFor="requester-revision-general">Minta Perbaikan Pemohon</Label>
                   </div>
-                  {!isVerificationTask(revisionDialogItem) && (
+                  {(!isVerificationTask(revisionDialogItem) || canReviseExamination(revisionDialogItem, currentUser?.id)) && (
                     <div className="flex items-center gap-2">
                       <RadioGroupItem value="items" id="requester-revision-items" />
-                      <Label htmlFor="requester-revision-items">Revisi oleh Penandatangan</Label>
+                      <Label htmlFor="requester-revision-items">{isVerificationTask(revisionDialogItem) ? "Revisi oleh Pemeriksa" : "Revisi oleh Penandatangan"}</Label>
                     </div>
                   )}
                 </RadioGroup>
@@ -3150,7 +3169,7 @@ const handleApprove = async (item: any) => {
                   <SignerRevisionEditor value={fullRevisionForm} onChange={setFullRevisionForm}
                     form={revisionDialogItem?.surat_registrasi?.location_snapshot?.form || revisionDialogItem?.surat_registrasi?.data_snapshot?.form} />
                   <RequesterRevisionSummary baseline={{ formData: signerRevisionForm(getInboxSurat(revisionDialogItem)) }} current={{ formData: fullRevisionForm }} />
-                  {isKeu10Revision(revisionDialogItem) && <SignerRevisionFinalApprover signatureId={revisionDialogItem.id}
+                  {isKeu10Revision(revisionDialogItem) && !isVerificationTask(revisionDialogItem) && <SignerRevisionFinalApprover signatureId={revisionDialogItem.id}
                     policy={getInboxSurat(revisionDialogItem)?.policy_snapshot} signatures={getInboxSurat(revisionDialogItem)?.surat_signatures}
                     items={fullRevisionForm.form_input_data.items} value={fullRevisionDirectorId} onChange={setFullRevisionDirectorId} />}
                   <div className="space-y-2"><Label htmlFor="signer-full-revision-reason">Alasan revisi</Label>
@@ -3265,7 +3284,7 @@ const handleApprove = async (item: any) => {
             </Button>
             <Button type="button" disabled={!revisionDialogItem || processingId === revisionDialogItem?.id} onClick={() => revisionDialogItem && handleReturnForRevision(revisionDialogItem)}>
               {processingId === revisionDialogItem?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              {isGeneralRequesterRevision(revisionDialogItem) ? "Minta perbaikan" : isRequesterRevision(revisionDialogItem) ? "Simpan revisi dan setujui" : "Kirim revisi"}
+              {isGeneralRequesterRevision(revisionDialogItem) ? "Minta perbaikan" : canReviseExamination(revisionDialogItem, currentUser?.id) ? "Simpan revisi dan selesai pemeriksaan" : isRequesterRevision(revisionDialogItem) ? "Simpan revisi dan setujui" : "Kirim revisi"}
             </Button>
           </DialogFooter>
         </DialogContent>

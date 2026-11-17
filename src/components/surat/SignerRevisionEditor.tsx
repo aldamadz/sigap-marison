@@ -33,11 +33,11 @@ export function SignerRevisionEditor({ value, form, onChange }: Props) {
     const nextIds = new Set(items.map(item => revisionRecord(item).id));
     const removesItem = items.length < rows.length || rows.some(row => row.id && !nextIds.has(row.id))
       || rows.length === 1 && items.length === 1 && Object.keys(revisionRecord(items[0])).every(key => key === 'id');
-    if (removesItem && !await dialog.confirm({ title: 'Hapus item dari usulan?', description: 'Item akan dihapus hanya setelah pemohon mengonfirmasi usulan revisi.', confirmText: 'Hapus item' })) return;
+    if (removesItem && !await dialog.confirm({ title: 'Hapus item dari usulan?', description: 'Penghapusan diterapkan saat revisi disimpan dan dicatat pada riwayat perubahan.', confirmText: 'Hapus item' })) return;
     updateInput('items', items);
   };
   const remove = async (index: number) => {
-    if (await dialog.confirm({ title: 'Hapus item dari usulan?', description: 'Item akan dihapus hanya setelah pemohon mengonfirmasi usulan revisi.', confirmText: 'Hapus item' })) {
+    if (await dialog.confirm({ title: 'Hapus item dari usulan?', description: 'Penghapusan diterapkan saat revisi disimpan dan dicatat pada riwayat perubahan.', confirmText: 'Hapus item' })) {
       updateInput('items', rows.filter((_, at) => at !== index));
     }
   };
