@@ -50,7 +50,7 @@ export function createHostedMaintenanceReader(host:string,fetcher:typeof fetch=f
     if(pending)return pending;
     const version=generation;
     const operation=(async()=>{
-      const response=await fetcher(`https://status.marisoncloud.com/sigap-maintenance/state?host=${host}`,{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(3000)});
+      const response=await fetcher(`https://status.marisoncloud.com/sigap-maintenance/state?host=${host}`,{cache:'no-store',redirect:'manual',signal:AbortSignal.timeout(3000)});
       const next=parseHostedMaintenance(await boundedJson(response),host);
       if(cached && next.revision<cached.revision)throw Error('Maintenance revision regressed');
       if(version===generation){cached=next;expires=now()+5000;}return next;
