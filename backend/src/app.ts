@@ -18,6 +18,7 @@ import { registerHealthRoutes } from "./routes/health.routes.js";
 import { registerSuratRoutes } from "./routes/surat.routes.js";
 import { registerMaintenanceRoutes } from "./routes/maintenance.routes.js";
 import { registerDesktopRoutes } from "./routes/desktop.routes.js";
+import { registerHostedMaintenanceGuard } from "./plugins/hosted-maintenance.js";
 
 const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
@@ -64,6 +65,7 @@ export const buildApp = async () => {
   });
 
   registerErrorHandler(app);
+  registerHostedMaintenanceGuard(app, process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || 'http://localhost');
   await registerHealthRoutes(app);
   await registerAuthRoutes(app);
   await registerDesktopRoutes(app);
