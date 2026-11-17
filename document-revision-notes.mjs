@@ -215,10 +215,9 @@ export function revisionAppendixBlock(entries = [], noSurat = "") {
       {text:[entry.title,entry.at && Number.isFinite(Date.parse(entry.at)) ? `${new Date(entry.at).toLocaleString("id-ID",{timeZone:"Asia/Jakarta"})} WIB` : ""].filter(Boolean).join(" | "),bold:true,fontSize:10,margin:[0,5,0,4]},
       ...(entry.mode==="examiner_direct" ? [
         {text:`Perubahan oleh pemeriksa: ${entry.actor || entry.requestedBy || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},
-        {text:"Pemohon diberi tahu tanpa konfirmasi. Persetujuan tetap oleh penandatangan.",fontSize:8,margin:[0,0,0,4]},
+        {text:"Persetujuan tetap oleh penandatangan.",fontSize:8,margin:[0,0,0,4]},
       ] : entry.mode==="signer_direct" ? [
         {text:`Perubahan dan persetujuan oleh penandatangan: ${entry.actor || entry.requestedBy || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},
-        {text:"Pemohon diberi tahu; konfirmasi tidak diperlukan.",fontSize:8,margin:[0,0,0,4]},
       ] : entry.mode==="signer_proposal" ? [
         {text:`Usulan perubahan oleh penandatangan: ${entry.requestedBy || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},
         {text:`Dikonfirmasi oleh pemohon: ${entry.actor || "Nama tidak tercatat"}`,fontSize:8,margin:[0,0,0,4]},

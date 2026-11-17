@@ -62,8 +62,7 @@ export function SignerRevisionSummary({ revision, suratId }: { revision?: Active
           {!direct && !examiner && !proposal && requestingActor ? `Diminta oleh ${requestingActor} · ` : ""}
           {new Date(history.submitted_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}
         </p>
-        {direct && <p className="text-xs text-muted-foreground">Pemohon diberi tahu; konfirmasi tidak diperlukan.</p>}
-        {examiner && <p className="text-xs text-muted-foreground">Pemohon diberi tahu tanpa konfirmasi. Pemeriksaan selesai; persetujuan tetap oleh penandatangan.</p>}
+        {examiner && <p className="text-xs text-muted-foreground">Pemeriksaan selesai; persetujuan tetap oleh penandatangan.</p>}
         {!direct && proposal && requester && <p className="text-xs text-muted-foreground">Dikirim kembali oleh pemohon: {requester} (riwayat alur sebelumnya).</p>}
         {!direct && !examiner && !proposal && !requesterEdit && requester && <p className="text-xs text-muted-foreground">Dikirim oleh pemohon: {requester}.</p>}
         <p className="whitespace-pre-wrap break-words text-sm">Alasan: {history.reason}</p>
