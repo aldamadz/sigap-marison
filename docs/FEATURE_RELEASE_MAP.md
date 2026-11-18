@@ -13,15 +13,16 @@ ordinary/inactive/deleted/null-active/missing/non-admin profiles, forged metadat
 role revocation and replay/data/ACL preservation. User authorizes staging then
 selective production deployment; live evidence must be recorded separately.
 
-## SEC-01 Staging Glob Parser Mitigation (2026-11-18, #1017)
+## SEC-01 Development Tool Glob Parser Mitigation (2026-11-18, #1017)
 
-Staging-only build mitigation for CVE-2026-112366. Pin upstream picomatch
+Build-only mitigation for CVE-2026-112366, first verified on staging. Pin upstream picomatch
 4.0.7; the existing fail-closed installation path verifies tarball integrity and
 parser hashes, then disables extglob parsing for development tools only.
-The staging audit accepts only the exact advisory and verified dev-only
-transitive findings while blocking unknown high/critical findings. Production
-keeps its original audit. Scope expires on 18 December 2026 WIB; remove the
-override, installer and staging audit rule when a supported patched version
+The release gate first runs an unmodified runtime dependency audit and then
+checks all dependencies. Only the exact advisory and verified dev-only
+transitive findings are covered; other high/critical findings block release.
+Scope expires on 18 December 2026 WIB; remove the override, installer and
+dev-tool audit rule when a supported patched version
 is available. No application runtime dependency or database changes.
 
 ## DOC-15 Nonretryable PDF Supersession and Replenishing Pool (2026-11-17, #1002)
@@ -151,7 +152,8 @@ starting with `- `, `* ` or a pasted bullet render as round bullets; `1. ` / `1)
 render as numbered lists. Other lines stay paragraphs. No HTML/Markdown execution,
 stored content rewrite, database migration or production release.
 
-Staging-only candidate. Configuration has a dedicated What's New editor,
+Selective production candidate tracked in #1021, previously verified on staging.
+Configuration has a dedicated What's New editor,
 saved draft, safe preview, atomic publication, withdrawal and immutable audit.
 Announcements no longer depend on maintenance publish/complete. Existing edge
 maintenance schedules/history remain unchanged; legacy note values are retained
@@ -160,7 +162,7 @@ Migration20261113110000 adds private singleton state/events, authenticated activ
 notice RPC and active-admin command/read RPC with optimistic revision locking.
 Server owns actor, publication UUID/time and next-midnight-WIB expiry. Existing
 per-user/session dismissals remain valid. No external notifications, business
-document changes, Worker deployment or production release authorized. Withdraw
+document changes, or Worker deployment included. Withdraw
 by reverting the independent editor/controller; retain state, audit and prefs.
 
 ## MRN-20 Fund Payload Whitespace (2026-11-13, [Codex], #954)

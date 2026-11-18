@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "postinstall": "node security/fail-closed/picomatch-backport.mjs",
-    "audit:staging": "node security/fail-closed/audit-staging.mjs",
+    "audit:release": "npm audit --omit=dev --audit-level=high && node security/fail-closed/audit-dev-backport.mjs",
     "test:document-layout": "node --test scripts/test-document-layout-rules.mjs",
     "test:pgd-pdf": "node --test scripts/test-pgd-pdf-renderer.mjs",
     "test:worker-job": "node --test scripts/test-pdf-worker-job.mjs",

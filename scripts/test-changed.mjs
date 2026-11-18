@@ -104,7 +104,7 @@ if (allChangedFiles.some(file => /configured_signer_removal.*\.sql$/u.test(file)
 if (allChangedFiles.some(file => /hrd_ga_review.*\.sql$/u.test(file))) gates.add('hrd-ga-review-sql');
 if (allChangedFiles.some(file => /hrd_ga_shared_claim.*\.sql$|internal_non_asset_goods.*\.sql$/u.test(file))) gates.add('hrd-ga-claim-sql');
 if (allChangedFiles.some(file => /docker.*retention|production-deploy-lock/.test(file))) gates.add('docker-image-retention');
-if (allChangedFiles.some(file => /^security\/fail-closed\/(picomatch-backport|audit-staging)/u.test(file))) gates.add('picomatch-backport');
+if (allChangedFiles.some(file => /^security\/fail-closed\/(picomatch-backport|audit-dev-backport)/u.test(file))) gates.add('picomatch-backport');
 for (const file of allChangedFiles) {
   if (/dashboard_date_range_and_submission_stars.*\.sql$/u.test(file)) gates.add('dashboard-tools-sql');
   if (/pdf_superseded_nonretryable.*\.sql$|pdf_publication_supersession\.integration\.sql$/u.test(file)) gates.add('pdf-publication-sql');
