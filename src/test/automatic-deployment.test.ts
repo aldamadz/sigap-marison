@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const staging = readFileSync(resolve(".github/workflows/deploy-staging.yml"), "utf8");
 const production = readFileSync(resolve(".github/workflows/deploy-production.yml"), "utf8");
+const quality = readFileSync(resolve(".github/workflows/quality.yml"), "utf8");
 const deploy = readFileSync(resolve("scripts/deploy-app.sh"), "utf8");
 const migrationGate = readFileSync(resolve("scripts/deploy-migration-gate.mjs"), "utf8");
 const parity = readFileSync(resolve("scripts/check-staging-parity.sh"), "utf8");
@@ -15,7 +16,9 @@ describe("automatic deployment boundaries", () => {
     expect(staging).toContain("github.ref == 'refs/heads/staging'");
     expect(staging).toContain("quality-live-base.sh staging");
     expect(staging).toContain("npm run quality:changed");
-    expect(staging).toContain("npm audit --audit-level=high");
+    expect(staging).toContain("npm run audit:staging");
+    expect(quality).toContain("if: github.base_ref == 'staging' || github.ref == 'refs/heads/staging'");
+    expect(quality).toContain("if: github.base_ref != 'staging' && github.ref != 'refs/heads/staging'");
     expect(staging).toContain('bash scripts/deploy-app.sh staging "$GITHUB_SHA"');
   });
 
@@ -27,6 +30,8 @@ describe("automatic deployment boundaries", () => {
     expect(production).toContain("environment: production");
     expect(production).toContain("quality-live-base.sh production");
     expect(production).toContain("npm run quality:changed");
+    expect(production).toContain("npm audit --audit-level=high");
+    expect(production).not.toContain("npm run audit:staging");
     expect(production.match(/fetch-depth: 0/g)).toHaveLength(3);
     expect(production).toContain("check-staging-parity.sh --require-ready");
     expect(parity).toContain('git merge-base --is-ancestor "$main_sha" "$staging_sha"');

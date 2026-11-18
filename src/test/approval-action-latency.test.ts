@@ -63,6 +63,7 @@ describe("approval action latency", () => {
     expect(hook).toContain("const refreshAfterAction");
     expect(hook).toContain("void Promise.allSettled([");
     expect(hook).toContain("queryClient.invalidateQueries");
-    expect(inbox.match(/finishInboxTaskLocally\(taskKey\);/g)).toHaveLength(3);
+    expect(inbox).toMatch(/const finishCompletedTask = \(item: any\) => \{[\s\S]*?finishInboxTaskLocally\(taskKey\);/);
+    expect(inbox.match(/finishCompletedTask\(item\);\s*refreshInboxAfterAction\(\);/g)).toHaveLength(5);
   });
 });

@@ -33,6 +33,7 @@ describe("PostgREST egress guardrails", () => {
   it("backs off PDF polling while the queue is idle", () => {
     const worker = read("pdf-worker.mjs");
     expect(worker).toContain("PDF_WORKER_MAX_IDLE_POLL_INTERVAL_MS");
-    expect(worker).toContain("idlePollIntervalMs * 2");
+    expect(worker).toMatch(/runPdfJobPool\(\{[^}]*\bmaxIdlePollIntervalMs\b/);
+    expect(read("server/pdf-worker-job.mjs")).toMatch(/if \(jobs\.length === 0\) \{\s*await waitForPoolWake\(active, idleDelay, signal\);\s*idleDelay = Math\.min\(maxIdlePollIntervalMs, idleDelay \* 2\);/);
   });
 });

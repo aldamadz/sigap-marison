@@ -39,7 +39,7 @@ describe("stored outbound payload preview", () => {
 });
 const source = readFileSync("backend/src/domain-runtime.ts", "utf8");
 const handler = source.slice(source.indexOf("const getMarisonOutboundPayloadPreview ="), source.indexOf("const preflightMarisonOutboundRecovery ="));
-function harness(options: { denied?: boolean; originDenied?: boolean; stored?: unknown; error?: unknown; letter?: unknown; tokenError?: unknown } = {}) {
+function harness(options: { denied?: boolean; originDenied?: boolean; routingDenied?: boolean; stored?: unknown; error?: unknown; letter?: unknown; tokenError?: unknown } = {}) {
   const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: options.stored === undefined ? job : options.stored, error: options.error })) };
   query.select.mockReturnValue(query); query.eq.mockReturnValue(query);
   const letterQuery = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: options.letter === undefined ? { id: "letter-a", status: "DONE", pdf_path: "main.pdf", surat_signatures: [{ is_signed: true, signed_at: "2026-10-21T00:00:00Z" }] } : options.letter, error: null })) };
@@ -49,12 +49,15 @@ function harness(options: { denied?: boolean; originDenied?: boolean; stored?: u
   const prepare = vi.fn(() => ({ payload: { type: "marketing_cost", main_document: "verified-link" }, payloadHash: "candidate" }));
   const from = vi.fn((table: string) => table === "surat_registrasi" ? letterQuery : table === "file_view_tokens" ? tokens : query);
   const current = vi.fn(async () => ({ source: "latest", payload: { corrected: true } }));
-  const context = { supabase: { from }, generateCurrentMarisonPayloadPreview: current, requireAdminUser: async () => { if (options.denied) throw Object.assign(new Error("Forbidden"), { status: 403 }); }, getBearerToken: () => "session", marisonDeploymentEnvironment: "staging", previewStoredMarisonPayload,
+  const assertMarisonProcurementRoute = vi.fn(async () => {
+    if (options.routingDenied) throw Object.assign(new Error("Not routed to procurement"), { status: 409 });
+  });
+  const context = { supabase: { from }, assertMarisonProcurementRoute, generateCurrentMarisonPayloadPreview: current, requireAdminUser: async () => { if (options.denied) throw Object.assign(new Error("Forbidden"), { status: 403 }); }, getBearerToken: () => "session", marisonDeploymentEnvironment: "staging", previewStoredMarisonPayload,
     process: { env: { APP_PUBLIC_URL: "https://sigap.test" } }, fundPostmanLinks: () => [{ tokenHash: "hash" }], previewFundForPostman: prepare,
     resolveFinalMarisonPdfPath: () => "main.pdf", parseStorageRef: vi.fn(),
     assertSameOrigin: () => { if (options.originDenied) throw Object.assign(new Error("Origin"), { status: 403 }); } };
   const runtime = vm.runInNewContext(handler + "\n({getMarisonOutboundPayloadPreview});", context);
-  return { get: (value = id, view = "stored") => runtime.getMarisonOutboundPayloadPreview({}, value, view), from, query, letterQuery, tokens, prepare, current };
+  return { get: (value = id, view = "stored") => runtime.getMarisonOutboundPayloadPreview({}, value, view), from, query, letterQuery, tokens, prepare, current, assertMarisonProcurementRoute };
 }
 describe("admin payload endpoint", () => {
   it("uses the separate latest generator only after admin, environment and history validation", async () => {
@@ -96,9 +99,17 @@ describe("admin payload endpoint", () => {
     const h = harness({ stored: { ...job, surat_id: "letter-a", kind: "fund", endpoint: "/fund-submissions" } });
     expect(await h.get(id, "postman")).toMatchObject({ source: "postman", payloadHash: "candidate", sourcePayloadHash: job.payload_hash, payload: { type: "marketing_cost" } });
     expect(h.letterQuery.eq).toHaveBeenCalledWith("id", "letter-a");
+    expect(h.assertMarisonProcurementRoute).toHaveBeenCalledWith({ from: h.from }, "letter-a");
     expect(h.tokens.in).toHaveBeenCalledWith("token_hash", ["hash"]);
     expect(h.prepare).toHaveBeenCalledOnce();
     const stored = await h.get(); expect(stored).toMatchObject({ source: "frozen", payloadHash: job.payload_hash });
+  });
+  it("does not prepare Postman data outside the procurement route", async () => {
+    const h = harness({ routingDenied: true, stored: { ...job, surat_id: "letter-a", kind: "fund", endpoint: "/fund-submissions" } });
+    await expect(h.get(id, "postman")).rejects.toMatchObject({ status: 409 });
+    expect(h.letterQuery.select).not.toHaveBeenCalled();
+    expect(h.tokens.select).not.toHaveBeenCalled();
+    expect(h.prepare).not.toHaveBeenCalled();
   });
   it("blocks nonfinal/missing letters and token lookup errors", async () => {
     const stored = { ...job, surat_id: "letter-a", kind: "fund", endpoint: "/fund-submissions" };
