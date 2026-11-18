@@ -68,6 +68,25 @@ describe("buildRecommendationMultiDetail pure unit tests", () => {
     });
   });
 
+  it("round-trips the form registration, damage, description, and notes independently", () => {
+    const items = [{ id: "parent", nama_barang: "Laptop", keterangan: "Keperluan pemohon", jumlah: 1 }];
+    const model = buildRecommendationMultiDetail(items, {
+      recommendation_items: [{
+        no_registrasi: "001020", kerusakan: "Tidak bisa menyala", lokasi: "PO", pic: "PIC uji",
+        recommendation_action: "ganti", uraian: "Ganti unit", keterangan: "Pembelian baru",
+      }],
+    }, sequentialIdFactory());
+    const input = syncRecommendationMultiDetailInput({ catatan: "Catatan umum" }, model);
+    expect(input.catatan).toBe("Catatan umum");
+    expect(input.recommendation_items).toMatchObject([{ no_registrasi: "001020", kerusakan: "Tidak bisa menyala", uraian: "Ganti unit", keterangan: "Pembelian baru" }]);
+    const [parent] = buildRecommendationMultiDetail(items, input).items;
+    expect(parent).toMatchObject({ registration_number: "001020", damage_description: "Tidak bisa menyala" });
+    expect(parent.applicant_original.notes).toBe("Keperluan pemohon");
+    expect(readLegacyRecommendationItems(input.recommendation_items).items[0]).toMatchObject({
+      registration_number: "001020", damage_description: "Tidak bisa menyala",
+    });
+  });
+
   it("2. one parent item recommended with multiple details (via canonical model)", () => {
     const canonical: RecommendationMultiDetail = {
       version: 1,

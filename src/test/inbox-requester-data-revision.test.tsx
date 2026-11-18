@@ -177,14 +177,14 @@ describe("Inbox requester data and attachment revision", () => {
     const key = legacy ? currentId : `${mocks.fixture.task_type}:${currentId}`;
     render(<MemoryRouter initialEntries={[`/surat/inbox?task=${key}&document=old-document`]}><ActionQueueRoute/></MemoryRouter>);
   };
-  it.each([false, true])('advances the task URL after successful approval (legacy=%s)', async legacy => {
+  it.each([false, true])('retires the explicit task URL after successful approval (legacy=%s)', async legacy => {
     mountActionQueue(true, legacy);
     fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledOnce());
     await waitFor(() => expect(screen.getByText('Pengajuan berikutnya')).toBeInTheDocument());
     expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
     const params = new URLSearchParams(screen.getByTestId('queue-location').textContent || '');
-    expect(params.get('task')).toBe(`approval:${nextId}`); expect(params.has('document')).toBe(false);
+    expect(params.has('task')).toBe(false); expect(params.has('document')).toBe(false);
     expect(mocks.finishTask).toHaveBeenCalledExactlyOnceWith(`approval:${currentId}`);
   });
   it('clears the finished deep link when the last approval leaves an empty queue', async () => {
@@ -238,7 +238,8 @@ describe("Inbox requester data and attachment revision", () => {
     expect(screen.getByText('Memproses tindakan...')).toBeInTheDocument();
     expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
     complete();
-    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${nextId}`));
+    await waitFor(() => expect(screen.getByTestId('queue-location')).toBeEmptyDOMElement());
+    expect(screen.getByText('Pengajuan berikutnya')).toBeInTheDocument();
     expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
   });
   it('advances after successful rejection instead of treating its old task as unavailable', async () => {
@@ -254,14 +255,29 @@ describe("Inbox requester data and attachment revision", () => {
     await waitFor(() => expect(mocks.verify).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText('Pengajuan berikutnya')).toBeInTheDocument());
     expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
-    expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`verification:${nextId}`);
+    expect(screen.getByTestId('queue-location')).toBeEmptyDOMElement();
   });
   it('retains a distinct approval task for the same signature after verification', async () => {
     mountActionQueue(true, false, true, true);
     fireEvent.click(screen.getByRole('button', { name: 'Simpan & lanjutkan' }));
     await waitFor(() => expect(mocks.finishTask).toHaveBeenCalledExactlyOnceWith(`verification:${currentId}`));
-    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('queue-location').textContent || '').get('task')).toBe(`approval:${currentId}`));
+    await waitFor(() => expect(screen.getByTestId('queue-location')).toBeEmptyDOMElement());
     expect(screen.getByRole('button', { name: 'Setujui' })).toBeInTheDocument();
+    expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
+  });
+  it('continues the recommendation queue if the next visible task is removed during refresh', async () => {
+    mountActionQueue();
+    mocks.fixture.surat_registrasi.judul_surat = 'Rekomendasi Peremajaan Alat';
+    mocks.fixture.surat_registrasi.location_snapshot.form.nomor_form = 'FM-UAI.HRD-30-00';
+    const third = structuredClone(mocks.queue![1]);
+    third.id = '00000000-0000-4000-8000-000000000006';
+    third.surat_registrasi.judul_surat = 'Rekomendasi berikutnya yang masih aktif';
+    mocks.queue!.push(third);
+    mocks.details![third.id] = third;
+    fireEvent.click(screen.getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(mocks.finishTask).toHaveBeenCalled());
+    act(() => { mocks.detailError = true; mocks.realtimeFinish!(`approval:${nextId}`); });
+    expect(await screen.findByText('Rekomendasi berikutnya yang masih aktif')).toBeInTheDocument();
     expect(screen.queryByText(unavailable)).not.toBeInTheDocument();
   });
   it('does not prefill examiner identity fields from requester-controlled allocation detail', async () => {

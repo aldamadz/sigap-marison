@@ -176,12 +176,14 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
         parentItem.keterangan,
         parentItem.notes,
       ),
-      registrationNumber: text(
+      registrationNumber: typeof item.registration_number === "string" ? item.registration_number.trim() : text(
         item.registration_number,
         item.no_registrasi,
         parentItem.registration_number,
         parentItem.no_registrasi,
       ),
+      damageDescription: typeof item.damage_description === "string" ? item.damage_description.trim()
+        : typeof item.kerusakan === "string" ? item.kerusakan.trim() : undefined,
       status: rejected ? "not_recommended" : itemStatus,
       location: text(item.location, item.lokasi, item.lokasi_pic, parentItem.location, parentItem.lokasi),
       pic: text(item.pic, item.person_in_charge, parentItem.pic, parentItem.person_in_charge),
@@ -194,8 +196,8 @@ export const resolveRecommendationSource = (childInput = {}, parentInput = {}, c
           id: text(detail.id, detail.detail_id, `${text(item.id, `item-${itemIndex + 1}`)}-detail-${detailIndex + 1}`),
           order: orderNumber(detail.order ?? detail.detail_order, detailIndex + 1),
           heading: text(detail.heading, detail.title, detail.name, detail.nama_detail, detail.nama_barang, detail.uraian, `Detail ${itemIndex + 1}.${detailIndex + 1}`),
-          description: text(detail.description, detail.keterangan, detail.notes, detail.catatan, detail.uraian),
-          notes: text(detail.notes, detail.catatan),
+          description: text(detail.description, detail.uraian, detail.keterangan, detail.notes, detail.catatan),
+          notes: text(detail.notes, detail.catatan, detail.keterangan),
           status,
           action: text(detail.action, detail.recommendation_action),
           location: text(detail.location, detail.lokasi, detail.detail_location),

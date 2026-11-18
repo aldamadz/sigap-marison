@@ -92,6 +92,9 @@
   min-height: 11rem;
   padding: 1.5rem;
   text-align: center;
+  cursor: default;
+  user-select: none;
+  pointer-events: none;
 }
 
 .sigap-login-quote-text {

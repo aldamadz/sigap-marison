@@ -272,7 +272,15 @@ function RecommendationMultiDetailEditorContent({
           </div>
         </div>
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor={`registration-number-${activeParent.id}`}>No. Registrasi</Label>
+            <Input
+              id={`registration-number-${activeParent.id}`}
+              value={activeParent.registration_number ?? ""}
+              onChange={(event) => setParent(parent => ({ ...parent, registration_number: event.target.value }))}
+            />
+          </div>
           <div className="space-y-2">
             <Label className="text-xs font-semibold">PIC *</Label>
             <Popover open={picOpen} onOpenChange={setPicOpen}>
@@ -312,10 +320,20 @@ function RecommendationMultiDetailEditorContent({
               id={`location-${activeParent.id}`}
               value={activeParent.location}
               onChange={(event) => setParent((parent) => ({ ...parent, location: event.target.value }))}
-              placeholder="Contoh: Kantor Pusat / Departemen PO"
+              placeholder="Contoh: PO"
               aria-describedby={`location-help-${activeParent.id}`}
             />
             <p id={`location-help-${activeParent.id}`} className="text-xs text-muted-foreground">Terisi otomatis sesuai PIC.</p>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor={`damage-${activeParent.id}`}>Kerusakan</Label>
+            <Textarea
+              id={`damage-${activeParent.id}`}
+              value={activeParent.damage_description ?? activeParent.applicant_original.notes}
+              onChange={(event) => setParent(parent => ({ ...parent, damage_description: event.target.value }))}
+              placeholder="Contoh: Penurunan performa"
+              className="min-h-16"
+            />
           </div>
         </div>
 
@@ -409,7 +427,7 @@ function RecommendationMultiDetailEditorContent({
                   </div>
 
                   <div className="mt-4 space-y-2">
-                    <Label className="text-xs font-semibold">Tindakan *</Label>
+                    <Label className="text-xs font-semibold">Hasil rekomendasi *</Label>
                     <div className="grid grid-cols-3 gap-2">
                       {ACTIONS.map((action) => (
                         <button
@@ -435,8 +453,9 @@ function RecommendationMultiDetailEditorContent({
 
                   <div className="mt-4 space-y-2">
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold">Uraian *</Label>
+                      <Label htmlFor={`description-${detail.id}`} className="text-xs font-semibold">Uraian *</Label>
                       <Input
+                        id={`description-${detail.id}`}
                         value={detail.description}
                         onChange={(event) => setDetail(detail.id, (item) => ({
                           ...item,
@@ -449,7 +468,7 @@ function RecommendationMultiDetailEditorContent({
                   </div>
 
                   <div className="mt-4 space-y-2">
-                    <Label htmlFor={`notes-${detail.id}`} className="text-sm font-medium">Catatan item *</Label>
+                    <Label htmlFor={`notes-${detail.id}`} className="text-sm font-medium">Keterangan *</Label>
                     <Textarea
                       id={`notes-${detail.id}`}
                       aria-describedby={`notes-help-${detail.id}`}
