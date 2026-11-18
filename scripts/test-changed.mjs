@@ -172,6 +172,7 @@ for (const gate of gates) {
   }
   if (gate === 'dashboard-tools-sql') {
     run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--dashboard-tools']);
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--dashboard-tools', '--monitoring-staging-shape']);
     continue;
   }
   if (gate === 'hrd-examiner-revision-sql') {
