@@ -1,28 +1,18 @@
 import { Link, useSearchParams } from 'react-router';
-import { ArrowUpRight, BookOpenText, CalendarDays, ChevronLeft, ChevronRight, History, Megaphone } from 'lucide-react';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { ArrowUpRight, BookOpenText, CalendarDays, History, Megaphone } from 'lucide-react';
+import { Accordion } from '@/components/ui/accordion';
 import { badgeVariants } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { ReleaseNoticeArchive } from './ReleaseNoticeArchive';
 import { ALL_DOCS, DOCS_CHANGELOG, getDocsEntryPath } from './docsContent';
-
-const DOCS_PAGE_SIZE = 5;
-const DOCS_PAGE_COUNT = Math.max(1, Math.ceil(DOCS_CHANGELOG.length / DOCS_PAGE_SIZE));
+import { VersionHistoryPagination, VersionHistoryRow } from './VersionHistoryList';
+import { useVersionHistoryPage } from './use-version-history-page';
 
 export function VersionHistoryPanel({ userId }: { userId?: string }) {
   const [params, setParams] = useSearchParams();
   const currentTab = params.get('tab') === 'dokumentasi' ? 'dokumentasi' : 'aplikasi';
-  const requestedPage = params.get('page') ?? '';
-  const page = /^[1-9]\d*$/.test(requestedPage) ? Math.min(Number(requestedPage), DOCS_PAGE_COUNT) : 1;
-  const entries = DOCS_CHANGELOG.slice((page - 1) * DOCS_PAGE_SIZE, page * DOCS_PAGE_SIZE);
-  const goToPage = (nextPage: number) => {
-    const next = new URLSearchParams(params);
-    if (nextPage === 1) next.delete('page');
-    else next.set('page', String(nextPage));
-    setParams(next);
-  };
+  const { page, pageCount, start, end, goToPage } = useVersionHistoryPage(DOCS_CHANGELOG.length);
 
   return <Tabs value={currentTab} onValueChange={value => {
     const next = new URLSearchParams(params);
@@ -47,43 +37,28 @@ export function VersionHistoryPanel({ userId }: { userId?: string }) {
           <h2 id="docs-history-heading" className="text-xl font-semibold">Riwayat dokumentasi</h2>
         </div>
         <Accordion key={page} type="single" collapsible className="space-y-2">
-          {entries.map(entry => (
-            <AccordionItem key={entry.version} value={entry.version} className="min-w-0 rounded-lg border border-border bg-card">
-              <AccordionTrigger className="min-h-12 min-w-0 gap-3 rounded-lg px-4 py-3 text-left text-sm hover:bg-muted/50 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&>svg]:text-muted-foreground">
-                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className={cn(badgeVariants({ variant: 'outline' }), 'border-primary/30 bg-primary/10 text-primary')}>{entry.version}</span>
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                    <CalendarDays className="size-4 shrink-0" aria-hidden="true" />{entry.date}
-                  </span>
-                </span>
-              </AccordionTrigger>
-              <AccordionContent className="space-y-3 border-t border-border px-4 pt-3">
-                <ul className="list-outside list-disc space-y-2 break-words pl-5 text-sm leading-6 text-muted-foreground">
-                  {entry.changes.map(change => <li key={change}>{change}</li>)}
-                </ul>
-                {entry.guides && <nav aria-label={`Panduan ${entry.version}`} className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border pt-3">
-                  {entry.guides.map(id => {
-                    const guide = ALL_DOCS.find(doc => doc.id === id);
-                    return guide && <Link key={id} to={getDocsEntryPath(guide)} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                      {guide.title}<ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
-                    </Link>;
-                  })}
-                </nav>}
-              </AccordionContent>
-            </AccordionItem>
+          {DOCS_CHANGELOG.slice(start, end).map(entry => (
+            <VersionHistoryRow key={entry.version} value={entry.version} summary={<>
+              <span className={cn(badgeVariants({ variant: 'outline' }), 'border-primary/30 bg-primary/10 text-primary')}>{entry.version}</span>
+              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                <CalendarDays className="size-4 shrink-0" aria-hidden="true" />{entry.date}
+              </span>
+            </>}>
+              <ul className="list-outside list-disc space-y-2 break-words pl-5 text-sm leading-6 text-muted-foreground">
+                {entry.changes.map(change => <li key={change}>{change}</li>)}
+              </ul>
+              {entry.guides && <nav aria-label={`Panduan ${entry.version}`} className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border pt-3">
+                {entry.guides.map(id => {
+                  const guide = ALL_DOCS.find(doc => doc.id === id);
+                  return guide && <Link key={id} to={getDocsEntryPath(guide)} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                    {guide.title}<ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
+                  </Link>;
+                })}
+              </nav>}
+            </VersionHistoryRow>
           ))}
         </Accordion>
-        {DOCS_PAGE_COUNT > 1 && <nav aria-label="Halaman riwayat dokumentasi" className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-          <span aria-live="polite" className="text-sm tabular-nums text-muted-foreground">Halaman {page} dari {DOCS_PAGE_COUNT}</span>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="icon" aria-label="Halaman sebelumnya" title="Halaman sebelumnya" disabled={page === 1} onClick={() => goToPage(page - 1)}>
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </Button>
-            <Button type="button" variant="outline" size="icon" aria-label="Halaman berikutnya" title="Halaman berikutnya" disabled={page === DOCS_PAGE_COUNT} onClick={() => goToPage(page + 1)}>
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </nav>}
+        <VersionHistoryPagination label="Halaman riwayat dokumentasi" page={page} pageCount={pageCount} goToPage={goToPage} />
       </section>
     </TabsContent>
   </Tabs>;
