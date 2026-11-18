@@ -269,7 +269,7 @@ const compactBorderLayout = {
   paddingBottom: () => 1,
 };
 
-const signatureRow = (signers, topCount) => {
+const signatureRow = (signers, topCount, roleFillColor) => {
   const offset = topCount - signers.length;
   const blank = () => ({ text: "", border: [false, false, false, false] });
   const roleCells = Array.from({ length: offset }, blank);
@@ -277,7 +277,7 @@ const signatureRow = (signers, topCount) => {
     const role = signers[index].role;
     let span = 1;
     while (index + span < signers.length && signers[index + span].role === role) span += 1;
-    roleCells.push({ text: role, colSpan: span, bold: true, alignment: "center", fillColor: GREEN });
+    roleCells.push({ text: role, colSpan: span, bold: true, alignment: "center", fillColor: roleFillColor });
     for (let filler = 1; filler < span; filler += 1) roleCells.push({});
     index += span;
   }
@@ -314,7 +314,7 @@ const signatureRow = (signers, topCount) => {
   };
 };
 
-export const buildNativeSignatureBlock = (signatures) => {
+export const buildNativeSignatureBlock = (signatures, { roleFillColor = GREEN } = {}) => {
   const providedSignatures = Array.isArray(signatures) ? signatures.slice(0, 8) : [];
   const safeSignatures = providedSignatures.length > 0
     ? providedSignatures
@@ -330,7 +330,7 @@ export const buildNativeSignatureBlock = (signatures) => {
     unbreakable: true,
     stack: [
       ...groups.map((group, index) => ({
-        stack: [signatureRow(group, groups[0].length)],
+        stack: [signatureRow(group, groups[0].length, roleFillColor)],
         margin: [0, 0, 0, 0],
       })),
     ],

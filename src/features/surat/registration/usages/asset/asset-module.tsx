@@ -1,5 +1,7 @@
 import React from "react";
 import { RecommendationMultiDetailEditor } from "@/components/surat/RecommendationMultiDetailEditor";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { recommendationMultiDetailErrors } from "@/features/surat/registration/lib/recommendation-multi-detail-builder";
 import { MasterRecord } from "@/components/surat/form/surat-form-types";
 import type {
@@ -44,17 +46,27 @@ export const assetModule: UsageModule = {
     if (field.key === "recommendation_items" && ctx.recommendationIO?.model) {
       const io = ctx.recommendationIO;
       return (
-        <RecommendationMultiDetailEditor
-          model={io.model}
-          onChange={io.onModelChange}
-          users={io.directory.users}
-          offices={io.directory.offices}
-          departments={io.directory.departments}
-          uploadingKey={io.uploadingKey}
-          onUpload={(parentId, detailId, files, source) => io.onUpload(parentId, detailId, files, source)}
-          onDeleteAttachment={(parentId, detailId, attachment) => io.onDeleteAttachment(parentId, detailId, attachment)}
-          onDeleteDetail={(parentId, detail) => io.onDeleteDetail(parentId, detail)}
-        />
+        <div className="space-y-5">
+          <RecommendationMultiDetailEditor
+            model={io.model}
+            onChange={io.onModelChange}
+            users={io.directory.users}
+            offices={io.directory.offices}
+            departments={io.directory.departments}
+            uploadingKey={io.uploadingKey}
+            onUpload={(parentId, detailId, files, source) => io.onUpload(parentId, detailId, files, source)}
+            onDeleteAttachment={(parentId, detailId, attachment) => io.onDeleteAttachment(parentId, detailId, attachment)}
+            onDeleteDetail={(parentId, detail) => io.onDeleteDetail(parentId, detail)}
+          />
+          <div className="space-y-2">
+            <Label htmlFor="recommendation-form-notes">Catatan</Label>
+            <Textarea id="recommendation-form-notes"
+              value={typeof ctx.input.catatan === "string" ? ctx.input.catatan : ""}
+              onChange={(event) => ctx.setInputValue("catatan", event.target.value)}
+              className="min-h-24"
+            />
+          </div>
+        </div>
       );
     }
     return null;

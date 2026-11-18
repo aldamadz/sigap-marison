@@ -156,6 +156,8 @@ export function buildRecommendationMultiDetail(
         applicant_original: Object.freeze({ name: originalName, quantity: originalQuantity, notes: originalNotes }),
         location: text(legacy.location ?? legacy.lokasi ?? legacy.lokasi_pic),
         pic: text(legacy.pic ?? legacy.lokasi_pic),
+        registration_number: text(legacy.registration_number ?? legacy.no_registrasi ?? applicant.registration_number ?? applicant.no_registrasi),
+        damage_description: text(legacy.damage_description ?? legacy.kerusakan ?? applicant.damage_description ?? applicant.kerusakan ?? originalNotes),
         details: notRecommended ? [] : [detail],
       };
     }),

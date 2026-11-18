@@ -185,7 +185,7 @@ export default function InboxPage() {
   
   const noteRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
   const selectedItemRef = useRef<any>(null);
-  const queueNavigationRef = useRef<{ requestedTaskKey: string | null; items: any[] } | null>(null);
+  const queueNavigationRef = useRef<{ requestedTaskKey: string | null } | null>(null);
   const lastRealtimeToastRef = useRef<{ key: string; at: number } | null>(null);
   const hydrationRef = useRef<Record<string, boolean>>({});
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -280,8 +280,8 @@ export default function InboxPage() {
     requestedTask ||
     (!requestedTaskKey ? filteredInbox[0] : null) ||
     null;
-  const selectedTaskKey = getInboxTaskKey(selectedCompactItem);
   const selectedSignatureId = selectedCompactItem?.id || null;
+  const selectedTaskKey = getInboxTaskKey(selectedCompactItem);
   const requestedTaskProcessing = Boolean(requestedId && processingId === requestedId);
 
   const { data: selectedDetail, isFetching: detailFetching } = useQuery({
@@ -330,9 +330,9 @@ export default function InboxPage() {
 
   useEffect(() => {
     selectedItemRef.current = selectedItem;
-    queueNavigationRef.current = { requestedTaskKey, items: filteredInbox };
+    queueNavigationRef.current = { requestedTaskKey };
     return () => { selectedItemRef.current = null; queueNavigationRef.current = null; };
-  }, [selectedItem, requestedTaskKey, filteredInbox]);
+  }, [selectedItem, requestedTaskKey]);
 
   useEffect(() => {
     if (!selectedItem || !isVerificationTask(selectedItem) || hydrationRef.current[selectedItem.id]) return;
@@ -374,15 +374,6 @@ export default function InboxPage() {
       setRevisionTarget("requester");
     }
   }, [selectedItem, revisionTarget]);
-
-  useEffect(() => {
-    if (!selectedItem) {
-      return;
-    }
-    if (selectedTaskKey && requestedTaskKey !== selectedTaskKey) {
-      setSearchParams({ task: selectedTaskKey }, { replace: true });
-    }
-  }, [requestedTaskKey, selectedItem, selectedTaskKey, setSearchParams]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -669,14 +660,12 @@ export default function InboxPage() {
       || (!navigation.requestedTaskKey && getInboxTaskKey(selectedItemRef.current) === taskKey));
     finishInboxTaskLocally(taskKey);
     if (!isSelected) return;
-    const nextTaskKey = navigation.items.map(getInboxTaskKey).find(key => key && key !== taskKey);
-    // Retire the successful task link together with its local queue row. Genuine
-    // unavailable notification links must still retain their fail-closed warning.
+    // Let the current queue choose its next row. A candidate can disappear
+    // during the refresh, so do not turn it into an explicit task link.
     setSearchParams(previous => {
       const next = new URLSearchParams(previous);
       next.delete("document");
-      if (nextTaskKey) next.set("task", nextTaskKey);
-      else next.delete("task");
+      next.delete("task");
       return next;
     }, { replace: true });
   };
