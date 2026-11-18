@@ -1,0 +1,154 @@
+.sigap-login,
+.sigap-login-reset {
+  color-scheme: dark;
+  --background: 220 18% 5%;
+  --foreground: 210 20% 98%;
+  --card: 220 17% 9%;
+  --muted: 219 21% 12%;
+  --muted-foreground: 213 17% 68%;
+  --accent: 219 15% 16%;
+  --accent-foreground: 210 20% 98%;
+  --border: 218 15% 22%;
+  --input: 218 15% 27%;
+  --primary: 142 71% 45%;
+  --primary-foreground: 145 61% 9%;
+  --ring: 143 62% 60%;
+  color: hsl(var(--foreground));
+}
+
+.sigap-login {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: hsl(var(--background));
+}
+
+.sigap-login-sidebar {
+  display: grid;
+  place-items: center;
+  padding: 2.5rem 1rem;
+}
+
+.sigap-login-form {
+  width: 100%;
+  max-width: 23.75rem;
+  min-width: 0;
+}
+
+.sigap-login-spotlight {
+  display: none;
+}
+
+@media (min-width: 1025px) {
+  .sigap-login {
+    grid-template-columns: minmax(24rem, 37.5%) minmax(0, 1fr);
+  }
+
+  .sigap-login-sidebar {
+    padding-inline: 2rem;
+    border-right: 1px solid #202329;
+  }
+
+  .sigap-login-spotlight {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    min-width: 0;
+    background: #050607 radial-gradient(ellipse 82% 74% at 50% 0%, #343940 0%, #14181d 44%, #050607 83%);
+  }
+}
+
+.sigap-login-dust {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sigap-login-dust span {
+  position: absolute;
+  border-radius: 50%;
+  background: #e5e9ef;
+  opacity: 0.26;
+  animation: sigap-login-drift linear infinite;
+}
+
+.sigap-login-quote {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 11rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.sigap-login-quote-text {
+  width: 100%;
+  animation: sigap-login-quote-in 640ms ease-out both;
+}
+
+.sigap-login-quote-word {
+  color: #f6f7f9;
+  font-size: 2.75rem;
+  font-weight: 850;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  text-shadow: 0 8px 28px #0009;
+}
+
+.sigap-login-quote-line {
+  margin-top: 0.875rem;
+  color: #b4b9bf;
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+@media (min-width: 1280px) {
+  .sigap-login-sidebar { padding-inline: 3.5rem; }
+  .sigap-login-quote-word { font-size: 3.5rem; }
+}
+
+@media (min-width: 1600px) {
+  .sigap-login-quote-word { font-size: 4.25rem; }
+}
+
+.sigap-login-motion {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 2;
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid #ffffff26;
+  border-radius: 0.5rem;
+  color: #aeb6be;
+}
+
+.sigap-login-motion:hover { color: #fff; background: #ffffff0d; }
+.sigap-login-motion:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+.sigap-login-spotlight[data-paused="true"] .sigap-login-dust span {
+  animation-play-state: paused;
+}
+
+@keyframes sigap-login-quote-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes sigap-login-drift {
+  0%, 100% { transform: translate(0, 0); opacity: 0.16; }
+  50% { transform: translate(9px, -13px); opacity: 0.36; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sigap-login-quote-text,
+  .sigap-login-dust span { animation: none; }
+  .sigap-login-motion { display: none; }
+}
