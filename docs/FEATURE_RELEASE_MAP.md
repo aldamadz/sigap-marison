@@ -1,14 +1,5 @@
 # SIGAP Feature and Release Map
 
-## Dashboard Date Range and Personal Submission Stars (2026-11-18, #1015)
-
-Custom dashboard range filters creation dates by inclusive WIB days before
-summary, KPI and pagination; existing monthly history behavior stays intact.
-Status Pengajuan stars are private per active authorized account, stored
-separately from submission state and filtered before pagination. Verify the
-guarded migration `20261118090000` against the live catalog before staging
-deployment. Kas Kecil data operations are not part of this change.
-
 ## ADM-04 Master Entity Active-Admin Writes (2026-11-17, #1010)
 
 Production catalog audit found only an authenticated SELECT policy on
@@ -2250,3 +2241,12 @@ their scheduler propagation/tail checkpoints are recorded on #962. Main-host
 legal Worker routes and SIGAP app runtimes remain unchanged. See
 ops/status-page/cpanel/README.md for evidence, rollback and independent-release
 SHA handling. No business data, approvals or vendor requests changed.
+
+## Dashboard Date Range and Personal Submission Stars (2026-11-18, #1015)
+
+Custom dashboard range filters creation dates by inclusive WIB days before
+summary, KPI and pagination; existing monthly history behavior stays intact.
+Status Pengajuan stars are private per authorized account, stored separately
+from submission state and filtered before pagination. Verify guarded migration
+`20261118090000` against the live catalog before staging deployment. Kas Kecil
+data operations are not part of this change.
