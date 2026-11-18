@@ -130,9 +130,18 @@ for attempt in {1..12}; do
   sleep 5
 done
 [[ "$live_sha" == "$target_sha" ]] || { echo 'Public runtime revision mismatch.' >&2; exit 1; }
-curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/health/live"
-curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/health/ready"
-curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/"
+public_smoke_retry=()
+if [[ "$environment" == staging ]]; then
+  # The public proxy can still return a transient 503 after the new SHA is visible.
+  public_smoke_retry=(--retry 6 --retry-delay 4 --retry-max-time 30)
+fi
+for path in /health/live /health/ready /; do
+  curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
+    "${public_smoke_retry[@]}" --output /dev/null "$domain$path" || {
+      echo "Public smoke check failed: $path" >&2
+      exit 1
+    }
+done
 echo "$environment app deployed at $target_sha; workers were not restarted."
 started=0
 if [[ "$environment" == production ]]; then
