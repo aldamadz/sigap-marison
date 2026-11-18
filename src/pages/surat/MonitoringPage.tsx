@@ -2,11 +2,11 @@ import { useDeferredValue, useState, useEffect } from 'react';
 import {ReceivingPeriodNotice} from '@/components/surat/ReceivingPeriodNotice';
 import { PersonalReminderButton } from '@/components/notifications/PersonalReminderButton';
 import { Link, useSearchParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Loader2, Info, Eye,
   Clock, AlertCircle, CheckCircle2, User, ArrowUpRight,
-  FileCheck, XCircle, Inbox, RefreshCw
+  FileCheck, XCircle, Inbox, RefreshCw, Star
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -106,6 +106,7 @@ const resolveStatus = (surat: any, sigs: any[]): ResolvedStatus => {
 
 const FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'all',          label: 'Semua' },
+  { value: 'marked',       label: 'Ditandai' },
   { value: 'PROSES',       label: 'Proses' },
   { value: 'MENUNGGU_PERBAIKAN', label: 'Perlu Perbaikan' },
   { value: 'SELESAI',      label: 'Selesai' },
@@ -147,6 +148,18 @@ const getRevisionDisplayReason = (event: any) => {
 
 const MonitoringPage = () => {
   const { user } = useAuth() as any;
+  const queryClient = useQueryClient();
+  const starMutation = useMutation({
+    mutationFn: ({ id, starred }: { id: string; starred: boolean; userId: string }) => suratMonitoringService.setStarred(id, starred),
+    onSuccess: (_result, { id, starred, userId }) => {
+      queryClient.setQueriesData<Awaited<ReturnType<typeof suratMonitoringService.getPage>>>({
+        queryKey: ['surat-monitoring-list'],
+        predicate: query => query.queryKey[4] === userId && query.queryKey[3] !== 'marked',
+      }, result => result && { ...result, rows: result.rows.map(row => row.id === id ? { ...row, is_starred: starred } : row) });
+      return queryClient.invalidateQueries({ queryKey: ['surat-monitoring-list'], predicate: query => query.queryKey[4] === userId });
+    },
+    onError: () => toast.error('Tanda pengajuan belum dapat disimpan.'),
+  });
   const [search, setSearch] = useState('');
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? 'all');
@@ -192,7 +205,7 @@ const MonitoringPage = () => {
     selectedSurat.status === 'MENUNGGU_PERBAIKAN'
   );
 
-  const { data: pageData, isLoading, error: queryError } = useQuery({
+  const { data: pageData, isLoading, isPlaceholderData, error: queryError } = useQuery({
     queryKey: ['surat-monitoring-list', page, deferredSearch, statusFilter, user?.id],
     queryFn: async () => {
       if (!user?.id) throw new Error("Sesi pengguna belum tersedia.");
@@ -203,7 +216,7 @@ const MonitoringPage = () => {
       });
     },
     enabled: Boolean(user?.id),
-    placeholderData: (previous) => previous,
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[4] === user?.id ? previous : undefined,
     staleTime: 20_000,
   });
 
@@ -239,6 +252,9 @@ const MonitoringPage = () => {
   useEffect(() => {
     setPage(1);
   }, [deferredSearch, statusFilter]);
+  useEffect(() => {
+    if (pageData && !isPlaceholderData && page > totalPages) setPage(totalPages);
+  }, [pageData, isPlaceholderData, page, totalPages]);
 
   const getAttachments = (surat: any) => {
     const attachments = Array.isArray(surat?.surat_attachments) ? surat.surat_attachments : [];
@@ -257,7 +273,7 @@ const MonitoringPage = () => {
     const matchSearch =
       (s.judul_surat?.toLowerCase() || '').includes(search.toLowerCase()) ||
       (s.no_surat?.toLowerCase() || '').includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || s._status.type === statusFilter;
+    const matchStatus = statusFilter === 'all' || (statusFilter === 'marked' ? s.is_starred === true : s._status.type === statusFilter);
     return matchSearch && matchStatus;
   });
 
@@ -322,7 +338,8 @@ const MonitoringPage = () => {
             {FILTER_OPTIONS.map(opt => (
               <button
                 key={opt.value}
-                onClick={() => setStatusFilter(opt.value)}
+                onClick={() => { setStatusFilter(opt.value); setPage(1); }}
+                aria-pressed={statusFilter === opt.value}
                 className={cn(
                   "px-4 py-2 rounded-lg text-[9px] font-black tracking-widest border transition-all uppercase",
                   statusFilter === opt.value
@@ -330,7 +347,7 @@ const MonitoringPage = () => {
                     : "bg-background text-muted-foreground border-border hover:border-primary/50"
                 )}
               >
-                {opt.label}
+                {opt.value === 'marked' && <Star className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />}{opt.label}
               </button>
             ))}
           </div>
@@ -338,7 +355,7 @@ const MonitoringPage = () => {
       </div>
 
       {/* Loading State */}
-      {isLoading ? (
+      {isLoading || isPlaceholderData ? (
         <div className="h-64 flex flex-col items-center justify-center space-y-4">
           <Loader2 className="animate-spin text-primary" size={32} />
           <span className="text-sm text-muted-foreground">Mensinkronkan Dokumen...</span>
@@ -347,7 +364,7 @@ const MonitoringPage = () => {
         <EmptyState
           variant="no-results"
           title="Tidak Ada Dokumen"
-          description={search ? `Tidak ditemukan dokumen dengan kata kunci "${search}"` : "Belum ada dokumen pengajuan surat."}
+          description={search ? `Tidak ditemukan dokumen dengan kata kunci "${search}"` : statusFilter === 'marked' ? 'Belum ada pengajuan yang ditandai.' : 'Belum ada dokumen pengajuan surat.'}
           action={search ? { label: 'Reset Pencarian', onClick: () => setSearch('') } : undefined}
           icon={<Inbox size={40} strokeWidth={1} />}
         />
@@ -377,6 +394,13 @@ const MonitoringPage = () => {
                     <span className="text-xs text-muted-foreground">
                       {new Date(surat.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
                     </span>
+                    <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0"
+                      title={surat.is_starred ? 'Hapus tanda pribadi' : 'Tandai pengajuan'}
+                      aria-label={`${surat.is_starred ? 'Hapus tanda' : 'Tandai'} ${surat.no_surat || surat.judul_surat}`}
+                      aria-pressed={surat.is_starred === true} disabled={starMutation.isPending}
+                      onClick={() => { if (user?.id) starMutation.mutate({ id: surat.id, starred: !surat.is_starred, userId: user.id }); }}>
+                      <Star aria-hidden="true" className={cn('h-4 w-4', surat.is_starred ? 'fill-current text-amber-600 dark:text-amber-400' : 'text-muted-foreground')} />
+                    </Button>
                   </div>
                 </div>
 

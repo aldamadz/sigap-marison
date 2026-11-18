@@ -97,6 +97,7 @@ if (changesGlobalTestInfrastructure) {
 }
 
 const gates = new Set();
+if (allChangedFiles.some(file => /dashboard_date_range_and_submission_stars.*\.sql$/u.test(file))) gates.add('dashboard-tools-sql');
 if (allChangedFiles.some(file => /master_entities_admin_writes.*\.sql$|test-master-entities-admin-sql\.mjs$/u.test(file))) gates.add('master-entities-admin-sql');
 if (allChangedFiles.some(file => /monitoring_readable_details.*\.sql$/u.test(file))) gates.add('monitoring-readable-details-sql');
 if (allChangedFiles.some(file => /configured_signer_removal.*\.sql$/u.test(file))) gates.add('configured-signer-removal-sql');
@@ -161,6 +162,10 @@ if (allChangedFiles.some(file => /direct_signer_revision/.test(file))) gates.add
 if (allChangedFiles.some(file => /hrd_examiner_direct_revision/.test(file))) gates.add('hrd-examiner-revision-sql');
 
 for (const gate of gates) {
+  if (gate === 'dashboard-tools-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--dashboard-tools']);
+    continue;
+  }
   if (gate === 'master-entities-admin-sql') {
     run('node', ['scripts/test-master-entities-admin-sql.mjs']);
     continue;
