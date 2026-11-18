@@ -86,14 +86,57 @@ describe('version tabs', () => {
     await screen.findByText('Pengajuan lebih rapi');
     expect(screen.getByRole('tab', {name:'Pembaruan aplikasi'})).toHaveAttribute('aria-selected','true');
     await userEvent.click(screen.getByRole('tab', {name:'Riwayat dokumentasi'}));
+    await userEvent.click(screen.getByRole('button', {name:/v1\.28\.0/}));
     expect(screen.getByRole('link', {name:'Kalender Kerja'})).toHaveAttribute('href','/docs/kalender/overview');
     expect(screen.queryByText('Pengajuan lebih rapi')).toBeNull();
   });
 
-  it('opens a documentation deep link without requesting private notices', () => {
+  it('opens a documentation deep link with details collapsed, without requesting private notices', async () => {
     mountTabs('/docs/versi/changelog?tab=dokumentasi');
     expect(screen.getByRole('tab', {name:'Riwayat dokumentasi'})).toHaveAttribute('aria-selected','true');
+    const latest = screen.getByRole('button', {name:/v1\.28\.0/});
+    const older = screen.getByRole('button', {name:/v1\.27\.0/});
+    expect(latest).toHaveAttribute('aria-expanded','false');
+    expect(screen.queryByRole('link', {name:'Pembaruan dan Maintenance'})).toBeNull();
+    latest.focus();
+    await userEvent.keyboard('{Enter}');
     expect(screen.getByRole('link', {name:'Pembaruan dan Maintenance'})).toBeInTheDocument();
+    await userEvent.click(older);
+    expect(latest).toHaveAttribute('aria-expanded','false');
+    expect(screen.getByText(/Menambahkan panduan Lihat payload/)).toBeVisible();
+    await userEvent.click(older);
+    expect(older).toHaveAttribute('aria-expanded','false');
     expect(mocks.history).not.toHaveBeenCalled();
   });
+
+  it('paginates newest first and lets readers reach the final partial page and return', async () => {
+    mountTabs('/docs/versi/changelog?tab=dokumentasi');
+    const previous = screen.getByRole('button', {name:'Halaman sebelumnya'});
+    const next = screen.getByRole('button', {name:'Halaman berikutnya'});
+    expect(screen.getByText('Halaman 1 dari 5')).toBeVisible();
+    expect(screen.getAllByRole('button', {name:/^v\d+\./})).toHaveLength(5);
+    expect(previous).toBeDisabled();
+    await userEvent.click(next);
+    expect(screen.getByText('Halaman 2 dari 5')).toBeVisible();
+    expect(screen.queryByRole('button', {name:/v1\.28\.0/})).toBeNull();
+    expect(screen.getByRole('button', {name:/v1\.23\.0/})).toHaveAttribute('aria-expanded','false');
+    await userEvent.click(next);
+    await userEvent.click(next);
+    await userEvent.click(next);
+    expect(screen.getByText('Halaman 5 dari 5')).toBeVisible();
+    expect(screen.getAllByRole('button', {name:/^v\d+\./})).toHaveLength(3);
+    expect(screen.getByRole('button', {name:/v1\.5\.0/})).toBeVisible();
+    expect(next).toBeDisabled();
+    await userEvent.click(previous);
+    expect(screen.getByText('Halaman 4 dari 5')).toBeVisible();
+  });
+
+  it.each([['2', '2', '1.23.0'], ['999', '5', '1.8.0'], ['-1', '1', '1.28.0']])(
+    'opens documentation page %s as page %s',
+    (param, page, firstVersion) => {
+      mountTabs(`/docs/versi/changelog?tab=dokumentasi&page=${param}`);
+      expect(screen.getByText(`Halaman ${page} dari 5`)).toBeVisible();
+      expect(screen.getAllByRole('button', {name:/^v\d+\./})[0]).toHaveAccessibleName(expect.stringContaining(`v${firstVersion}`));
+    },
+  );
 });
