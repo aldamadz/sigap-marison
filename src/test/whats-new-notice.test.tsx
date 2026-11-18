@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WhatsNewNotice, releaseIsCurrent, releaseSessionKey } from '@/components/app/WhatsNewNotice';
 import type { ReleaseNotice } from '@/services/maintenance.service';
+import { APP_RELEASES } from '@/lib/app-releases';
 
 const mocks=vi.hoisted(()=>({read:vi.fn(),dismiss:vi.fn()}));
 vi.mock('@/lib/supabase',()=>({supabase:{
@@ -23,6 +24,14 @@ describe("What's New release notice",()=>{
     const {completedAt,...standalone}=release;
     expect(releaseIsCurrent({...standalone,publishedAt:completedAt},now)).toBe(true);
     expect(releaseIsCurrent({...standalone,publishedAt:'invalid'},now)).toBe(false);
+  });
+  it('shows the app version only for its linked announcement', async () => {
+    const linked = mount('user-a', { ...release, id:APP_RELEASES[0].announcementId! });
+    expect(await screen.findByText('Versi aplikasi v1.10.0')).toBeVisible();
+    linked.unmount();
+    mount();
+    expect(await screen.findByRole('dialog')).toBeVisible();
+    expect(screen.queryByText('Versi aplikasi v1.10.0')).toBeNull();
   });
   it('renders safe text and allows session dismissal separately from permanent opt-out',async()=>{
     const notice={...release,items:['<img src=x onerror=alert(1)>']};
