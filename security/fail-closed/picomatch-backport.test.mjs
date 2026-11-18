@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
-import { verifyStagingAudit } from './audit-staging.mjs';
+import { verifyDevBackportAudit } from './audit-dev-backport.mjs';
 import { checkPicomatch } from './picomatch-backport.mjs';
 
 const req = createRequire(import.meta.url);
@@ -34,17 +34,17 @@ test('all installed copies retain ordinary glob behavior with extglobs disabled'
 });
 
 test('accepts only the verified dev advisory and its transitive findings', () => {
-  assert.equal(verifyStagingAudit(mockReport(), packages, patched, now), 2);
-  assert.throws(() => verifyStagingAudit(mockReport(), packages, new Set(), now), /unverified/iu);
-  assert.throws(() => verifyStagingAudit(mockReport(), { ...packages, [toolPath]: {} }, patched, now), /non-dev/u);
-  assert.throws(() => verifyStagingAudit(mockReport(), packages, patched, Date.parse('2026-12-18T00:00:00+07:00')), /temporary staging backport/u);
+  assert.equal(verifyDevBackportAudit(mockReport(), packages, patched, now), 2);
+  assert.throws(() => verifyDevBackportAudit(mockReport(), packages, new Set(), now), /unverified/iu);
+  assert.throws(() => verifyDevBackportAudit(mockReport(), { ...packages, [toolPath]: {} }, patched, now), /non-dev/u);
+  assert.throws(() => verifyDevBackportAudit(mockReport(), packages, patched, Date.parse('2026-12-18T00:00:00+07:00')), /temporary development-tool backport/u);
 });
 
 test('blocks new high causes and unknown dependency chains', () => {
   const newCause = mockReport();
   newCause.vulnerabilities['example-tool'].via.push({ name: 'another-package', severity: 'high', url: 'https://example.invalid/other' });
-  assert.throws(() => verifyStagingAudit(newCause, packages, patched, now), /unmitigated/iu);
+  assert.throws(() => verifyDevBackportAudit(newCause, packages, patched, now), /unmitigated/iu);
   const incomplete = mockReport();
   incomplete.vulnerabilities['example-tool'].via.push('missing-advisory');
-  assert.throws(() => verifyStagingAudit(incomplete, packages, patched, now), /incomplete/iu);
+  assert.throws(() => verifyDevBackportAudit(incomplete, packages, patched, now), /incomplete/iu);
 });

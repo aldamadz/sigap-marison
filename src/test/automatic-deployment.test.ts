@@ -16,9 +16,8 @@ describe("automatic deployment boundaries", () => {
     expect(staging).toContain("github.ref == 'refs/heads/staging'");
     expect(staging).toContain("quality-live-base.sh staging");
     expect(staging).toContain("npm run quality:changed");
-    expect(staging).toContain("npm run audit:staging");
-    expect(quality).toContain("if: github.base_ref == 'staging' || github.ref == 'refs/heads/staging'");
-    expect(quality).toContain("if: github.base_ref != 'staging' && github.ref != 'refs/heads/staging'");
+    expect(staging).toContain("npm run audit:release");
+    expect(quality).toContain("run: npm run audit:release");
     expect(staging).toContain('bash scripts/deploy-app.sh staging "$GITHUB_SHA"');
   });
 
@@ -30,8 +29,11 @@ describe("automatic deployment boundaries", () => {
     expect(production).toContain("environment: production");
     expect(production).toContain("quality-live-base.sh production");
     expect(production).toContain("npm run quality:changed");
-    expect(production).toContain("npm audit --audit-level=high");
-    expect(production).not.toContain("npm run audit:staging");
+    expect(production).toContain("npm run audit:release");
+    const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+    expect(manifest.scripts["audit:release"]).toBe(
+      "npm audit --omit=dev --audit-level=high && node security/fail-closed/audit-dev-backport.mjs",
+    );
     expect(production.match(/fetch-depth: 0/g)).toHaveLength(3);
     expect(production).toContain("check-staging-parity.sh --require-ready");
     expect(parity).toContain('git merge-base --is-ancestor "$main_sha" "$staging_sha"');

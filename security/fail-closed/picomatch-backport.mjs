@@ -21,7 +21,7 @@ export function checkPicomatch(root, { apply = false, omitDev = false } = {}) {
     assert.ok(!path.split('/').includes('..'));
     assert.equal(entry.version, version, 'Backport must be reviewed for a new version');
     assert.equal(entry.integrity, integrity, 'Unexpected picomatch tarball integrity');
-    assert.equal(entry.dev, true, 'Staging backport is only permitted for dev dependencies');
+    assert.equal(entry.dev, true, 'Backport is only permitted for dev dependencies');
     const directory = join(root, path);
     if (omitDev) {
       assert.ok(!existsSync(directory), 'picomatch must not be installed in an omit-dev image');
@@ -46,5 +46,5 @@ export function checkPicomatch(root, { apply = false, omitDev = false } = {}) {
 
 if (resolve(process.argv[1] || '') === fileURLToPath(import.meta.url)) {
   const paths = checkPicomatch(process.cwd(), { apply: true, omitDev: process.env.NODE_ENV === 'production' });
-  console.log(`Verified staging picomatch backport lock: ${paths.size} dev entr${paths.size === 1 ? 'y' : 'ies'}.`);
+  console.log(`Verified picomatch backport lock: ${paths.size} dev entr${paths.size === 1 ? 'y' : 'ies'}.`);
 }
