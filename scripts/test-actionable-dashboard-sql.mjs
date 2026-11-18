@@ -9,7 +9,8 @@ const labels = read('supabase/migrations/20261019091000_actionable_role_dashboar
 const personalReminders = process.argv.includes('--personal-reminders');
 const notifications = process.argv.includes('--notifications') || personalReminders;
 const actionClock = process.argv.includes('--action-clock');
-const receivingAuthority = process.argv.includes('--receiving-authority');
+const scopedReceiving = process.argv.includes('--scoped-receiving');
+const receivingAuthority = process.argv.includes('--receiving-authority') || scopedReceiving;
 const weekly = process.argv.includes('--weekly') || actionClock || receivingAuthority;
 const receiving = process.argv.includes('--receiving') || weekly;
 const monitoringDetails = process.argv.includes('--monitoring-details');
@@ -251,6 +252,20 @@ try {
      authority+authority+read('supabase/tests/department_receiving_authority.integration.sql'));
     if(!proof.includes('SLA02 authoritative intake department assertions passed'))throw Error('Missing intake authority assertions');
     console.log('SLA02: authoritative profile department, missing profiles/departments, forged snapshots and frozen holds passed.');
+   }
+   if(scopedReceiving){
+    const scopeSetup = `
+     alter table public.master_forms add primary key(id),add column nomor_form text;
+     create table public.form_usages(id uuid primary key,form_id uuid references public.master_forms(id),name text,status text);
+     alter table public.surat_registrasi add column form_id uuid,add column form_usage_id uuid;
+     alter table public.department_kpi_configs enable row level security;
+     create policy department_kpi_configs_select_authenticated on public.department_kpi_configs for select to authenticated using(true);
+    `;
+    const migration = read('supabase/migrations/20261118180000_scoped_department_receiving.sql');
+    const result = run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+     scopeSetup+migration+migration+read('supabase/tests/scoped_department_receiving.integration.sql'));
+    if(!result.includes('Scoped department receiving assertions passed'))throw Error('Missing scoped receiving assertions');
+    console.log('Scoped receiving: weekly/monthly precedence, authoritative scope, immutable snapshots and write permissions passed.');
    }
    if(actionClock){
     const clockSetup=`alter table surat_linked_documents add column child_surat_id uuid,add column link_type text,add column status text default 'active';

@@ -3,14 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DepartmentReceivingPolicy } from '@/components/configuration/DepartmentReceivingPolicy';
 import { defaultReceivingRule, defaultWeeklyReceivingRule, validateReceivingRule, validateWeeklyReceivingRule } from '@/services/department-receiving.service';
-const h = vi.hoisted(() => ({ list: vi.fn(), save: vi.fn(), remove: vi.fn(), listWeekly: vi.fn(), saveWeekly: vi.fn(), removeWeekly: vi.fn(), getSettings: vi.fn(), saveSettings: vi.fn(), confirm: vi.fn() }));
+const h = vi.hoisted(() => ({ list: vi.fn(), save: vi.fn(), remove: vi.fn(), listWeekly: vi.fn(), saveWeekly: vi.fn(), removeWeekly: vi.fn(), getSettings: vi.fn(), saveSettings: vi.fn(), getScopeOptions: vi.fn(), confirm: vi.fn() }));
 vi.mock('@/services/department-receiving.service', async original => ({ ...await original<typeof import('@/services/department-receiving.service')>(), departmentReceivingService: h }));
 vi.mock('@/components/app/AppDialogProvider', () => ({ useAppDialog: () => ({ confirm: h.confirm }) }));
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
 const clients: QueryClient[] = [];
-const mount = () => {
+const mount = (allowSignerOverride = true) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); clients.push(client);
-  return render(<QueryClientProvider client={client}><DepartmentReceivingPolicy deptId="finance" /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><DepartmentReceivingPolicy deptId="finance" allowSignerOverride={allowSignerOverride} /></QueryClientProvider>);
 };
 const tab = (name: string) => fireEvent.mouseDown(screen.getByRole('tab', { name }), { button: 0, ctrlKey: false });
 const ready = async () => { await waitFor(() => expect(screen.getByRole('switch', { name: 'Aktifkan kebijakan penerimaan departemen' })).toBeEnabled()); };
@@ -22,12 +22,34 @@ const enablePolicy = async () => {
 beforeEach(() => {
   vi.resetAllMocks(); h.list.mockResolvedValue([]); h.listWeekly.mockResolvedValue([]);
   h.getSettings.mockResolvedValue({ dept_id: 'finance', enabled: false });
+  h.getScopeOptions.mockResolvedValue([{ kind: 'form', id: 'cash', label: 'KEU 10 - Kas Kecil' }, { kind: 'usage', id: 'monthly', label: 'Kas Kecil Bulanan' }]);
   h.save.mockResolvedValue(undefined); h.saveWeekly.mockResolvedValue(undefined); h.saveSettings.mockResolvedValue(undefined);
   h.remove.mockResolvedValue(undefined); h.removeWeekly.mockResolvedValue(undefined); h.confirm.mockResolvedValue(true);
 });
 afterEach(() => { cleanup(); for (const client of clients.splice(0)) client.clear(); });
 
 describe('optional department receiving policy', () => {
+  it('saves an independent weekly rule per form and a monthly rule per usage without exposing signer SLA', async () => {
+    mount(false);
+    const selector = screen.getByLabelText('Berlaku untuk');
+    await screen.findByRole('option', { name: 'KEU 10 - Kas Kecil' });
+    fireEvent.change(selector, { target: { value: 'form:cash' } });
+    const save = () => screen.getByRole('button', { name: 'Simpan periode' });
+    await waitFor(() => expect(save()).toBeEnabled());
+    expect(screen.queryByLabelText('SLA pengerjaan (menit kerja)')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Aktifkan kebijakan penerimaan departemen' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Gunakan batas mingguan' }));
+    fireEvent.change(screen.getByLabelText('Hari tutup'), { target: { value: '3' } });
+    fireEvent.click(save());
+    await waitFor(() => expect(h.saveWeekly).toHaveBeenCalledWith(expect.objectContaining({ cutoff_weekday: 3, sla_minutes: null }), expect.objectContaining({ kind: 'form', id: 'cash' }), true));
+    fireEvent.change(selector, { target: { value: 'usage:monthly' } });
+    await waitFor(() => expect(save()).toBeEnabled());
+    expect(screen.getByLabelText('Hari tutup')).toHaveValue('4');
+    tab('Bulanan');
+    fireEvent.click(save());
+    await waitFor(() => expect(h.save).toHaveBeenCalledWith(expect.objectContaining({ period_month: '2000-01-01', enabled: false }), expect.objectContaining({ kind: 'usage', id: 'monthly' }), true));
+    expect(h.saveSettings).not.toHaveBeenCalled();
+  });
   it('defaults off independently of saved rules and never writes on mount', async () => {
     h.listWeekly.mockResolvedValue([{ ...defaultWeeklyReceivingRule, dept_id: 'finance', week_start: '2000-01-03', enabled: true }]);
     mount(); await ready();

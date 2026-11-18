@@ -10,7 +10,6 @@ const TITLE: Record<string, { title: string; subtitle: string }> = {
   '/calendar': { title: 'Kalender Kerja', subtitle: 'Kelola jadwal kerja mandiri dan tim' },
   '/hierarchy': { title: 'Organisasi', subtitle: 'Struktur hirarki karyawan' },
   '/audit-logs': { title: 'Audit Log', subtitle: 'Jejak audit administratif sistem' },
-  '/settings': { title: 'Settings', subtitle: 'Configure your preferences' },
   '/docs': { title: 'Dokumentasi', subtitle: 'Panduan penggunaan, admin, dan problem solving SIGAP' },
   '/surat/registrasi': { title: 'Registrasi Surat', subtitle: 'Kelola pendaftaran surat masuk & keluar' },
   '/surat/rekomendasi/registrasi': { title: 'Registrasi Rekomendasi', subtitle: 'Lengkapi dokumen rekomendasi berdasarkan pengajuan induk' },

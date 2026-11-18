@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { formatDistanceToNow } from 'date-fns'
 import { id as localeID } from 'date-fns/locale'
 import { useNavigate } from 'react-router'
@@ -173,6 +173,53 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
     await refetchAttention()
   }, [refetchAttention])
 
+  const notificationTrigger = <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-md"
+    aria-label={`Buka notifikasi, ${unreadCount} belum dibaca`}>
+    <Bell className={cn('h-5 w-5', unreadCount ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
+    {unreadCount > 0 && <span data-testid="notification-unread-badge" className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-destructive px-0.5 text-[10px] font-semibold leading-none text-destructive-foreground">
+      {formatUnreadBadge(unreadCount)}
+    </span>}
+  </Button>
+
+  const notificationTitle = 'Notifikasi'
+  const notificationPanel = <>
+    <div className={cn('flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3', isMobileView && 'pr-12')}>
+      <div className="min-w-0">
+        {isMobileView ? <SheetTitle className="text-base font-semibold">{notificationTitle}</SheetTitle>
+          : <h2 className="text-base font-semibold">{notificationTitle}</h2>}
+        {isMobileView ? <SheetDescription className="text-xs">{unreadCount} belum dibaca</SheetDescription>
+          : <p className="text-xs text-muted-foreground">{unreadCount} belum dibaca</p>}
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Tandai semua sudah dibaca" title="Tandai semua sudah dibaca"
+          disabled={unreadCount === 0} onClick={handleMarkAllRead}><FileCheck className="h-4 w-4" aria-hidden="true" /></Button>
+        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" aria-label="Hapus semua notifikasi" title="Hapus semua notifikasi"
+          disabled={!notifications.length} onClick={handleClearAll}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+      </div>
+    </div>
+    <div className="shrink-0 border-b px-4 py-2.5"><BrowserNotificationButton /></div>
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {notifications.length === 0 ? <div className="grid justify-items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
+        <Inbox className="h-7 w-7" aria-hidden="true" />Tidak ada notifikasi
+      </div> : <ul className="divide-y divide-border">
+        {notifications.map(n => <li key={n.id}>
+          <button type="button" onClick={() => { void handleNotifClick(n); }} className={cn(
+            'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+            !n.isRead && 'bg-primary/5'
+          )}>
+            {renderNotificationIcon(n)}
+            <div className="min-w-0 flex-1">
+              <p className={cn('break-words text-sm leading-snug', !n.isRead ? 'font-semibold' : 'font-medium')}>{n.title}</p>
+              <p className="mt-0.5 line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground">{n.description}</p>
+              <p className="mt-1.5 text-xs text-muted-foreground">{formatDistanceToNow(n.time, { addSuffix: true, locale: localeID })}</p>
+            </div>
+            {!n.isRead && <><span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><span className="sr-only">Belum dibaca</span></>}
+          </button>
+        </li>)}
+      </ul>}
+    </div>
+  </>
+
   return (
     <header className="safe-area-top sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/92 px-3 backdrop-blur-md sm:px-5 lg:px-6">
       <div className="flex items-center gap-3">
@@ -206,184 +253,18 @@ export const Header = ({ onNewAgenda, onMenuClick, showMenuButton = false }: Hea
           </Button>
         )}
 
-        {/* Notifications */}
         {isMobileView ? (
           <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative h-10 w-10 rounded-md"
-                aria-label={`Buka notifikasi, ${unreadCount} belum dibaca`}
-              >
-                <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
-                {unreadCount > 0 && (
-                  <span
-                    data-testid="notification-unread-badge"
-                    className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-destructive px-0.5 text-[10px] font-semibold leading-none text-destructive-foreground"
-                  >
-                    {formatUnreadBadge(unreadCount)}
-                  </span>
-                )}
-              </Button>
-            </SheetTrigger>
-            <SheetContent
-              side="right"
-              className="flex w-full flex-col border-border bg-background p-0 sm:w-[380px]"
-            >
-              <SheetHeader className="shrink-0 border-b px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <SheetTitle className="text-sm font-semibold">
-                    Notifikasi ({unreadCount})
-                  </SheetTitle>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={handleMarkAllRead}
-                    >
-                      <FileCheck className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive"
-                      onClick={handleClearAll}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </SheetHeader>
-              <div className="border-b px-4 py-3"><BrowserNotificationButton /></div>
-
-              <div className="flex-1 overflow-y-auto">
-                {notifications.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 gap-4">
-                    <Inbox className="w-12 h-12 text-muted-foreground/30" />
-                    <p className="text-sm text-muted-foreground">Tidak ada notifikasi</p>
-                  </div>
-                ) : (
-                  notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => handleNotifClick(n)}
-                      className={cn(
-                        'p-4 border-b border-border/40 flex gap-3 cursor-pointer active:bg-muted/50',
-                        !n.isRead ? 'bg-primary/[0.03]' : 'opacity-60'
-                      )}
-                    >
-                      {renderNotificationIcon(n)}
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium leading-tight mb-1 truncate">
-                          {n.title}
-                        </p>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {n.description}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {formatDistanceToNow(n.time, { addSuffix: true, locale: localeID })}
-                        </p>
-                      </div>
-
-                      {!n.isRead && (
-                        <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
+            <SheetTrigger asChild>{notificationTrigger}</SheetTrigger>
+            <SheetContent side="right" className="flex w-full flex-col gap-0 border-border bg-background p-0 sm:w-[380px]">
+              {notificationPanel}
             </SheetContent>
           </Sheet>
         ) : (
           <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                    className="relative h-10 w-10 rounded-md"
-                    aria-label={`Buka notifikasi, ${unreadCount} belum dibaca`}
-              >
-                <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
-                {unreadCount > 0 && (
-                  <span
-                    data-testid="notification-unread-badge"
-                    className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-destructive px-0.5 text-[10px] font-semibold leading-none text-destructive-foreground"
-                  >
-                    {formatUnreadBadge(unreadCount)}
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-
-            <PopoverContent
-              className="mr-4 w-80 overflow-hidden rounded-lg border-border p-0 shadow-[var(--shadow-elevated)]"
-              align="end"
-            >
-              <div className="flex items-center justify-between border-b bg-muted/40 p-3">
-                <span className="text-sm font-medium">
-                  Notifikasi ({unreadCount})
-                </span>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={handleMarkAllRead}
-                  >
-                    <FileCheck className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive"
-                    onClick={handleClearAll}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="max-h-[60vh] overflow-y-auto">
-                <div className="border-b p-3"><BrowserNotificationButton /></div>
-                {notifications.length === 0 ? (
-                  <div className="p-8 text-center flex flex-col items-center gap-3">
-                    <Inbox className="w-10 h-10 text-muted-foreground/20" />
-                    <p className="text-sm text-muted-foreground">Tidak ada notifikasi</p>
-                  </div>
-                ) : (
-                  notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => handleNotifClick(n)}
-                      className={cn(
-                        'p-3 border-b border-border/40 flex gap-3 cursor-pointer transition-all hover:bg-muted/30',
-                        !n.isRead ? 'bg-primary/[0.03]' : 'opacity-60'
-                      )}
-                    >
-                      {renderNotificationIcon(n)}
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium leading-tight mb-1 truncate">
-                          {n.title}
-                        </p>
-                        <p className="text-sm text-muted-foreground leading-snug line-clamp-2">
-                          {n.description}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {formatDistanceToNow(n.time, { addSuffix: true, locale: localeID })}
-                        </p>
-                      </div>
-
-                      {!n.isRead && (
-                        <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
+            <PopoverTrigger asChild>{notificationTrigger}</PopoverTrigger>
+            <PopoverContent className="flex max-h-[min(34rem,var(--radix-popover-content-available-height))] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border-border p-0 shadow-[var(--shadow-elevated)]" align="end">
+              {notificationPanel}
             </PopoverContent>
           </Popover>
         )}
