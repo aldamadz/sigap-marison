@@ -11,6 +11,13 @@ export type DepartmentReceivingWeeklyRule = {
 };
 export type DepartmentSlaScope = { dept_id: string; name: string };
 export type DepartmentSlaManagerCandidate = { user_id: string; full_name: string; selected: boolean };
+export type ReceivingTarget = { kind: 'form' | 'usage'; id: string };
+export type ReceivingTargetOption = ReceivingTarget & { label: string };
+type ReceivingCadence = 'weekly' | 'monthly';
+type ScopedWindow = {
+  dept_id: string; period_start: string; enabled: boolean; open_day: number; open_time: string;
+  cutoff_day: number | null; cutoff_time: string; message: string;
+};
 
 export const regularReceivingMonth = '2000-01-01';
 export const regularReceivingWeek = '2000-01-03';
@@ -67,20 +74,52 @@ export function validateWeeklyReceivingRule(rule: DepartmentReceivingWeeklyRule)
   return rule;
 }
 
+const scopedRules = () => supabase.from('department_receiving_scoped_rules');
+async function listScoped(deptId: string, target: ReceivingTarget, cadence: ReceivingCadence): Promise<ScopedWindow[]> {
+  const { data, error } = await scopedRules().select('dept_id,period_start,enabled,open_day,open_time,cutoff_day,cutoff_time,message')
+    .eq('dept_id', deptId).eq('scope_kind', target.kind).eq('scope_id', target.id).eq('cadence', cadence).order('period_start');
+  if (error) throw error;
+  return data || [];
+}
+async function saveScoped(target: ReceivingTarget, cadence: ReceivingCadence, window: ScopedWindow) {
+  const { error } = await scopedRules().upsert({ ...window, scope_kind: target.kind, scope_id: target.id, cadence });
+  if (error) throw error;
+}
+async function removeScoped(deptId: string, target: ReceivingTarget, cadence: ReceivingCadence, period: string) {
+  const { error } = await scopedRules().delete().eq('dept_id', deptId).eq('scope_kind', target.kind)
+    .eq('scope_id', target.id).eq('cadence', cadence).eq('period_start', period);
+  if (error) throw error;
+}
+
 export const departmentReceivingService = {
-  async list(deptId: string): Promise<DepartmentReceivingRule[]> {
+  async getScopeOptions(deptId: string): Promise<ReceivingTargetOption[]> {
+    const { data, error } = await supabase.rpc('get_department_receiving_scope_options', { p_dept_id: deptId });
+    if (error) throw error;
+    return data || [];
+  },
+  async list(deptId: string, target?: ReceivingTarget): Promise<DepartmentReceivingRule[]> {
+    if (target) return (await listScoped(deptId, target, 'monthly')).map(row => ({
+      dept_id: row.dept_id, period_month: row.period_start, enabled: row.enabled, cutoff_day: row.cutoff_day,
+      cutoff_time: row.cutoff_time, reopen_day: row.open_day, reopen_time: row.open_time, sla_minutes: null, message: row.message,
+    }));
     const { data, error } = await supabase.from('department_receiving_rules')
       .select('dept_id,period_month,enabled,cutoff_day,cutoff_time,reopen_day,reopen_time,sla_minutes,message')
       .eq('dept_id', deptId).order('period_month');
     if (error) throw error;
     return data || [];
   },
-  async save(rule: DepartmentReceivingRule) {
+  async save(rule: DepartmentReceivingRule, target?: ReceivingTarget, preserveSla = false) {
     validateReceivingRule(rule);
-    const { error } = await supabase.from('department_receiving_rules').upsert(rule);
+    const { dept_id, period_month, enabled, reopen_day, reopen_time, cutoff_day, cutoff_time, message } = rule;
+    if (target) return saveScoped(target, 'monthly', {
+      dept_id, period_start: period_month, enabled, open_day: reopen_day, open_time: reopen_time, cutoff_day, cutoff_time, message,
+    });
+    const values = preserveSla ? { dept_id, period_month, enabled, reopen_day, reopen_time, cutoff_day, cutoff_time, message } : rule;
+    const { error } = await supabase.from('department_receiving_rules').upsert(values);
     if (error) throw error;
   },
-  async remove(deptId: string, month: string) {
+  async remove(deptId: string, month: string, target?: ReceivingTarget) {
+    if (target) return removeScoped(deptId, target, 'monthly', month);
     const { error } = await supabase.from('department_receiving_rules').delete().eq('dept_id', deptId).eq('period_month', month);
     if (error) throw error;
   },
@@ -95,20 +134,30 @@ export const departmentReceivingService = {
       .upsert({ dept_id: settings.dept_id, enabled: settings.enabled }, { onConflict: 'dept_id' });
     if (error) throw error;
   },
-  async listWeekly(deptId: string): Promise<DepartmentReceivingWeeklyRule[]> {
+  async listWeekly(deptId: string, target?: ReceivingTarget): Promise<DepartmentReceivingWeeklyRule[]> {
+    if (target) return (await listScoped(deptId, target, 'weekly')).map(row => ({
+      dept_id: row.dept_id, week_start: row.period_start, enabled: row.enabled, open_weekday: row.open_day,
+      open_time: row.open_time, cutoff_weekday: row.cutoff_day!, cutoff_time: row.cutoff_time, sla_minutes: null, message: row.message,
+    }));
     const { data, error } = await supabase.from('department_receiving_weekly_rules')
       .select('dept_id,week_start,enabled,open_weekday,open_time,cutoff_weekday,cutoff_time,sla_minutes,message')
       .eq('dept_id', deptId).order('week_start');
     if (error) throw error;
     return data || [];
   },
-  async saveWeekly(rule: DepartmentReceivingWeeklyRule) {
+  async saveWeekly(rule: DepartmentReceivingWeeklyRule, target?: ReceivingTarget, preserveSla = false) {
     validateWeeklyReceivingRule(rule);
-    const { error } = await supabase.from('department_receiving_weekly_rules').upsert(rule, { onConflict: 'dept_id,week_start' });
+    const { dept_id, week_start, enabled, open_weekday, open_time, cutoff_weekday, cutoff_time, message } = rule;
+    if (target) return saveScoped(target, 'weekly', {
+      dept_id, period_start: week_start, enabled, open_day: open_weekday, open_time, cutoff_day: cutoff_weekday, cutoff_time, message,
+    });
+    const values = preserveSla ? { dept_id, week_start, enabled, open_weekday, open_time, cutoff_weekday, cutoff_time, message } : rule;
+    const { error } = await supabase.from('department_receiving_weekly_rules').upsert(values, { onConflict: 'dept_id,week_start' });
     if (error) throw error;
   },
-  async removeWeekly(deptId: string, weekStart: string) {
-    if (!isReceivingWeekStart(weekStart) || weekStart === regularReceivingWeek) throw Error('Pilih minggu pengecualian.');
+  async removeWeekly(deptId: string, weekStart: string, target?: ReceivingTarget) {
+    if (!isReceivingWeekStart(weekStart) || !target && weekStart === regularReceivingWeek) throw Error('Pilih minggu pengecualian.');
+    if (target) return removeScoped(deptId, target, 'weekly', weekStart);
     const { error } = await supabase.from('department_receiving_weekly_rules').delete()
       .eq('dept_id', deptId).eq('week_start', weekStart);
     if (error) throw error;

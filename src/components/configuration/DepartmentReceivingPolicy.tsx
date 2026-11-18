@@ -10,6 +10,7 @@ import { useAppDialog } from '@/components/app/AppDialogProvider';
 import {
   departmentReceivingService, defaultReceivingRule, defaultWeeklyReceivingRule,
   regularReceivingMonth, regularReceivingWeek, isReceivingWeekStart, validateReceivingRule, validateWeeklyReceivingRule,
+  type ReceivingTarget,
 } from '@/services/department-receiving.service';
 import { todayWorkDate } from '@/features/work-calendar/lib/work-calendar-date';
 
@@ -20,7 +21,35 @@ const thisMonday = () => {
   return date.toISOString().slice(0, 10);
 };
 
-export function DepartmentReceivingPolicy({ deptId }: { deptId: string }) {
+export function DepartmentReceivingPolicy({ deptId, allowSignerOverride = false }: { deptId: string; allowSignerOverride?: boolean }) {
+  const [selected, setSelected] = useState('');
+  const options = useQuery({
+    queryKey: ['department-receiving-options', deptId],
+    queryFn: () => departmentReceivingService.getScopeOptions(deptId),
+    retry: false,
+  });
+  const target = options.data?.find(option => `${option.kind}:${option.id}` === selected);
+  return <section className="space-y-5 border-t pt-5" aria-label="Periode penerimaan">
+    <h2 className="flex items-center gap-2 text-base font-semibold"><CalendarDays className="h-5 w-5 text-primary" aria-hidden="true" />Periode penerimaan</h2>
+    <label className="block max-w-xl space-y-1.5 text-sm">
+      <span>Berlaku untuk</span>
+      <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={target ? selected : ''}
+        disabled={options.isPending || options.isError} onChange={event => setSelected(event.target.value)}>
+        <option value="">Semua pengajuan (aturan umum)</option>
+        {(['form', 'usage'] as const).map(kind => <optgroup key={kind} label={kind === 'form' ? 'Form' : 'Kegunaan'}>
+          {options.data?.filter(option => option.kind === kind).map(option => <option key={option.id} value={`${kind}:${option.id}`}>{option.label}</option>)}
+        </optgroup>)}
+      </select>
+    </label>
+    {options.isError && <div className="flex flex-wrap items-center gap-3 text-sm" role="alert">
+      Pilihan form dan kegunaan belum dapat dimuat.
+      <Button size="sm" variant="outline" onClick={() => { void options.refetch(); }}>Muat ulang pilihan</Button>
+    </div>}
+    <ReceivingWindowEditor key={`${deptId}:${target?.kind ?? 'general'}:${target?.id ?? ''}`} deptId={deptId} target={target} allowSignerOverride={allowSignerOverride} />
+  </section>;
+}
+
+function ReceivingWindowEditor({ deptId, target, allowSignerOverride }: { deptId: string; target?: ReceivingTarget; allowSignerOverride: boolean }) {
   const [cadence, setCadence] = useState('weekly');
   const [mode, setMode] = useState('regular');
   const [month, setMonth] = useState(() => todayWorkDate().slice(0, 7));
@@ -32,9 +61,9 @@ export function DepartmentReceivingPolicy({ deptId }: { deptId: string }) {
   const [failed, setFailed] = useState(false);
   const [validationError, setValidationError] = useState('');
   const dialog = useAppDialog();
-  const monthly = useQuery({ queryKey: ['department-receiving-rules', deptId], queryFn: () => departmentReceivingService.list(deptId), retry: false });
-  const weekly = useQuery({ queryKey: ['department-receiving-weekly-rules', deptId], queryFn: () => departmentReceivingService.listWeekly(deptId), retry: false });
-  const settings = useQuery({ queryKey: ['department-receiving-settings', deptId], queryFn: () => departmentReceivingService.getSettings(deptId), retry: false });
+  const monthly = useQuery({ queryKey: ['department-receiving-rules', deptId, target?.kind, target?.id], queryFn: () => target ? departmentReceivingService.list(deptId, target) : departmentReceivingService.list(deptId), retry: false });
+  const weekly = useQuery({ queryKey: ['department-receiving-weekly-rules', deptId, target?.kind, target?.id], queryFn: () => target ? departmentReceivingService.listWeekly(deptId, target) : departmentReceivingService.listWeekly(deptId), retry: false });
+  const settings = useQuery({ queryKey: ['department-receiving-settings', deptId], queryFn: () => departmentReceivingService.getSettings(deptId), enabled: !target, retry: false });
   const isWeekly = cadence === 'weekly';
   const isSpecific = mode === 'specific';
   const periodMonth = isSpecific ? `${month}-01` : regularReceivingMonth;
@@ -42,13 +71,18 @@ export function DepartmentReceivingPolicy({ deptId }: { deptId: string }) {
   const existingMonthly = monthly.data?.find(row => row.period_month === periodMonth);
   const existingWeekly = weekly.data?.find(row => row.week_start === weekStart);
   const existing = isWeekly ? existingWeekly : existingMonthly;
-  const queries = [monthly, weekly, settings];
+  const queries = target ? [monthly, weekly] : [monthly, weekly, settings];
   const unavailable = queries.some(query => query.isError);
   const loading = queries.some(query => query.isPending || !query.isFetchedAfterMount);
-  const enabled = settings.data?.enabled === true;
+  const enabled = Boolean(target) || settings.data?.enabled === true;
+  const weeklyManagedByAdmin = !allowSignerOverride && !target && weekly.data?.some(rule => rule.sla_minutes !== null);
+  const monthlyManagedByAdmin = !allowSignerOverride && !target && monthly.data?.some(rule => rule.sla_minutes !== null);
+  const managedByAdmin = weeklyManagedByAdmin || monthlyManagedByAdmin;
+  const ruleManagedByAdmin = isWeekly ? weeklyManagedByAdmin : monthlyManagedByAdmin;
+  const canRemove = Boolean(existing && (target || isSpecific && (allowSignerOverride || existing.sla_minutes === null)));
   const locked = busy || loading || unavailable;
   const ruleEnabled = isWeekly ? weeklyForm.enabled : monthlyForm.enabled;
-  const fieldsDisabled = locked || !enabled || !ruleEnabled;
+  const fieldsDisabled = locked || !enabled || !ruleEnabled || ruleManagedByAdmin;
   const invalidPeriod = isSpecific && (isWeekly ? !isReceivingWeekStart(week) || week === regularReceivingWeek : !month || periodMonth === regularReceivingMonth);
 
   useEffect(() => {
@@ -77,28 +111,33 @@ export function DepartmentReceivingPolicy({ deptId }: { deptId: string }) {
     }
   };
   const save = async () => {
+    if (ruleManagedByAdmin) return;
     try {
       const weeklyRule = { ...weeklyForm, dept_id: deptId, week_start: weekStart };
       const monthlyRule = { ...monthlyForm, dept_id: deptId, period_month: periodMonth };
       if (isWeekly) validateWeeklyReceivingRule(weeklyRule);
       else validateReceivingRule(monthlyRule);
-      await run(() => isWeekly ? departmentReceivingService.saveWeekly(weeklyRule) : departmentReceivingService.save(monthlyRule), 'Aturan penerimaan tersimpan.');
+      await run(() => isWeekly
+        ? target || !allowSignerOverride ? departmentReceivingService.saveWeekly(weeklyRule, target, !allowSignerOverride) : departmentReceivingService.saveWeekly(weeklyRule)
+        : target || !allowSignerOverride ? departmentReceivingService.save(monthlyRule, target, !allowSignerOverride) : departmentReceivingService.save(monthlyRule),
+      'Aturan penerimaan tersimpan.');
     } catch (error) {
       setValidationError(error instanceof Error ? error.message : 'Periksa aturan penerimaan.');
     }
   };
   const remove = async () => {
-    if (!existing || locked || !enabled) return;
+    if (!canRemove || locked || !enabled || ruleManagedByAdmin) return;
     const selectedCadence = cadence;
     const selectedPeriod = isWeekly ? weekStart : periodMonth;
     if (!await dialog.confirm({
-      title: isWeekly ? 'Hapus pengecualian minggu ini?' : 'Hapus pengecualian bulan ini?',
-      description: 'Aturan reguler akan digunakan kembali. Pengajuan yang sudah berjalan tidak berubah.',
-      confirmText: 'Hapus pengecualian',
+      title: target && !isSpecific ? 'Hapus aturan khusus ini?' : isWeekly ? 'Hapus pengecualian minggu ini?' : 'Hapus pengecualian bulan ini?',
+      description: 'Aturan yang berlaku berikutnya digunakan. Jadwal yang sudah ditetapkan tidak berubah.',
+      confirmText: 'Hapus aturan',
     })) return;
     await run(() => selectedCadence === 'weekly'
-      ? departmentReceivingService.removeWeekly(deptId, selectedPeriod)
-      : departmentReceivingService.remove(deptId, selectedPeriod), 'Pengecualian dihapus.');
+      ? target ? departmentReceivingService.removeWeekly(deptId, selectedPeriod, target) : departmentReceivingService.removeWeekly(deptId, selectedPeriod)
+      : target ? departmentReceivingService.remove(deptId, selectedPeriod, target) : departmentReceivingService.remove(deptId, selectedPeriod),
+    target ? 'Aturan khusus dihapus.' : 'Pengecualian dihapus.');
   };
   const setSharedField = (key: 'enabled' | 'sla_minutes' | 'message', value: boolean | number | string | null) => {
     if (isWeekly) setWeeklyForm(previous => ({ ...previous, [key]: value }));
@@ -107,13 +146,13 @@ export function DepartmentReceivingPolicy({ deptId }: { deptId: string }) {
   const form = isWeekly ? weeklyForm : monthlyForm;
   useEffect(() => { setValidationError(''); }, [weeklyForm, monthlyForm, cadence, mode, week, month]);
 
-  return <section className="space-y-4 border-t pt-5" aria-label="Periode penerimaan">
-    <h2 className="flex items-center gap-2 text-base font-semibold"><CalendarDays className="h-5 w-5" aria-hidden="true" />Periode penerimaan</h2>
-    <label className="flex max-w-xl items-center justify-between gap-3 text-sm">
+  return <div className="space-y-4">
+    {!target && <label className="flex max-w-xl items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-sm">
       <span>Aktifkan kebijakan penerimaan departemen</span>
-      <Switch aria-label="Aktifkan kebijakan penerimaan departemen" checked={enabled} disabled={locked}
+      <Switch aria-label="Aktifkan kebijakan penerimaan departemen" checked={enabled} disabled={locked || managedByAdmin}
         onCheckedChange={value => { void run(() => departmentReceivingService.saveSettings({ dept_id: deptId, enabled: value }), value ? 'Kebijakan penerimaan diaktifkan.' : 'Kebijakan penerimaan dinonaktifkan. Aturan tetap tersimpan.'); }} />
-    </label>
+    </label>}
+    {managedByAdmin && <p className="text-sm text-muted-foreground">Status kebijakan umum hanya dapat diubah admin karena terhubung ke SLA penandatangan.</p>}
     {loading && <p role="status" className="text-sm text-muted-foreground">Memuat aturan penerimaan...</p>}
     {unavailable && <div role="alert" className="space-y-2 text-sm"><p>Aturan penerimaan belum dapat dimuat.</p><Button variant="outline" disabled={busy} onClick={() => { void Promise.all(queries.map(query => query.refetch())); }}><RefreshCw className="h-4 w-4" />Coba lagi</Button></div>}
     <fieldset disabled={locked || !enabled} className="min-w-0 space-y-4 disabled:opacity-60">
@@ -123,7 +162,8 @@ export function DepartmentReceivingPolicy({ deptId }: { deptId: string }) {
       <TabsContent value={mode} className="space-y-4">
       {isSpecific && <label className="block max-w-xs space-y-1.5 text-sm"><span>{isWeekly ? 'Minggu mulai (Senin)' : 'Bulan'}</span><Input type={isWeekly ? 'date' : 'month'} aria-label={isWeekly ? 'Awal minggu pengecualian' : 'Bulan pengecualian'} value={isWeekly ? week : month} onChange={event => isWeekly ? setWeek(event.target.value) : setMonth(event.target.value)} /></label>}
       {invalidPeriod && <p role="alert" className="text-sm text-destructive">{isWeekly ? 'Pilih tanggal Senin untuk minggu tertentu.' : 'Pilih bulan pengecualian.'}</p>}
-      <label className="flex max-w-xl items-center justify-between gap-3 text-sm"><span>{isWeekly ? 'Gunakan batas mingguan' : 'Gunakan batas bulanan'}</span><Switch checked={ruleEnabled} disabled={locked || !enabled} onCheckedChange={value => setSharedField('enabled', value)} aria-label={isWeekly ? 'Gunakan batas mingguan' : 'Gunakan batas bulanan'} /></label>
+      <label className="flex max-w-xl items-center justify-between gap-3 text-sm"><span>{isWeekly ? 'Gunakan batas mingguan' : 'Gunakan batas bulanan'}</span><Switch checked={ruleEnabled} disabled={locked || !enabled || ruleManagedByAdmin} onCheckedChange={value => setSharedField('enabled', value)} aria-label={isWeekly ? 'Gunakan batas mingguan' : 'Gunakan batas bulanan'} /></label>
+      {target && !locked && <p className="text-sm text-muted-foreground">{existing ? existing.enabled ? 'Jadwal khusus tersimpan' : 'Tanpa batas pada periode ini' : 'Mengikuti aturan yang lebih umum'}</p>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {isWeekly ? <>
           <WeekdayField label="Hari buka" value={weeklyForm.open_weekday} disabled={fieldsDisabled} onChange={value => setWeeklyForm(previous => ({ ...previous, open_weekday: value }))} />
@@ -137,15 +177,15 @@ export function DepartmentReceivingPolicy({ deptId }: { deptId: string }) {
           <label className="space-y-1.5 text-sm"><span>Jam tutup</span><Input type="time" value={monthlyForm.cutoff_time} disabled={fieldsDisabled} onChange={event => setMonthlyForm(previous => ({ ...previous, cutoff_time: event.target.value }))} /></label>
         </>}
       </div>
-      <label className="block max-w-xs space-y-1.5 text-sm"><span>SLA pengerjaan (menit kerja)</span><Input type="number" min="1" max="525600" placeholder="Ikuti SLA departemen" value={form.sla_minutes ?? ''} disabled={fieldsDisabled} onChange={event => setSharedField('sla_minutes', event.target.value ? Number(event.target.value) : null)} /></label>
+      {allowSignerOverride && !target && <label className="block max-w-xs space-y-1.5 text-sm"><span>SLA pengerjaan (menit kerja)</span><Input type="number" min="1" max="525600" placeholder="Ikuti SLA departemen" value={form.sla_minutes ?? ''} disabled={fieldsDisabled} onChange={event => setSharedField('sla_minutes', event.target.value ? Number(event.target.value) : null)} /></label>}
       <label className="block space-y-1.5 text-sm"><span>Pesan untuk pemohon</span><Textarea maxLength={300} value={form.message} disabled={fieldsDisabled} onChange={event => setSharedField('message', event.target.value)} /></label>
-      <div className="flex flex-wrap gap-2"><Button disabled={locked || !enabled || invalidPeriod} onClick={() => { void save(); }}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Simpan periode</Button>{isSpecific && existing && <Button variant="outline" disabled={locked || !enabled} onClick={() => { void remove(); }}><Trash2 className="h-4 w-4" />Hapus pengecualian</Button>}</div>
+      <div className="flex flex-wrap gap-2"><Button disabled={locked || !enabled || invalidPeriod || ruleManagedByAdmin} onClick={() => { void save(); }}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Simpan periode</Button>{canRemove && <Button variant="outline" disabled={locked || !enabled || ruleManagedByAdmin} onClick={() => { void remove(); }}><Trash2 className="h-4 w-4" />{target && !isSpecific ? 'Hapus aturan khusus' : 'Hapus pengecualian'}</Button>}</div>
       </TabsContent></Tabs>
       </TabsContent></Tabs>
     </fieldset>
     {validationError && <p role="alert" className="text-sm text-destructive">{validationError}</p>}
     {notice && <p role={failed ? 'alert' : 'status'} className="text-sm">{notice}</p>}
-  </section>;
+  </div>;
 }
 
 function WeekdayField({ label, value, disabled, onChange }: { label: string; value: number; disabled: boolean; onChange: (value: number) => void }) {

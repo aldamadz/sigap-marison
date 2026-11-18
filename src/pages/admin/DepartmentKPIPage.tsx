@@ -233,7 +233,7 @@ const DepartmentKPIPage = ({ configurationOnly = false }: { configurationOnly?: 
                 Simpan Konfigurasi
               </Button>
             </div>
-            <DepartmentReceivingPolicy key={filters.deptId} deptId={filters.deptId}/>
+            <DepartmentReceivingPolicy key={filters.deptId} deptId={filters.deptId} allowSignerOverride/>
             <DepartmentSlaManagers key={`managers-${filters.deptId}`} deptId={filters.deptId}/>
           </>
         )}
