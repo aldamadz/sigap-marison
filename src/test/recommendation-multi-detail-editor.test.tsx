@@ -147,17 +147,22 @@ describe("RecommendationMultiDetailEditor", () => {
     expect(screen.getByRole("heading", { level: 3, name: "Detail Rekomendasi per Item" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 4, name: "Komputer SPV" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 5, name: "Detail rekomendasi" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Catatan item *")).toHaveValue("Spesifikasi baru");
+    expect(screen.getByLabelText("Keterangan *")).toHaveValue("Spesifikasi baru");
     expect(screen.getByText("Hanya untuk item ini.")).toBeInTheDocument();
   });
 
   it("keeps notes isolated when switching applicant items", () => {
     render(<TwoItemHarness />);
-    fireEvent.change(screen.getByLabelText("Catatan item *"), { target: { value: "Catatan komputer" } });
+    fireEvent.change(screen.getByLabelText("Keterangan *"), { target: { value: "Catatan komputer" } });
+    fireEvent.change(screen.getByLabelText("No. Registrasi"), { target: { value: "001020" } });
+    fireEvent.change(screen.getByLabelText("Kerusakan"), { target: { value: "Tidak bisa menyala" } });
     fireEvent.click(screen.getByRole("button", { name: /Kursi Gaming/ }));
-    expect(screen.getByLabelText("Catatan item *")).toHaveValue("Spesifikasi baru");
+    expect(screen.getByLabelText("Keterangan *")).toHaveValue("Spesifikasi baru");
+    expect(screen.getByLabelText("No. Registrasi")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: /Komputer SPV/ }));
-    expect(screen.getByLabelText("Catatan item *")).toHaveValue("Catatan komputer");
+    expect(screen.getByLabelText("Keterangan *")).toHaveValue("Catatan komputer");
+    expect(screen.getByLabelText("No. Registrasi")).toHaveValue("001020");
+    expect(screen.getByLabelText("Kerusakan")).toHaveValue("Tidak bisa menyala");
   });
   it("splits one applicant item into stable numbered details", () => {
     render(<Harness />);
@@ -219,7 +224,7 @@ describe("RecommendationMultiDetailEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Aldama" }));
     fireEvent.click(screen.getByText("Andreas Bayu Darmawan"));
 
-    expect(screen.getByPlaceholderText(/Contoh: Kantor Pusat/i)).toHaveValue("Marketing");
+    expect(screen.getByLabelText("Lokasi *")).toHaveValue("Marketing");
     expect(screen.getByRole("button", { name: "Andreas Bayu Darmawan" })).toBeInTheDocument();
   });
 

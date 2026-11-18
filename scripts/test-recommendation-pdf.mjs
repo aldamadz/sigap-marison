@@ -242,7 +242,7 @@ test("keeps the FM-UAI.HRD-30-00 first-page table, reserved rows, notes, and low
   const footer = definition.content[4].table;
 
   assert.match(serialized, /NAMA BARANG \/ ALAT KERJA/);
-  assert.match(serialized, /NO\\nREGISTRASI/);
+  assert.match(serialized, /NO REGISTRASI/);
   assert.match(serialized, /KERUSAKAN/);
   assert.match(serialized, /HASIL REKOMENDASI/);
   assert.match(serialized, /SERVICE/);
@@ -253,10 +253,28 @@ test("keeps the FM-UAI.HRD-30-00 first-page table, reserved rows, notes, and low
   assert.match(serialized, /Pembelian baru/);
   assert.match(serialized, /Sesuaikan kebutuhan ruang/);
   assert.equal(mainTable.body.length, 10);
-  assert.deepEqual(footer.widths, ["72%", "28%"]);
+  assert.deepEqual(footer.widths, ["76%", "24%"]);
   assert.match(serialized, /Catatan :/);
   assert.match(serialized, /1 dari 1/);
   assert.doesNotMatch(serialized, /Dinamis/);
+});
+
+test("prints explicit recommendation fields verbatim and keeps normal multiline notes on page one", async () => {
+  const notes = "Penggantian diperlukan karena laptop mengalami penurunan performa sehingga menghambat pekerjaan sehari-hari.\nServis tangga diperlukan agar dapat kembali berfungsi dan aman digunakan dalam kegiatan operasional. Periksa penguncinya.";
+  const items = resolveRecommendationSource({ recommendation_multi_detail: { version: 1, items: [{
+    id: "laptop", status: "recommended", order: 0, applicant_original: { name: "Laptop", notes: "Catatan asli pemohon" },
+    registration_number: "001020", damage_description: "Penurunan performa", location: "PO", pic: "Pengguna A",
+    details: [{ id: "laptop-new", name: "Laptop", action: "replace", description: "Ganti unit", notes: "Pembelian unit baru" }],
+  }] } });
+  const data = normalizeRecommendationDocumentData({ form_input_data: { catatan: notes } }, { items });
+  const definition = buildRecommendationDocumentDefinition(data, []);
+  const table = definition.content[3].table.body;
+  assert.deepEqual(table[2].slice(2).map(cell => cell.text), ["001020", "PO / Pengguna A", "Penurunan performa", "", "V", "Ganti unit", "Pembelian unit baru"]);
+  assert.ok(table[3].every(cell => cell.text === ""));
+  assert.equal(definition.content[4].table.body[0][0].text[1].text, notes);
+  assert.doesNotMatch(JSON.stringify(definition), /CATATAN PENGAJUAN|Catatan asli pemohon/);
+  const pdf = await renderRecommendationPdf(data);
+  assert.equal((pdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length, 1);
 });
 
 const complexComputer = () => ({

@@ -8,7 +8,6 @@ const pdfMake = pdfMakeModule?.default || pdfMakeModule;
 pdfMake.vfs = pdfFontsModule?.default || pdfFontsModule;
 
 const BORDER = "#111827";
-const GREEN = "#e2f0d9";
 const MUTED = "#475569";
 const REJECTED = "#9a3412";
 
@@ -40,14 +39,14 @@ const actionLabel = (value) => {
 };
 
 const borderLayout = {
-  hLineWidth: () => 0.7,
-  vLineWidth: () => 0.7,
+  hLineWidth: () => 0.55,
+  vLineWidth: () => 0.55,
   hLineColor: () => BORDER,
   vLineColor: () => BORDER,
-  paddingLeft: () => 4,
-  paddingRight: () => 4,
-  paddingTop: () => 3,
-  paddingBottom: () => 3,
+  paddingLeft: () => 3,
+  paddingRight: () => 3,
+  paddingTop: () => 1,
+  paddingBottom: () => 1,
 };
 
 const imageDataUrl = async (buffer) => {
@@ -61,7 +60,7 @@ const imageDataUrl = async (buffer) => {
 
 const buildHeader = (data, logoDataUrl, totalPages) => ({
   table: {
-    widths: ["13%", "59%", "28%"],
+    widths: ["25%", "51%", "24%"],
     body: [[
       logoDataUrl
         ? { image: logoDataUrl, fit: [82, 30], alignment: "center", margin: [0, 6, 0, 0] }
@@ -93,7 +92,8 @@ const detailSummary = (item) => {
     const sameAsParent = heading.localeCompare(text(item.applicantName, ""), "id", { sensitivity: "base" }) === 0;
     const repeatedDefault = description.localeCompare(action, "id", { sensitivity: "base" }) === 0;
     const subject = sameAsParent ? "" : `${heading}${heading && action ? " - " : ""}`;
-    return `${prefix}${subject}${action}${description && !repeatedDefault ? `${action ? ": " : ""}${description}` : ""}`;
+    return `${prefix}${subject}${item.details.length === 1 ? (description || action)
+      : `${action}${description && !repeatedDefault ? `${action ? ": " : ""}${description}` : ""}`}`;
   }).join("\n");
 };
 
@@ -111,6 +111,13 @@ const itemNotes = (item) => {
   return item.details.map((detail) => text(detail.notes, "")).filter(Boolean).join("\n");
 };
 
+const itemDamage = (item) => item.damageDescription ?? item.applicantNotes;
+
+// Bound the unbreakable notes/signature row by its approximate wrapped lines,
+// accounting for individual line breaks instead of a single character cutoff.
+const needsNotesAppendix = (notes) => text(notes, "").split(/\r?\n/)
+  .reduce((lines, line) => lines + Math.max(1, Math.ceil(line.trim().length / 72)), 0) > 8;
+
 const compactText = (value, limit = 160) => {
   const valueText = text(value, "").replace(/\s+/g, " ");
   return valueText.length > limit ? `${valueText.slice(0, limit).trimEnd()}... (lihat rincian)` : valueText;
@@ -118,7 +125,7 @@ const compactText = (value, limit = 160) => {
 
 const needsItemDetails = (item) => [
   [item.applicantName, 100], [item.registrationNumber, 60], [item.location, 80],
-  [item.pic, 80], [item.applicantNotes, 160], [detailSummary(item), 220], [itemNotes(item), 160],
+  [item.pic, 80], [itemDamage(item), 160], [detailSummary(item), 220], [itemNotes(item), 160],
 ].some(([value, limit]) => text(value, "").length > limit || text(value, "").split(/\r?\n/).length > 4);
 
 const compactRecommendation = (item, index) => {
@@ -138,7 +145,7 @@ const expandedItemBlocks = (data) => data.items.flatMap((item, index) => needsIt
     { text: "RINCIAN REKOMENDASI", bold: true, fontSize: 14, color: "#17324d", margin: [0, 0, 0, 8] },
     { text: `ITEM ${index + 1} - ${item.applicantName}`, bold: true, fontSize: 11 },
     { text: `No. registrasi: ${text(item.registrationNumber)} | Lokasi: ${text(item.location)} | PIC: ${text(item.pic)}`, margin: [0, 5, 0, 5] },
-    { text: [{ text: "Kerusakan / catatan pemohon: ", bold: true }, { text: text(item.applicantNotes) }], margin: [0, 0, 0, 8] },
+    { text: [{ text: "Kerusakan: ", bold: true }, { text: text(itemDamage(item)) }], margin: [0, 0, 0, 8] },
     ...(isRejected(item.status)
       ? [{ text: `Tidak direkomendasikan: ${text(item.rejectionReason)}`, color: REJECTED }]
       : item.details.map((detail, detailIndex) => ({
@@ -164,7 +171,7 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
       { text: compactText(item.applicantName, 100), bold: true, decoration: rejected ? "lineThrough" : undefined, color: rejected ? MUTED : BORDER },
       { text: compactText(item.registrationNumber, 60), alignment: "center" },
       { text: [compactText(item.location, 80), compactText(item.pic, 80)].filter(Boolean).join(" / ") || "-" },
-      { text: compactText(item.applicantNotes) },
+      { text: compactText(itemDamage(item)) },
       { text: markers.service, bold: true, alignment: "center", color: "#166534" },
       { text: markers.replace, bold: true, alignment: "center", color: "#166534" },
       { text: rejected ? compactText(detailSummary(item), 220) : compactRecommendation(item, index), color: rejected ? REJECTED : BORDER },
@@ -175,21 +182,13 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
     data.signatures.length >= 7 ? Math.max(rows.length, 4) : 8;
   while (rows.length < minimumRows) {
     rows.push([
-      { text: String(rows.length + 1), alignment: "center" },
+      { text: "" },
       ...Array.from({ length: 8 }, () => ({ text: "" })),
     ]);
   }
 
   return [
     buildHeader(data, logoDataUrl, totalPages),
-    {
-      table: {
-        widths: ["20%", "80%"],
-        body: [[{ text: "Nomor Dokumen :", bold: true }, { text: data.noSurat, bold: true }]],
-      },
-      layout: borderLayout,
-      margin: [0, 4, 0, 0],
-    },
     {
       table: {
         widths: ["*"],
@@ -199,22 +198,29 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
     },
     {
       table: {
+        widths: ["*"],
+        body: [[{ text: `Nomor: ${data.noSurat}` }]],
+      },
+      layout: borderLayout,
+    },
+    {
+      table: {
         headerRows: 2,
         dontBreakRows: true,
-        widths: ["3%", "23%", "8%", "16%", "13%", "5%", "5%", "14%", "13%"],
-        heights: (row) => row < 2 ? 15 : 22,
+        widths: ["2.6%", "29.8%", "7.9%", "12%", "13%", "4.3%", "6.5%", "11.4%", "12.5%"],
+        heights: (row) => row < 2 ? 11 : 10.5,
         body: [
           [
-            { text: "NO.", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
-            { text: "NAMA BARANG / ALAT KERJA", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
-            { text: "NO\nREGISTRASI", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN },
-            { text: "LOKASI / PIC", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
-            { text: "KERUSAKAN", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
-            { text: "HASIL REKOMENDASI", colSpan: 3, bold: true, alignment: "center", fillColor: GREEN }, {}, {},
-            { text: "KETERANGAN", rowSpan: 2, bold: true, alignment: "center", fillColor: GREEN, margin: [0, 8, 0, 0] },
+            { text: "NO", rowSpan: 2, alignment: "center", margin: [0, 6, 0, 0] },
+            { text: "NAMA BARANG / ALAT KERJA", rowSpan: 2, alignment: "center", margin: [0, 6, 0, 0] },
+            { text: "NO REGISTRASI", rowSpan: 2, alignment: "center", fontSize: 7, margin: [0, 6, 0, 0] },
+            { text: "LOKASI / PIC", rowSpan: 2, alignment: "center", margin: [0, 6, 0, 0] },
+            { text: "KERUSAKAN", rowSpan: 2, alignment: "center", margin: [0, 6, 0, 0] },
+            { text: "HASIL REKOMENDASI", colSpan: 3, alignment: "center" }, {}, {},
+            { text: "KETERANGAN", rowSpan: 2, alignment: "center", margin: [0, 6, 0, 0] },
           ],
           [{}, {}, {}, {}, {}, "SERVICE", "GANTI", "URAIAN", {}].map((cell) => typeof cell === "string"
-            ? { text: cell, bold: true, alignment: "center", fillColor: GREEN }
+            ? { text: cell, alignment: "center", fontSize: 7 }
             : cell),
           ...rows,
         ],
@@ -223,20 +229,22 @@ const buildMainPage = (data, logoDataUrl, totalPages) => {
     },
     {
       table: {
-        widths: ["72%", "28%"],
+        widths: data.signatures.length === 2 ? ["76%", "24%"] : ["72%", "28%"],
         dontBreakRows: true,
-        heights: [112],
+        heights: [100],
         body: [[
-          { text: [{ text: "Catatan :\n", bold: true }, { text: compactText(data.notes) }], margin: [4, 2, 4, 2] },
+          { text: [{ text: "Catatan :\n", bold: true }, { text: needsNotesAppendix(data.notes)
+            ? "Catatan lengkap tersedia pada halaman lanjutan." : text(data.notes, "") }], margin: [0, 2, 3, 2] },
           {
             stack: [
               { text: data.placeDate, alignment: "center", margin: [0, 0, 0, 2] },
-              buildNativeSignatureBlock(data.signatures),
+              buildNativeSignatureBlock(data.signatures, { roleFillColor: "#ffffff" }),
             ],
           },
         ]],
       },
-      layout: borderLayout,
+      layout: { ...borderLayout, paddingLeft: column => column === 1 ? 0 : 3, paddingRight: column => column === 1 ? 0 : 3 },
+      margin: [0, 11, 0, 0],
     },
   ];
 };
@@ -265,10 +273,10 @@ const buildAttachmentCards = (data, pages) => pages.flatMap((page) => {
     const location = [parentValue(page.detailLocation || page.location, 80), parentValue(page.detailPic || page.pic, 80)].join(" / ");
     const applicantName = parentValue(page.applicantName, 100);
     const registrationNumber = parentValue(item?.registrationNumber, 60);
-    const applicantNotes = parentValue(item?.applicantNotes, 160);
+    const damage = parentValue(item ? itemDamage(item) : "", 160);
     const action = isRejected(page.status || page.detailStatus) ? "Tidak direkomendasikan" : actionLabel(page.detailAction);
     const values = [applicantName, page.detailHeading, location, registrationNumber,
-      applicantNotes, page.description, notes, ...page.documents.map(entry => entry.name), ...images.map(entry => entry.name)];
+      damage, page.description, notes, ...page.documents.map(entry => entry.name), ...images.map(entry => entry.name)];
     // Oversized narrative must flow; an unbreakable row taller than a page loses text.
     const compact = values.join(" ").length < 1600 && values.join("\n").split(/\r?\n/).length < 24;
     return {
@@ -294,7 +302,7 @@ const buildAttachmentCards = (data, pages) => pages.flatMap((page) => {
             { text: applicantName, bold: true, fontSize: 10, margin: [0, 0, 0, 4] },
             { text: text(page.detailHeading), bold: true, fontSize: 11, margin: [0, 0, 0, 10] },
             { columns: [attachmentField("Lokasi / PIC", location), attachmentField("No. registrasi", registrationNumber)], columnGap: 18 },
-            { columns: [attachmentField("Kerusakan / catatan pemohon", applicantNotes), attachmentField("Rekomendasi", action)], columnGap: 18 },
+            { columns: [attachmentField("Kerusakan", damage), attachmentField("Rekomendasi", action)], columnGap: 18 },
             { columns: [attachmentField("Uraian", page.description), attachmentField("Keterangan", notes)], columnGap: 18 },
             ...(page.documents.length && !continuation ? [attachmentField("Dokumen pendukung", page.documents.map(entry => text(entry.name, "Lampiran")).join("\n"))] : []),
           ] },
@@ -334,7 +342,7 @@ export const buildRecommendationDocumentDefinition = (data, pages, logoDataUrl =
   footer: (page, total) => ({ text: `Halaman ${page} dari ${total}`, fontSize: 7, alignment: "right", margin: [18, 0, 18, 0] }),
   content: [
     ...buildMainPage(data, logoDataUrl, totalPages),
-    ...(data.notes?.length > 160 || String(data.notes || "").split(/\r?\n/).length > 4 ? [{ pageBreak: "before", stack: [
+    ...(needsNotesAppendix(data.notes) ? [{ pageBreak: "before", stack: [
       { text: "CATATAN PENGAJUAN", bold: true, fontSize: 14, margin: [0, 0, 0, 8] },
       { text: data.notes, fontSize: 9 },
     ] }] : []),
