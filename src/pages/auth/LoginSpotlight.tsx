@@ -9,6 +9,15 @@ const quotes = [
   ['KUALITAS', 'HASIL DARI NIAT TINGGI DAN EKSEKUSI CERDAS'],
 ] as const;
 
+function shuffleQuotes() {
+  const shuffled = [...quotes];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 const particles = Array.from({ length: 32 }, (_, i) => ({
   top: `${3 + ((i * 53 + i * i * 7) % 94)}%`,
   left: `${2 + ((i * 43 + i * i * 11) % 96)}%`,
@@ -19,6 +28,7 @@ const particles = Array.from({ length: 32 }, (_, i) => ({
 }));
 
 export function LoginSpotlight() {
+  const [orderedQuotes] = useState(shuffleQuotes);
   const [index, setIndex] = useState(0);
   useEffect(() => {
     const canAnimate = window.matchMedia('(min-width: 1025px) and (prefers-reduced-motion: no-preference)');
@@ -39,7 +49,7 @@ export function LoginSpotlight() {
     };
   }, []);
 
-  const [word, line] = quotes[index];
+  const [word, line] = orderedQuotes[index];
   return (
     <aside className="sigap-login-spotlight" aria-label="Sorotan">
       <div className="sigap-login-dust" aria-hidden="true">
