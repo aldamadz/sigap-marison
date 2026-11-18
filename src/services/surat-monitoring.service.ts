@@ -43,12 +43,18 @@ const dateBounds = (range: SuratMonitoringFilters["dateRange"]) => {
 };
 
 export const suratMonitoringService = {
+  async setStarred(suratId: string, starred: boolean) {
+    const table = supabase.from("surat_personal_stars");
+    const { error } = starred
+      ? await table.insert({ surat_id: suratId })
+      : await table.delete().eq("surat_id", suratId);
+    if (error && !(starred && error.code === "23505")) throw error;
+  },
+
   async getPage(filters: SuratMonitoringFilters = {}): Promise<SuratMonitoringPage> {
     const pageSize = Math.min(Math.max(filters.pageSize || SURAT_MONITORING_PAGE_SIZE, 1), 50);
     const page = Math.max(filters.page || 1, 1);
     const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
     const search = normalizeSearch(filters.search);
     const bounds = dateBounds(filters.dateRange);
     const { data, error } = await supabase.rpc("get_surat_monitoring_page", {
