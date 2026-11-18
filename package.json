@@ -12,6 +12,8 @@
     "external-api"
   ],
   "scripts": {
+    "postinstall": "node security/fail-closed/picomatch-backport.mjs",
+    "audit:staging": "node security/fail-closed/audit-staging.mjs",
     "test:document-layout": "node --test scripts/test-document-layout-rules.mjs",
     "test:pgd-pdf": "node --test scripts/test-pgd-pdf-renderer.mjs",
     "test:worker-job": "node --test scripts/test-pdf-worker-job.mjs",
@@ -164,6 +166,7 @@
     "vitest": "^4.1.11"
   },
   "overrides": {
+    "picomatch": "4.0.7",
     "glob": "^13.0.0",
     "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
