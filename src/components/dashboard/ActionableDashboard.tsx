@@ -116,36 +116,6 @@ export function ActionableDashboard({ userId }: { userId: string }) {
           <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} /></Button>
       </div>
       <TabsContent value={scope} className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Popover open={rangeOpen} onOpenChange={open => {
-          if (open) setDraftRange(range ?? { start: todayWorkDate(), end: todayWorkDate() });
-          setRangeOpen(open);
-        }}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-auto min-h-9 gap-2 whitespace-normal text-left">
-              <CalendarDays className="h-4 w-4 shrink-0" />
-              {range ? `Tanggal dibuat: ${range.start} s.d. ${range.end}` : 'Rentang tanggal'}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-72 max-w-[calc(100vw-2rem)]">
-            <form className="space-y-3" onSubmit={event => {
-              event.preventDefault();
-              if (!validRange) return;
-              setRange(draftRange); setPage(1); setRangeOpen(false);
-            }}>
-              <p className="text-sm font-semibold">Tanggal dibuat (WIB)</p>
-              <div className="space-y-1.5"><Label htmlFor="dashboard-range-start">Dari tanggal</Label>
-                <Input id="dashboard-range-start" type="date" required value={draftRange.start}
-                  onChange={event => setDraftRange(previous => ({ ...previous, start: event.target.value }))} /></div>
-              <div className="space-y-1.5"><Label htmlFor="dashboard-range-end">Sampai tanggal</Label>
-                <Input id="dashboard-range-end" type="date" required min={draftRange.start || undefined} value={draftRange.end}
-                  onChange={event => setDraftRange(previous => ({ ...previous, end: event.target.value }))} /></div>
-              <div className="flex justify-end"><Button type="submit" size="sm" disabled={!validRange}>Terapkan</Button></div>
-            </form>
-          </PopoverContent>
-        </Popover>
-        {range && <Button variant="ghost" size="sm" onClick={() => { setRange(null); setPage(1); }}>Reset tanggal</Button>}
-      </div>
       {scope === 'team' && data && <h2 className="flex items-center gap-2 text-base font-semibold"><Building2 className="h-4 w-4" />{data.team_label}</h2>}
       {query.isError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/30 p-4">
         <p className="text-sm">Ringkasan pengajuan gagal dimuat.</p><Button variant="outline" size="sm" onClick={() => { void query.refetch(); }}>Coba lagi</Button>
@@ -175,16 +145,49 @@ export function ActionableDashboard({ userId }: { userId: string }) {
               {onTimePercent !== null && <div role="meter" aria-label="Selesai tepat waktu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={onTimePercent} className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-blue-600 dark:bg-blue-400" style={{ width: `${onTimePercent}%` }} /></div>}
             </div></div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-base font-semibold">{DASHBOARD_BUCKET_LABELS[bucket]} <span className="inline-flex min-w-7 items-center justify-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">{data?.count ?? 0}</span></h2>
-          {!range && <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="mr-1">Riwayat selesai / ditolak</span>
+      </>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {!query.isError && <h2 className="flex items-center gap-2 text-base font-semibold">{DASHBOARD_BUCKET_LABELS[bucket]} <span className="inline-flex min-w-7 items-center justify-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">{data?.count ?? 0}</span></h2>}
+        <div role="group" aria-label="Periode Dashboard" className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:ml-auto">
+          {!range && <div className="flex max-w-full flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>Riwayat selesai / ditolak</span>
             <div className="flex items-center rounded-md border border-border bg-card p-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan sebelumnya" onClick={() => { setMonth(m => addMonths(m, -1)); setPage(1); }}><ChevronLeft className="h-4 w-4" /></Button>
-            <CalendarDays className="ml-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="min-w-28 px-2 text-center text-sm font-medium text-foreground">{format(month, 'MMMM yyyy', { locale: id })}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan berikutnya" disabled={month >= startOfMonth(new Date())} onClick={() => { setMonth(m => addMonths(m, 1)); setPage(1); }}><ChevronRight className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan sebelumnya" onClick={() => { setMonth(m => addMonths(m, -1)); setPage(1); }}><ChevronLeft className="h-4 w-4" /></Button>
+              <CalendarDays className="ml-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="min-w-28 px-2 text-center text-sm font-medium text-foreground">{format(month, 'MMMM yyyy', { locale: id })}</span>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan berikutnya" disabled={month >= startOfMonth(new Date())} onClick={() => { setMonth(m => addMonths(m, 1)); setPage(1); }}><ChevronRight className="h-4 w-4" /></Button>
             </div>
           </div>}
+          <Popover open={rangeOpen} onOpenChange={open => {
+            if (open) setDraftRange(range ?? { start: todayWorkDate(), end: todayWorkDate() });
+            setRangeOpen(open);
+          }}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-auto min-h-9 max-w-full gap-2 whitespace-normal text-left">
+                <CalendarDays className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {range ? `Tanggal dibuat: ${range.start} s.d. ${range.end}` : 'Rentang tanggal'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 max-w-[calc(100vw-2rem)]">
+              <form className="space-y-3" onSubmit={event => {
+                event.preventDefault();
+                if (!validRange) return;
+                setRange(draftRange); setPage(1); setRangeOpen(false);
+              }}>
+                <p className="text-sm font-semibold">Tanggal dibuat (WIB)</p>
+                <div className="space-y-1.5"><Label htmlFor="dashboard-range-start">Dari tanggal</Label>
+                  <Input id="dashboard-range-start" type="date" required value={draftRange.start}
+                    onChange={event => setDraftRange(previous => ({ ...previous, start: event.target.value }))} /></div>
+                <div className="space-y-1.5"><Label htmlFor="dashboard-range-end">Sampai tanggal</Label>
+                  <Input id="dashboard-range-end" type="date" required min={draftRange.start || undefined} value={draftRange.end}
+                    onChange={event => setDraftRange(previous => ({ ...previous, end: event.target.value }))} /></div>
+                <div className="flex justify-end"><Button type="submit" size="sm" disabled={!validRange}>Terapkan</Button></div>
+              </form>
+            </PopoverContent>
+          </Popover>
+          {range && <Button variant="ghost" size="sm" onClick={() => { setRange(null); setPage(1); }}>Reset tanggal</Button>}
         </div>
+      </div>
+      {!query.isError && <>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div role="group" aria-label="Kategori antrean" className="flex max-w-full flex-wrap gap-1 rounded-lg border-2 border-solid border-primary bg-muted/30 p-1">
             {(['active', ...(scope === 'signer' ? ['ready','blocked','upcoming'] : ['returned']), 'completed','rejected'] as DashboardBucket[]).map(value =>
