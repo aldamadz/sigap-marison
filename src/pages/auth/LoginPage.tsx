@@ -134,19 +134,19 @@ export default function LoginPage() {
     <main className="sigap-login">
       <section className="sigap-login-sidebar" aria-labelledby="login-heading">
         <div className="sigap-login-form">
-          <div className="mb-8 flex items-center gap-3">
+          <div className="mb-8 flex items-center gap-[0.85rem]">
             <img src="/marison-sigap-logo-v2.png" alt="" width={44} height={44} className="size-11 shrink-0 object-contain" />
-            <span className="text-xl font-extrabold text-primary sm:text-2xl">Marison - SIGAP</span>
+            <span className="sigap-login-brand font-extrabold text-primary">Marison - SIGAP</span>
           </div>
 
           <div className="mb-8">
-            <h1 id="login-heading" className="text-3xl font-extrabold leading-tight">Selamat Datang</h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">Masuk ke Sistem Persetujuan Digital Terintegrasi.</p>
+            <h1 id="login-heading" className="sigap-login-heading font-extrabold">Selamat Datang</h1>
+            <p className="mt-[0.35rem] max-w-[20rem] text-[0.88rem] leading-[1.5] text-muted-foreground">Masuk untuk memproses agenda, surat, dan persetujuan.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5" aria-busy={isLoading}>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Kerja</Label>
+          <form onSubmit={handleSubmit} aria-busy={isLoading}>
+            <div className="mb-[1.35rem] grid gap-[0.55rem]">
+              <Label htmlFor="email" className="text-[0.82rem] font-semibold leading-[17px]">Email Kerja</Label>
               <div className="relative">
                 <Mail aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -159,20 +159,20 @@ export default function LoginPage() {
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
-                  className="h-12 rounded-lg bg-muted pl-11 text-base sm:text-sm"
+                  className="h-12 rounded-xl bg-muted pl-11 text-base sm:text-sm"
                   required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <Label htmlFor="password">Kata Sandi</Label>
+            <div className="mb-[1.35rem] grid gap-[0.55rem]">
+              <div className="flex min-h-[1.61rem] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <Label htmlFor="password" className="self-start text-[0.82rem] font-semibold leading-[17px]">Kata Sandi</Label>
                 <button
                   ref={resetTriggerRef}
                   type="button"
                   onClick={handleOpenReset}
-                  className="rounded text-sm font-semibold text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="rounded text-[0.82rem] font-semibold text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   Lupa sandi?
                 </button>
@@ -187,7 +187,7 @@ export default function LoginPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Masukkan password Anda"
                   autoComplete="current-password"
-                  className="h-12 rounded-lg bg-muted pl-11 pr-12 text-base sm:text-sm"
+                  className="h-12 rounded-xl bg-muted pl-11 pr-12 text-base sm:text-sm"
                   required
                 />
                 <button
@@ -201,14 +201,14 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex min-h-8 items-center gap-2.5">
+            <div className="mb-[1.85rem] flex items-center gap-[0.65rem]">
               <Checkbox id="remember" checked={rememberMe} onCheckedChange={checked => setRememberMe(checked === true)} className="size-[18px] rounded-full border-primary" />
-              <Label htmlFor="remember" className="cursor-pointer text-sm font-medium text-muted-foreground">
+              <Label htmlFor="remember" className="cursor-pointer text-[0.82rem] font-medium leading-[17px] text-muted-foreground">
                 Ingat saya di perangkat ini
               </Label>
             </div>
 
-            <Button type="submit" disabled={isLoading} className="group h-[50px] w-full rounded-lg text-base font-bold shadow-[0_10px_26px_-7px_hsl(var(--primary)/0.6)]">
+            <Button type="submit" disabled={isLoading} className="group h-[50px] w-full rounded-xl text-[0.95rem] font-bold shadow-[0_10px_26px_-7px_hsl(var(--primary)/0.6)]">
               {isLoading ? <><Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> Memproses...</> : <>
                 Masuk Sekarang <ArrowRight aria-hidden="true" className="motion-safe:transition-transform motion-safe:group-hover:translate-x-1" />
               </>}
