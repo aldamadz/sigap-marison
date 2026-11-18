@@ -12,6 +12,10 @@ vi.mock('@/services/actionable-dashboard.service', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/actionable-dashboard.service')>(),
   getActionableDashboard: mocks.get, remindDashboardRequest: mocks.remind,
 }));
+vi.mock('@/features/work-calendar/lib/work-calendar-date', async importOriginal => ({
+  ...await importOriginal<typeof import('@/features/work-calendar/lib/work-calendar-date')>(),
+  todayWorkDate: () => '2026-11-18',
+}));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/components/layout/Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('@/components/layout/Header', () => ({ Header: () => null }));
@@ -32,6 +36,64 @@ const renderDashboard = (path='/dashboard') => {
 };
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe('actionable dashboard', () => {
+  it('opens presets from the current month and hides only the active preset', async () => {
+    const user = userEvent.setup();
+    mocks.get.mockResolvedValue(bundle());renderDashboard();
+    await screen.findByText(row.title);
+    const period = within(screen.getByRole('group', {name:'Periode Dashboard'}));
+    expect(period.getByText('Riwayat selesai / ditolak')).toBeInTheDocument();
+    const menu = () => within(screen.getByRole('dialog', {name:'Pilih periode Dashboard'}));
+    const options = () => menu().getAllByRole('button').map(button => button.textContent?.trim());
+    await user.click(period.getByRole('button', {name:'November 2026'}));
+    expect(options()).toEqual(['Hari ini', 'Minggu ini', 'Rentang tanggal']);
+    await user.click(menu().getByRole('button', {name:'Minggu ini'}));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({
+      from:'2026-11-15T17:00:00.000Z',to:'2026-11-22T17:00:00.000Z',filterCreated:true,page:1,
+    })));
+    await user.click(period.getByRole('button', {name:'Minggu ini'}));
+    expect(options()).toEqual(['Hari ini', 'Bulan ini', 'Rentang tanggal']);
+    await user.click(menu().getByRole('button', {name:'Hari ini'}));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({
+      from:'2026-11-17T17:00:00.000Z',to:'2026-11-18T17:00:00.000Z',filterCreated:true,page:1,
+    })));
+    await user.click(period.getByRole('button', {name:'Hari ini'}));
+    expect(options()).toEqual(['Minggu ini', 'Bulan ini', 'Rentang tanggal']);
+    await user.click(menu().getByRole('button', {name:'Bulan ini'}));
+    expect(period.getByRole('button', {name:'November 2026'})).toBeInTheDocument();
+    await user.click(period.getByRole('button', {name:'Bulan sebelumnya'}));
+    await user.click(period.getByRole('button', {name:'Oktober 2026'}));
+    expect(options()).toEqual(['Hari ini', 'Minggu ini', 'Bulan ini', 'Rentang tanggal']);
+    await user.click(menu().getByRole('button', {name:'Bulan ini'}));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({
+      from:'2026-10-31T17:00:00.000Z',to:'2026-11-30T17:00:00.000Z',filterCreated:false,page:1,
+    })));
+  });
+  it('applies an inclusive date-picker range in WIB and can return to monthly history', async () => {
+    mocks.get.mockResolvedValue(bundle({count:25}));renderDashboard();
+    await screen.findByText(row.title);
+    fireEvent.click(screen.getByRole('button', {name:'Halaman berikutnya'}));
+    const period = within(screen.getByRole('group', {name:'Periode Dashboard'}));
+    const user = userEvent.setup();
+    await user.click(period.getByRole('button', {name:'November 2026'}));
+    await user.click(screen.getByRole('button', {name:'Rentang tanggal'}));
+    const calendar = within(screen.getByRole('dialog', {name:'Pilih rentang tanggal'}));
+    const apply = calendar.getByRole('button', {name:'Terapkan'});
+    expect(apply).toBeDisabled();
+    await user.click(calendar.getByRole('button', {name:/19 November 2026/}));
+    expect(apply).toBeDisabled();
+    await user.click(calendar.getByRole('button', {name:/17 November 2026/}));
+    await user.click(apply);
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({
+      from:'2026-11-16T17:00:00.000Z',to:'2026-11-19T17:00:00.000Z',filterCreated:true,page:1,
+    })));
+    await user.click(period.getByRole('button', {name:'17 Nov 2026 s.d. 19 Nov 2026'}));
+    await user.click(screen.getByRole('button', {name:'Rentang tanggal'}));
+    expect(screen.getByRole('button', {name:'Terapkan'})).toBeEnabled();
+    await user.click(screen.getByRole('button', {name:'Kembali ke pilihan periode'}));
+    await user.click(screen.getByRole('button', {name:'Bulan ini'}));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({filterCreated:false,page:1})));
+    expect(period.getByText('Riwayat selesai / ditolak')).toBeInTheDocument();
+  });
   it('shows a paused SLA and reasons instead of overdue styling or a signer reminder', async () => {
     mocks.get.mockResolvedValue(bundle({rows:[{...row,bucket:'blocked',sla_paused:true,sla_pause_reasons:['Menunggu tim pemeriksa','Menunggu rekomendasi'],elapsed_minutes:300}]}));
     renderDashboard();

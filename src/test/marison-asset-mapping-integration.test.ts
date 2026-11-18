@@ -63,6 +63,6 @@ describe("REC-03 Marison asset runtime integration", () => {
 
   it("maps typed mapper errors to safe HTTP 422 responses", () => {
     expect(runtime).toContain("error instanceof MarisonAssetItemsError ? 422");
-    expect(runtime).toContain('sendJson(res, status, { error: error.message || "Internal server error", requestId })');
+    expect(runtime).toMatch(/sendJson\(res, status, \{ error: error\.message \|\| "Internal server error", requestId(?:,| \})/);
   });
 });

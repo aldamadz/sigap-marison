@@ -3,17 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import { addMonths, format, startOfMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { ArrowRight, BellRing, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FilePenLine, FileText, Inbox, RefreshCw, Search, Timer, TriangleAlert, Undo2, Users, XCircle } from 'lucide-react';
+import { ArrowRight, BellRing, Building2, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FilePenLine, FileText, Inbox, RefreshCw, Search, Timer, TriangleAlert, Undo2, Users, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/ui/Breadcrumbs';
 import { cn } from '@/lib/utils';
 import { dashboardRowLink, getActionableDashboard, remindDashboardRequest, type DashboardBucket, type DashboardRow, type DashboardScope } from '@/services/actionable-dashboard.service';
-import { todayWorkDate } from '@/features/work-calendar/lib/work-calendar-date';
+import { todayWorkDate, workDateRangeToUtcRange, workWeekDates } from '@/features/work-calendar/lib/work-calendar-date';
 import { toast } from 'sonner';
 import {ReceivingPeriodNotice} from '@/components/surat/ReceivingPeriodNotice';
 import { PersonalReminderButton } from '@/components/notifications/PersonalReminderButton';
+import { DashboardPeriodPicker, type DashboardPeriod } from './DashboardPeriodPicker';
 
 export const DASHBOARD_BUCKET_LABELS: Record<DashboardBucket, string> = {
   all: 'Semua', active: 'Antrean aktif', ready: 'Perlu tanda tangan', blocked: 'Menunggu kelengkapan',
@@ -59,7 +60,11 @@ export function ActionableDashboard({ userId }: { userId: string }) {
   const requestedScope=['mine','signer','team'].includes(params.get('scope') || '')?params.get('scope') as DashboardScope:null;
   const [scope, setScope] = useState<DashboardScope>(requestedScope || 'mine');
   const [bucket, setBucket] = useState<DashboardBucket>('active');
-  const [month, setMonth] = useState(() => startOfMonth(new Date(`${todayWorkDate()}T12:00:00`)));
+  const today = todayWorkDate();
+  const currentMonth = startOfMonth(new Date(`${today}T12:00:00`));
+  const [historyMonth, setHistoryMonth] = useState<Date | null>(null);
+  const month = historyMonth ?? currentMonth;
+  const [period, setPeriod] = useState<DashboardPeriod>({ kind: 'month' });
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [reminding, setReminding] = useState<string | null>(null);
@@ -72,11 +77,16 @@ export function ActionableDashboard({ userId }: { userId: string }) {
     finally { setReminding(null); }
   };
   const deferredSearch = useDeferredValue(search);
-  const from = new Date(`${format(month, 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
-  const to = new Date(`${format(addMonths(month, 1), 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
+  const week = period.kind === 'week' ? workWeekDates(today) : null;
+  const creationDates = period.kind === 'custom' ? period.range
+    : period.kind === 'today' ? { start: today, end: today }
+    : week ? { start: week[0], end: week[6] } : null;
+  const bounds = creationDates ? workDateRangeToUtcRange(creationDates.start, creationDates.end) : null;
+  const from = bounds?.startUtc ?? new Date(`${format(month, 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
+  const to = bounds?.endUtc ?? new Date(`${format(addMonths(month, 1), 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
   const query = useQuery({
-    queryKey: ['actionable-dashboard', userId, scope, bucket, from, to, deferredSearch, page],
-    queryFn: ({ signal }) => getActionableDashboard({ scope, bucket, from, to, search: deferredSearch, page, signal }),
+    queryKey: ['actionable-dashboard', userId, scope, bucket, from, to, Boolean(bounds), deferredSearch, page],
+    queryFn: ({ signal }) => getActionableDashboard({ scope, bucket, from, to, filterCreated: Boolean(bounds), search: deferredSearch, page, signal }),
     enabled: Boolean(userId), staleTime: 20_000, refetchInterval: 60_000,
   });
   const data = query.data;
@@ -138,16 +148,18 @@ export function ActionableDashboard({ userId }: { userId: string }) {
               {onTimePercent !== null && <div role="meter" aria-label="Selesai tepat waktu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={onTimePercent} className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-blue-600 dark:bg-blue-400" style={{ width: `${onTimePercent}%` }} /></div>}
             </div></div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-base font-semibold">{DASHBOARD_BUCKET_LABELS[bucket]} <span className="inline-flex min-w-7 items-center justify-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">{data?.count ?? 0}</span></h2>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="mr-1">Riwayat selesai / ditolak</span>
-            <div className="flex items-center rounded-md border border-border bg-card p-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan sebelumnya" onClick={() => { setMonth(m => addMonths(m, -1)); setPage(1); }}><ChevronLeft className="h-4 w-4" /></Button>
-            <CalendarDays className="ml-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="min-w-28 px-2 text-center text-sm font-medium text-foreground">{format(month, 'MMMM yyyy', { locale: id })}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan berikutnya" disabled={month >= startOfMonth(new Date())} onClick={() => { setMonth(m => addMonths(m, 1)); setPage(1); }}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-          </div>
-        </div>
+      </>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {!query.isError && <h2 className="flex items-center gap-2 text-base font-semibold">{DASHBOARD_BUCKET_LABELS[bucket]} <span className="inline-flex min-w-7 items-center justify-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">{data?.count ?? 0}</span></h2>}
+        <DashboardPeriodPicker period={period} month={month} currentMonth={currentMonth} today={today}
+          onSelect={value => { setPeriod(value); if (value.kind === 'month') setHistoryMonth(null); setPage(1); }}
+          onMoveMonth={direction => {
+            const next = addMonths(month, direction);
+            setHistoryMonth(next >= currentMonth ? null : next);
+            setPage(1);
+          }} />
+      </div>
+      {!query.isError && <>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div role="group" aria-label="Kategori antrean" className="flex max-w-full flex-wrap gap-1 rounded-lg border-2 border-solid border-primary bg-muted/30 p-1">
             {(['active', ...(scope === 'signer' ? ['ready','blocked','upcoming'] : ['returned']), 'completed','rejected'] as DashboardBucket[]).map(value =>

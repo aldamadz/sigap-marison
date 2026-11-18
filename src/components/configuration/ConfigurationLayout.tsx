@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server, ShieldCheck, CalendarClock } from "lucide-react";
+import { BriefcaseBusiness, Hash, Mail, Route, Timer, Server, ShieldCheck, CalendarClock, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/ui/Breadcrumbs";
 import {
   Select,
@@ -11,6 +11,7 @@ import {
 
 const configurationOptions = [
   {value:'/admin/configuration/maintenance',label:'Pemeliharaan Sistem',description:'Jadwal pembaruan, dampak layanan, dan pemberitahuan pengguna.',icon:CalendarClock},
+  {value:'/admin/configuration/whats-new',label:"What's New",description:'Draft, publikasi, dan riwayat pembaruan layanan.',icon:Sparkles},
   {
     value: "/admin/configuration/access",
     label: "Hak Akses",

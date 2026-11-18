@@ -13,6 +13,18 @@ ordinary/inactive/deleted/null-active/missing/non-admin profiles, forged metadat
 role revocation and replay/data/ACL preservation. User authorizes staging then
 selective production deployment; live evidence must be recorded separately.
 
+## SEC-01 Development Tool Glob Parser Mitigation (2026-11-18, #1017)
+
+Build-only mitigation for CVE-2026-112366, first verified on staging. Pin upstream picomatch
+4.0.7; the existing fail-closed installation path verifies tarball integrity and
+parser hashes, then disables extglob parsing for development tools only.
+The release gate first runs an unmodified runtime dependency audit and then
+checks all dependencies. Only the exact advisory and verified dev-only
+transitive findings are covered; other high/critical findings block release.
+Scope expires on 18 December 2026 WIB; remove the override, installer and
+dev-tool audit rule when a supported patched version
+is available. No application runtime dependency or database changes.
+
 ## DOC-15 Nonretryable PDF Supersession and Replenishing Pool (2026-11-17, #1002)
 
 User authorizes staging validation and selective production deployment after the
@@ -124,6 +136,34 @@ Genuine requester edits retain requester attribution; missing or cross-document
 provenance uses neutral wording. App-only presentation correction; no migration,
 immutable history rewrite, signed PDF regeneration, approval or external resend.
 PDF enrichment already resolves each event independently and is unchanged.
+
+## OPS-18 Standalone What's New (2026-11-13, [Codex], #958)
+
+Follow-up: popup opt-out is a default-unchecked checkbox, committed on close or
+acknowledgement. Reuse `/docs/versi/changelog` for the latest 50 published notices,
+including expired notices, independent of dismissal preferences. Migration
+20261113130000 adds active-authenticated read-only history RPC with explicit
+content allowlist; drafts, actor details and withdrawn notices remain private.
+Existing static documentation changelog stays available publicly. No new menu,
+external publication or production rollout authorized.
+
+Follow-up: popup and admin preview share a safe plain-text list renderer. Lines
+starting with `- `, `* ` or a pasted bullet render as round bullets; `1. ` / `1) `
+render as numbered lists. Other lines stay paragraphs. No HTML/Markdown execution,
+stored content rewrite, database migration or production release.
+
+Selective production candidate tracked in #1021, previously verified on staging.
+Configuration has a dedicated What's New editor,
+saved draft, safe preview, atomic publication, withdrawal and immutable audit.
+Announcements no longer depend on maintenance publish/complete. Existing edge
+maintenance schedules/history remain unchanged; legacy note values are retained
+for rollback but the new popup reads only the independent canonical notice.
+Migration20261113110000 adds private singleton state/events, authenticated active
+notice RPC and active-admin command/read RPC with optimistic revision locking.
+Server owns actor, publication UUID/time and next-midnight-WIB expiry. Existing
+per-user/session dismissals remain valid. No external notifications, business
+document changes, or Worker deployment included. Withdraw
+by reverting the independent editor/controller; retain state, audit and prefs.
 
 ## MRN-20 Fund Payload Whitespace (2026-11-13, [Codex], #954)
 
@@ -2241,3 +2281,12 @@ their scheduler propagation/tail checkpoints are recorded on #962. Main-host
 legal Worker routes and SIGAP app runtimes remain unchanged. See
 ops/status-page/cpanel/README.md for evidence, rollback and independent-release
 SHA handling. No business data, approvals or vendor requests changed.
+
+## Dashboard Date Range and Personal Submission Stars (2026-11-18, #1015)
+
+Custom dashboard range filters creation dates by inclusive WIB days before
+summary, KPI and pagination; existing monthly history behavior stays intact.
+Status Pengajuan stars are private per authorized account, stored separately
+from submission state and filtered before pagination. Verify guarded migration
+`20261118090000` against the live catalog before staging deployment. Kas Kecil
+data operations are not part of this change.

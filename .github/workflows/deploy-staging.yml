@@ -35,7 +35,7 @@ jobs:
         id: scope
         run: node scripts/status-release-scope.mjs "$BASE_SHA" >> "$GITHUB_OUTPUT"
       - run: npm run quality:changed
-      - run: npm audit --audit-level=high
+      - run: npm run audit:release
 
   deploy:
     needs: quality
