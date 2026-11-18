@@ -64,8 +64,8 @@ do $monitoring$
 declare
   definition text;
   monitoring_owner name;
-  anchor constant text := $filter$or surat.status = p_status)$filter$;
-  row_anchor constant text := $filter$'id', surat.id, 'no_surat', surat.no_surat, 'judul_surat', surat.judul_surat,$filter$;
+  anchor constant text := 'or surat.status = p_status';
+  row_anchor constant text := $filter$'judul_surat', surat.judul_surat,$filter$;
 begin
   select pg_get_functiondef(oid),pg_get_userbyid(proowner) into strict definition,monitoring_owner
   from pg_proc where oid='public.get_surat_monitoring_page(integer,integer,text,text,timestamptz,timestamptz)'::regprocedure;
@@ -80,7 +80,7 @@ begin
           select 1 from public.surat_personal_stars star
           where star.user_id = (select auth.uid()) and star.surat_id = surat.id
         ))
-        or surat.status = p_status)$filter$);
+        or surat.status = p_status$filter$);
     execute replace(definition,row_anchor,row_anchor || $row$
         'is_starred', exists (select 1 from public.surat_personal_stars star
           where star.user_id=(select auth.uid()) and star.surat_id=surat.id),$row$);

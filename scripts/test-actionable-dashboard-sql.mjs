@@ -17,8 +17,11 @@ const dashboardTools = process.argv.includes('--dashboard-tools');
 const signerScope = process.argv.includes('--signer-scope') || dashboardTools || monitoringDetails || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
 const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
-const monitoringRpcs = monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
-  monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count('))
+const monitoringRpcs = (process.argv.includes('--monitoring-staging-shape')
+  ? monitoringSource.slice(monitoringSource.indexOf('create or replace function public.get_surat_monitoring_page('),
+    monitoringSource.indexOf('create or replace function public.get_my_surat_monitoring_stats('))
+  : monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
+    monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count(')))
   + monitoringSource.slice(monitoringSource.indexOf('create or replace function public.get_my_surat_monitoring_stats('),
     monitoringSource.indexOf('create or replace function public.enforce_surat_reservation_number_scope()'));
 const signerScopeMigration = signerScope ? read('supabase/migrations/20261105050000_signer_organization_monitoring.sql') : '';
