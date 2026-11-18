@@ -30,11 +30,12 @@ export const dashboardRowLink = (row: DashboardRow, scope: DashboardScope) => {
 };
 export async function getActionableDashboard(filters: {
   scope: DashboardScope; bucket: DashboardBucket; from: string; to: string;
-  search: string; page: number; signal?: AbortSignal;
+  search: string; page: number; signal?: AbortSignal; filterCreated?: boolean;
 }): Promise<ActionableDashboardData> {
-  const { data, error } = await supabase.rpc('get_actionable_dashboard', {
+  const { data, error } = await supabase.rpc(filters.filterCreated ? 'get_actionable_dashboard_by_period' : 'get_actionable_dashboard', {
     p_scope: filters.scope, p_bucket: filters.bucket, p_from: filters.from, p_to: filters.to,
     p_search: filters.search.trim().slice(0, 100) || null, p_limit: 12, p_offset: (filters.page - 1) * 12,
+    ...(filters.filterCreated && { p_filter_created: true }),
   }).abortSignal(filters.signal as AbortSignal);
   if (error) throw error;
   if (!data || !data.summary || !Array.isArray(data.rows)) throw new Error('Ringkasan pengajuan tidak tersedia.');

@@ -106,6 +106,7 @@ if (allChangedFiles.some(file => /hrd_ga_shared_claim.*\.sql$|internal_non_asset
 if (allChangedFiles.some(file => /docker.*retention|production-deploy-lock/.test(file))) gates.add('docker-image-retention');
 if (allChangedFiles.some(file => /^security\/fail-closed\/(picomatch-backport|audit-staging)/u.test(file))) gates.add('picomatch-backport');
 for (const file of allChangedFiles) {
+  if (/dashboard_date_range_and_submission_stars.*\.sql$/u.test(file)) gates.add('dashboard-tools-sql');
   if (/pdf_superseded_nonretryable.*\.sql$|pdf_publication_supersession\.integration\.sql$/u.test(file)) gates.add('pdf-publication-sql');
   if (/requester_revision_recovery.*\.sql$/u.test(file)) gates.add('requester-revision-recovery-sql');
   if (/signer_(?:action_sla|clock_authority).*\.sql$/u.test(file)) gates.add('signer-action-sla-clock-sql');
@@ -173,6 +174,11 @@ for (const gate of gates) {
   }
   if (gate === 'pdf-publication-sql') {
     run('node',['scripts/test-keu10-workflow-sql.mjs','--pdf-publication']);
+    continue;
+  }
+  if (gate === 'dashboard-tools-sql') {
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--dashboard-tools']);
+    run('node', ['scripts/test-actionable-dashboard-sql.mjs', '--dashboard-tools', '--monitoring-staging-shape']);
     continue;
   }
   if (gate === 'hrd-examiner-revision-sql') {

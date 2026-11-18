@@ -32,6 +32,22 @@ const renderDashboard = (path='/dashboard') => {
 };
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe('actionable dashboard', () => {
+  it('applies whole WIB days to the server range and resets to monthly history', async () => {
+    mocks.get.mockResolvedValue(bundle({count:25}));renderDashboard();
+    await screen.findByText(row.title);
+    fireEvent.click(screen.getByRole('button', {name:'Halaman berikutnya'}));
+    await userEvent.click(screen.getByRole('button', {name:'Rentang tanggal'}));
+    fireEvent.change(screen.getByLabelText('Dari tanggal'), {target:{value:'2026-11-19'}});
+    fireEvent.change(screen.getByLabelText('Sampai tanggal'), {target:{value:'2026-11-17'}});
+    expect(screen.getByRole('button',{name:'Terapkan'})).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Dari tanggal'), {target:{value:'2026-11-17'}});
+    await userEvent.click(screen.getByRole('button', {name:'Terapkan'}));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({
+      from:'2026-11-16T17:00:00.000Z',to:'2026-11-17T17:00:00.000Z',filterCreated:true,page:1,
+    })));
+    await userEvent.click(screen.getByRole('button', {name:'Reset tanggal'}));
+    await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({filterCreated:false,page:1})));
+  });
   it('shows a paused SLA and reasons instead of overdue styling or a signer reminder', async () => {
     mocks.get.mockResolvedValue(bundle({rows:[{...row,bucket:'blocked',sla_paused:true,sla_pause_reasons:['Menunggu tim pemeriksa','Menunggu rekomendasi'],elapsed_minutes:300}]}));
     renderDashboard();

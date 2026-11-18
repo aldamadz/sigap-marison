@@ -13,11 +13,15 @@ const receivingAuthority = process.argv.includes('--receiving-authority');
 const weekly = process.argv.includes('--weekly') || actionClock || receivingAuthority;
 const receiving = process.argv.includes('--receiving') || weekly;
 const monitoringDetails = process.argv.includes('--monitoring-details');
-const signerScope = process.argv.includes('--signer-scope') || monitoringDetails || receiving || notifications;
+const dashboardTools = process.argv.includes('--dashboard-tools');
+const signerScope = process.argv.includes('--signer-scope') || dashboardTools || monitoringDetails || receiving || notifications;
 const monitoringRecovery = read('supabase/migrations/20260923130000_production_runtime_contract_recovery.sql');
 const monitoringSource = read('supabase/migrations/20260814103000_surat_organizational_scope_and_auto_approval.sql');
-const monitoringRpcs = monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
-  monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count('))
+const monitoringRpcs = (process.argv.includes('--monitoring-staging-shape')
+  ? monitoringSource.slice(monitoringSource.indexOf('create or replace function public.get_surat_monitoring_page('),
+    monitoringSource.indexOf('create or replace function public.get_my_surat_monitoring_stats('))
+  : monitoringRecovery.slice(monitoringRecovery.indexOf('create or replace function public.get_surat_monitoring_page('),
+    monitoringRecovery.indexOf('create or replace function public.get_compact_inbox_count(')))
   + monitoringSource.slice(monitoringSource.indexOf('create or replace function public.get_my_surat_monitoring_stats('),
     monitoringSource.indexOf('create or replace function public.enforce_surat_reservation_number_scope()'));
 const signerScopeMigration = signerScope ? read('supabase/migrations/20261105050000_signer_organization_monitoring.sql') : '';
@@ -147,6 +151,13 @@ try {
  if(!ready)throw Error('Disposable PostgreSQL not ready');
  run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],fixture+migration+migration+labels+labels
   +(signerScope ? signerScopeSetup+monitoringRpcs+signerScopeMigration+signerScopeMigration : '')+assertions+signerScopeAssertions);
+ if (dashboardTools) {
+  const migration = read('supabase/migrations/20261118090000_dashboard_date_range_and_submission_stars.sql');
+  const output=run(['exec','-i',container,'psql','-U','sigap_fixture_root','-d','postgres','-v','ON_ERROR_STOP=1'],
+   migration+migration+read('supabase/tests/dashboard_date_range_and_submission_stars.integration.sql'));
+  if (!output.includes('Dashboard range and private stars passed')) throw Error('Missing dashboard tools assertions');
+  console.log('Dashboard range and private stars: scope, pagination, inclusive WIB days, RLS and replay passed.');
+ }
  if(monitoringDetails){
   const patch=process.argv.includes('--baseline') ? '' : read('supabase/migrations/20261112100000_monitoring_readable_details.sql');
   const approvalPolicySource=read('supabase/migrations/20260608093000_harden_surat_approval.sql');
