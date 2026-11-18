@@ -3,19 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import { addMonths, format, startOfMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { ArrowRight, BellRing, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FilePenLine, FileText, Inbox, RefreshCw, Search, Timer, TriangleAlert, Undo2, Users, XCircle } from 'lucide-react';
+import { ArrowRight, BellRing, Building2, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FilePenLine, FileText, Inbox, RefreshCw, Search, Timer, TriangleAlert, Undo2, Users, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/ui/Breadcrumbs';
 import { cn } from '@/lib/utils';
 import { dashboardRowLink, getActionableDashboard, remindDashboardRequest, type DashboardBucket, type DashboardRow, type DashboardScope } from '@/services/actionable-dashboard.service';
-import { isValidWorkDate, todayWorkDate, workDateRangeToUtcRange } from '@/features/work-calendar/lib/work-calendar-date';
+import { todayWorkDate, workDateRangeToUtcRange, workWeekDates } from '@/features/work-calendar/lib/work-calendar-date';
 import { toast } from 'sonner';
 import {ReceivingPeriodNotice} from '@/components/surat/ReceivingPeriodNotice';
 import { PersonalReminderButton } from '@/components/notifications/PersonalReminderButton';
+import { DashboardPeriodPicker, type DashboardPeriod } from './DashboardPeriodPicker';
 
 export const DASHBOARD_BUCKET_LABELS: Record<DashboardBucket, string> = {
   all: 'Semua', active: 'Antrean aktif', ready: 'Perlu tanda tangan', blocked: 'Menunggu kelengkapan',
@@ -61,10 +60,11 @@ export function ActionableDashboard({ userId }: { userId: string }) {
   const requestedScope=['mine','signer','team'].includes(params.get('scope') || '')?params.get('scope') as DashboardScope:null;
   const [scope, setScope] = useState<DashboardScope>(requestedScope || 'mine');
   const [bucket, setBucket] = useState<DashboardBucket>('active');
-  const [month, setMonth] = useState(() => startOfMonth(new Date(`${todayWorkDate()}T12:00:00`)));
-  const [range, setRange] = useState<{ start: string; end: string } | null>(null);
-  const [draftRange, setDraftRange] = useState(() => ({ start: todayWorkDate(), end: todayWorkDate() }));
-  const [rangeOpen, setRangeOpen] = useState(false);
+  const today = todayWorkDate();
+  const currentMonth = startOfMonth(new Date(`${today}T12:00:00`));
+  const [historyMonth, setHistoryMonth] = useState<Date | null>(null);
+  const month = historyMonth ?? currentMonth;
+  const [period, setPeriod] = useState<DashboardPeriod>({ kind: 'month' });
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [reminding, setReminding] = useState<string | null>(null);
@@ -77,13 +77,16 @@ export function ActionableDashboard({ userId }: { userId: string }) {
     finally { setReminding(null); }
   };
   const deferredSearch = useDeferredValue(search);
-  const custom = range ? workDateRangeToUtcRange(range.start, range.end) : null;
-  const from = custom?.startUtc ?? new Date(`${format(month, 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
-  const to = custom?.endUtc ?? new Date(`${format(addMonths(month, 1), 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
-  const validRange = isValidWorkDate(draftRange.start) && isValidWorkDate(draftRange.end) && draftRange.start <= draftRange.end;
+  const week = period.kind === 'week' ? workWeekDates(today) : null;
+  const creationDates = period.kind === 'custom' ? period.range
+    : period.kind === 'today' ? { start: today, end: today }
+    : week ? { start: week[0], end: week[6] } : null;
+  const bounds = creationDates ? workDateRangeToUtcRange(creationDates.start, creationDates.end) : null;
+  const from = bounds?.startUtc ?? new Date(`${format(month, 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
+  const to = bounds?.endUtc ?? new Date(`${format(addMonths(month, 1), 'yyyy-MM')}-01T00:00:00+07:00`).toISOString();
   const query = useQuery({
-    queryKey: ['actionable-dashboard', userId, scope, bucket, from, to, Boolean(custom), deferredSearch, page],
-    queryFn: ({ signal }) => getActionableDashboard({ scope, bucket, from, to, filterCreated: Boolean(custom), search: deferredSearch, page, signal }),
+    queryKey: ['actionable-dashboard', userId, scope, bucket, from, to, Boolean(bounds), deferredSearch, page],
+    queryFn: ({ signal }) => getActionableDashboard({ scope, bucket, from, to, filterCreated: Boolean(bounds), search: deferredSearch, page, signal }),
     enabled: Boolean(userId), staleTime: 20_000, refetchInterval: 60_000,
   });
   const data = query.data;
@@ -148,44 +151,13 @@ export function ActionableDashboard({ userId }: { userId: string }) {
       </>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {!query.isError && <h2 className="flex items-center gap-2 text-base font-semibold">{DASHBOARD_BUCKET_LABELS[bucket]} <span className="inline-flex min-w-7 items-center justify-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">{data?.count ?? 0}</span></h2>}
-        <div role="group" aria-label="Periode Dashboard" className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:ml-auto">
-          {!range && <div className="flex max-w-full flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>Riwayat selesai / ditolak</span>
-            <div className="flex items-center rounded-md border border-border bg-card p-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan sebelumnya" onClick={() => { setMonth(m => addMonths(m, -1)); setPage(1); }}><ChevronLeft className="h-4 w-4" /></Button>
-              <CalendarDays className="ml-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="min-w-28 px-2 text-center text-sm font-medium text-foreground">{format(month, 'MMMM yyyy', { locale: id })}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Bulan berikutnya" disabled={month >= startOfMonth(new Date())} onClick={() => { setMonth(m => addMonths(m, 1)); setPage(1); }}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-          </div>}
-          <Popover open={rangeOpen} onOpenChange={open => {
-            if (open) setDraftRange(range ?? { start: todayWorkDate(), end: todayWorkDate() });
-            setRangeOpen(open);
-          }}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-auto min-h-9 max-w-full gap-2 whitespace-normal text-left">
-                <CalendarDays className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {range ? `Tanggal dibuat: ${range.start} s.d. ${range.end}` : 'Rentang tanggal'}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 max-w-[calc(100vw-2rem)]">
-              <form className="space-y-3" onSubmit={event => {
-                event.preventDefault();
-                if (!validRange) return;
-                setRange(draftRange); setPage(1); setRangeOpen(false);
-              }}>
-                <p className="text-sm font-semibold">Tanggal dibuat (WIB)</p>
-                <div className="space-y-1.5"><Label htmlFor="dashboard-range-start">Dari tanggal</Label>
-                  <Input id="dashboard-range-start" type="date" required value={draftRange.start}
-                    onChange={event => setDraftRange(previous => ({ ...previous, start: event.target.value }))} /></div>
-                <div className="space-y-1.5"><Label htmlFor="dashboard-range-end">Sampai tanggal</Label>
-                  <Input id="dashboard-range-end" type="date" required min={draftRange.start || undefined} value={draftRange.end}
-                    onChange={event => setDraftRange(previous => ({ ...previous, end: event.target.value }))} /></div>
-                <div className="flex justify-end"><Button type="submit" size="sm" disabled={!validRange}>Terapkan</Button></div>
-              </form>
-            </PopoverContent>
-          </Popover>
-          {range && <Button variant="ghost" size="sm" onClick={() => { setRange(null); setPage(1); }}>Reset tanggal</Button>}
-        </div>
+        <DashboardPeriodPicker period={period} month={month} currentMonth={currentMonth} today={today}
+          onSelect={value => { setPeriod(value); if (value.kind === 'month') setHistoryMonth(null); setPage(1); }}
+          onMoveMonth={direction => {
+            const next = addMonths(month, direction);
+            setHistoryMonth(next >= currentMonth ? null : next);
+            setPage(1);
+          }} />
       </div>
       {!query.isError && <>
         <div className="flex flex-wrap items-center justify-between gap-3">
