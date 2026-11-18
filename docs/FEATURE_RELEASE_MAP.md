@@ -13,6 +13,17 @@ ordinary/inactive/deleted/null-active/missing/non-admin profiles, forged metadat
 role revocation and replay/data/ACL preservation. User authorizes staging then
 selective production deployment; live evidence must be recorded separately.
 
+## SEC-01 Staging Glob Parser Mitigation (2026-11-18, #1017)
+
+Staging-only build mitigation for CVE-2026-112366. Pin upstream picomatch
+4.0.7; the existing fail-closed installation path verifies tarball integrity and
+parser hashes, then disables extglob parsing for development tools only.
+The staging audit accepts only the exact advisory and verified dev-only
+transitive findings while blocking unknown high/critical findings. Production
+keeps its original audit. Scope expires on 18 December 2026 WIB; remove the
+override, installer and staging audit rule when a supported patched version
+is available. No application runtime dependency or database changes.
+
 ## DOC-15 Nonretryable PDF Supersession and Replenishing Pool (2026-11-17, #1002)
 
 User authorizes staging validation and selective production deployment after the
