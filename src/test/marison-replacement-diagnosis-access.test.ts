@@ -17,7 +17,7 @@ function harness(overrides = {}, forbidden = false) {
     return { id: "admin" };
   });
   const context = { supabase: { from, rpc }, marisonDeploymentEnvironment: "production", diagnoseVendorRejection,
-    assertSameOrigin: vi.fn(), requireAdminUser, getBearerToken: () => "private-test-token",
+    assertSameOrigin: vi.fn(), assertMarisonProcurementRoute: vi.fn(), requireAdminUser, getBearerToken: () => "private-test-token",
     readJsonBody: async () => ({ reason: "Periksa diagnosis Aset", confirmProductionSend: true }) };
   const result = vm.runInNewContext(`${handlers}\n({preflightMarisonOutboundReplacement,createMarisonOutboundReplacement});`, context);
   return { ...result, rpc, from, requireAdminUser };
