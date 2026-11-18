@@ -3,27 +3,40 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReleaseNoticeArchive } from '@/pages/docs/ReleaseNoticeArchive';
 import { VersionHistoryPanel } from '@/pages/docs/VersionHistoryPanel';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import userEvent from '@testing-library/user-event';
 import { APP_RELEASES } from '@/lib/app-releases';
 
 const mocks=vi.hoisted(()=>({history:vi.fn()}));
 vi.mock('@/services/release-notice.service',()=>({releaseNoticeService:mocks}));
 const release={id:'release-1',publishedAt:'2026-11-12T07:00:00Z',expiresAt:'2026-11-12T17:00:00Z',items:['- Pengajuan lebih rapi','- Pengingat pekerjaan']};
-const mount=(userId?:string)=>render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}})}><ReleaseNoticeArchive userId={userId} /></QueryClientProvider>);
+const appVersion = () => screen.getByRole('button', {name:/^Versi v1\.10\.0/});
+const LocationSearch = () => <output aria-label="Alamat pencarian">{useLocation().search}</output>;
+const mount = (userId?: string, search = '') => render(
+  <MemoryRouter initialEntries={[`/docs/versi/changelog${search}`]}>
+    <QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}>
+      <ReleaseNoticeArchive userId={userId} />
+      <LocationSearch />
+    </QueryClientProvider>
+  </MemoryRouter>,
+);
 beforeEach(()=>{vi.clearAllMocks();mocks.history.mockResolvedValue({releases:[release]});});
 afterEach(cleanup);
 
 describe('published notices on the existing documentation changelog',()=>{
   it('does not request private announcements without an authenticated session',()=>{
     mount();expect(screen.getByText(/Masuk ke SIGAP/)).toBeInTheDocument();expect(mocks.history).not.toHaveBeenCalled();
-    expect(screen.getByRole('heading', {name:'Versi v1.10.0'})).toBeVisible();
+    expect(appVersion()).toHaveAttribute('aria-expanded', 'false');
   });
   it('keeps expired or dismissed announcements readable with WIB dates and bullets',async()=>{
-    mount('user-a');await screen.findByText('Pengajuan lebih rapi');
-    expect(screen.getByText(/12 November 2026/)).toHaveAttribute('dateTime',release.publishedAt);
-    const notice = screen.getByText('Pengajuan lebih rapi').closest('article')!;
-    expect(within(notice).getByRole('list')).toHaveClass('list-disc');expect(screen.queryByRole('dialog')).toBeNull();
+    mount('user-a');
+    const notice = await screen.findByRole('button', {name:/12 November 2026/});
+    expect(within(notice).getByText('12 November 2026')).toHaveAttribute('dateTime',release.publishedAt);
+    expect(screen.queryByText('Pengajuan lebih rapi')).toBeNull();
+    notice.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getByText('Pengajuan lebih rapi').closest('ul')).toHaveClass('list-disc');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
   it('renders a dated timeline and marks only the first release as latest', async () => {
     mocks.history.mockResolvedValue({releases:[
@@ -31,20 +44,26 @@ describe('published notices on the existing documentation changelog',()=>{
       {...release, id:'older', publishedAt:'2026-11-11T01:00:00Z', items:['1. Rilis lama']},
     ]});
     mount('user-a');
-    await screen.findByText('Pengajuan lebih rapi');
-    expect(screen.getAllByRole('article')).toHaveLength(3);
+    const newerNotice = await screen.findByRole('button', {name:/12 November 2026/});
+    expect(screen.getAllByRole('button')).toHaveLength(3);
     expect(screen.getAllByText('Terbaru')).toHaveLength(1);
     expect(screen.getByText('14.00 WIB')).toBeInTheDocument();
+    await userEvent.click(newerNotice);
     expect(screen.getAllByText('Pembaruan SIGAP')).toHaveLength(1);
+    expect(screen.getByText('Pengajuan lebih rapi')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', {name:/11 November 2026/}));
+    expect(newerNotice).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByText('Rilis lama')).toBeInTheDocument();
   });
   it('keeps the official version visible when there are no archived announcements',async()=>{
     mocks.history.mockResolvedValue({releases:[]});mount('user-a');
     expect(await screen.findByText('Belum ada pengumuman lain.')).toBeInTheDocument();
-    const version = screen.getByRole('heading', {name:'Versi v1.10.0'}).closest('article')!;
-    expect(within(version).getByText('18 November 2026')).toHaveAttribute('datetime','2026-11-18');
-    expect(within(version).getByText('Penambahan fitur')).toBeVisible();
-    expect(within(version).queryByText('Optimasi')).toBeNull();
+    expect(within(appVersion()).getByText('18 November 2026')).toHaveAttribute('datetime','2026-11-18');
+    expect(screen.queryByText('Penambahan fitur')).toBeNull();
+    await userEvent.click(appVersion());
+    expect(screen.getByText('Penambahan fitur')).toBeVisible();
+    expect(screen.queryByText('Optimasi')).toBeNull();
+    expect(screen.queryByRole('navigation', {name:'Halaman pembaruan aplikasi'})).toBeNull();
   });
   it('attaches the existing notice by exact ID without assigning versions by date', async () => {
     mocks.history.mockResolvedValue({releases:[
@@ -52,23 +71,70 @@ describe('published notices on the existing documentation changelog',()=>{
       {...release, id:'other-same-day', publishedAt:'2026-11-18T04:00:00Z', items:['Pengumuman berbeda di hari yang sama']},
     ]});
     mount('user-a');
-    const original = await screen.findByText("Lihat pengumuman What's New");
-    const version = screen.getByRole('heading', {name:'Versi v1.10.0'}).closest('article')!;
-    expect(version).toContainElement(original);
+    const other = await screen.findByRole('button', {name:/^18 November 2026/});
+    await userEvent.click(appVersion());
+    const version = screen.getByRole('region', {name:/^Versi v1\.10\.0/});
+    const original = within(version).getByText("Lihat pengumuman What's New");
     await userEvent.click(original);
     expect(within(version).getByText('Pengumuman asli')).toBeVisible();
-    const other = screen.getByText('Pengumuman berbeda di hari yang sama').closest('article')!;
-    expect(within(other).queryByText(/v1\.10\.0/)).toBeNull();
+    await userEvent.click(other);
+    expect(appVersion()).toHaveAttribute('aria-expanded', 'false');
+    const archived = screen.getByRole('region', {name:/^18 November 2026/});
+    expect(within(archived).getByText('Pengumuman berbeda di hari yang sama')).toBeVisible();
+    expect(within(archived).queryByText(/v1\.10\.0/)).toBeNull();
   });
   it('offers retry instead of displaying internal errors',async()=>{
     mocks.history.mockRejectedValue(Error('private SQL'));mount('user-a');
     await screen.findByRole('alert',{}, {timeout:3000});expect(screen.queryByText('private SQL')).toBeNull();
     mocks.history.mockResolvedValue({releases:[release]});fireEvent.click(screen.getByRole('button',{name:'Coba lagi'}));
-    expect(await screen.findByText('Pengajuan lebih rapi')).toBeInTheDocument();
+    expect(await screen.findByRole('button', {name:/12 November 2026/})).toBeInTheDocument();
   });
   it('never shows a previous account cache after logout',async()=>{
-    const view=mount('user-a');await screen.findByText('Pengajuan lebih rapi');view.unmount();
-    mount();await waitFor(()=>expect(screen.queryByText('Pengajuan lebih rapi')).toBeNull());
+    const client = new QueryClient();
+    const tree = (id?: string) => <MemoryRouter>
+      <QueryClientProvider client={client}><ReleaseNoticeArchive userId={id} /></QueryClientProvider>
+    </MemoryRouter>;
+    const view = render(tree('user-a'));
+    await userEvent.click(await screen.findByRole('button', {name:/12 November 2026/}));
+    expect(screen.getByText('Pengajuan lebih rapi')).toBeVisible();
+    view.rerender(tree());
+    await waitFor(() => expect(screen.queryByText('Pengajuan lebih rapi')).toBeNull());
+    expect(screen.queryByText('12 November 2026')).toBeNull();
+    expect(screen.getByText(/Masuk ke SIGAP/)).toBeVisible();
+  });
+
+  const severalNotices = () => Array.from({length: 7}, (_, index) => ({
+    ...release, id: `archive-${index}`, publishedAt: `2026-11-${17 - index}T07:00:00Z`,
+    items: [`Isi arsip ${index + 1}`],
+  }));
+
+  it('counts the release and legacy announcements together without counting the linked notice twice', async () => {
+    mocks.history.mockResolvedValue({ releases: [...severalNotices(), {...release, id: APP_RELEASES[0].announcementId}] });
+    mount('user-a');
+    const pagination = await screen.findByRole('navigation', {name:'Halaman pembaruan aplikasi'});
+    expect(screen.getByText('Halaman 1 dari 2')).toBeVisible();
+    expect(screen.getAllByRole('button', {expanded:false})).toHaveLength(5);
+    expect(screen.queryByRole('button', {name:/13 November 2026/})).toBeNull();
+    const previous = within(pagination).getByRole('button', {name:'Halaman sebelumnya'});
+    const next = within(pagination).getByRole('button', {name:'Halaman berikutnya'});
+    expect(previous).toBeDisabled();
+    await userEvent.click(next);
+    expect(screen.getByText('Halaman 2 dari 2')).toBeVisible();
+    expect(screen.getByLabelText('Alamat pencarian')).toHaveTextContent('?page=2');
+    expect(screen.getAllByRole('button', {expanded:false})).toHaveLength(3);
+    expect(screen.queryByRole('button', {name:/^Versi v1\.10\.0/})).toBeNull();
+    await userEvent.click(screen.getByRole('button', {name:/13 November 2026/}));
+    expect(screen.getByText('Isi arsip 5')).toBeVisible();
+    expect(next).toBeDisabled();
+    await userEvent.click(previous);
+    expect(appVersion()).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('opens a bookmarked app history page once the authenticated archive loads', async () => {
+    mocks.history.mockResolvedValue({ releases: severalNotices() });
+    mount('user-a', '?page=2');
+    expect(await screen.findByText('Halaman 2 dari 2')).toBeVisible();
+    expect(screen.getAllByRole('button', {expanded:false})).toHaveLength(3);
   });
 });
 
@@ -83,7 +149,7 @@ describe('version tabs', () => {
 
   it('keeps the existing changelog link on release announcements and separates guides', async () => {
     mountTabs('/docs/versi/changelog', 'user-a');
-    await screen.findByText('Pengajuan lebih rapi');
+    await userEvent.click(await screen.findByRole('button', {name:/12 November 2026/}));
     expect(screen.getByRole('tab', {name:'Pembaruan aplikasi'})).toHaveAttribute('aria-selected','true');
     await userEvent.click(screen.getByRole('tab', {name:'Riwayat dokumentasi'}));
     await userEvent.click(screen.getByRole('button', {name:/v1\.28\.0/}));
