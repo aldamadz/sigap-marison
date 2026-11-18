@@ -59,11 +59,13 @@ describe("automatic deployment boundaries", () => {
     expect(deploy).not.toContain("migration repair");
   });
 
+  it("retries transient public smoke failures on staging without skipping required checks", () => {
+    expect(deploy).toMatch(/public_smoke_retry=\(\)[\s\S]*?if \[\[ "\$environment" == staging \]\]; then[\s\S]*?public_smoke_retry=\(--retry 6 --retry-delay 4 --retry-max-time 30\)\s*fi/u);
+    expect(deploy).toContain("for path in /health/live /health/ready /; do");
+    expect(deploy).toMatch(/"\$\{public_smoke_retry\[@\]\}" --output \/dev\/null "\$domain\$path" \|\| \{\s*echo "Public smoke check failed: \$path" >&2\s*exit 1/u);
+  });
+
   it("bounds every public smoke probe so a stalled connection can roll back", () => {
-    for (const path of ["health/live", "health/ready", ""]) {
-      expect(deploy).toContain(
-        `curl --fail --silent --show-error --connect-timeout 10 --max-time 20 --output /dev/null "$domain/${path}"`,
-      );
-    }
+    expect(deploy).toMatch(/for path in \/health\/live \/health\/ready \/; do\s+curl --fail --silent --show-error --connect-timeout 10 --max-time 20/u);
   });
 });
