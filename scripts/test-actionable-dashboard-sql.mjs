@@ -257,7 +257,7 @@ try {
     const scopeSetup = `
      alter table public.master_forms add primary key(id),add column nomor_form text;
      create table public.form_usages(id uuid primary key,form_id uuid references public.master_forms(id),name text,status text);
-     alter table public.surat_registrasi add column form_id uuid,add column form_usage_id uuid;
+     alter table public.surat_registrasi add column form_usage_id uuid;
      alter table public.department_kpi_configs enable row level security;
      create policy department_kpi_configs_select_authenticated on public.department_kpi_configs for select to authenticated using(true);
     `;

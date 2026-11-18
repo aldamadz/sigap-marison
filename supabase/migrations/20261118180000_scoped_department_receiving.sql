@@ -116,14 +116,14 @@ create or replace function public.protect_receiving_document_target()
 returns trigger language plpgsql security invoker set search_path='' as $$
 begin
  if current_user in ('authenticated','anon') and
-    (new.form_id,new.form_usage_id) is distinct from (old.form_id,old.form_usage_id) then
+    (new.penggunaan_id,new.form_usage_id) is distinct from (old.penggunaan_id,old.form_usage_id) then
   raise exception 'Form dan kegunaan hanya dapat diubah melalui alur pengajuan.' using errcode='42501';
  end if;
  return new;
 end $$;
 revoke all on function public.protect_receiving_document_target() from public,anon,authenticated;
 drop trigger if exists protect_receiving_document_target on public.surat_registrasi;
-create trigger protect_receiving_document_target before update of form_id,form_usage_id on public.surat_registrasi
+create trigger protect_receiving_document_target before update of penggunaan_id,form_usage_id on public.surat_registrasi
  for each row execute function public.protect_receiving_document_target();
 
 create or replace function public.pick_department_receiving_window(
@@ -218,8 +218,9 @@ begin
    join public.master_departments d on d.id=p.department_id where p.id=new.user_id;
   if dept is not null then
    select f.id,u.id into form_id,usage_id from public.surat_registrasi s
-    left join public.master_forms f on f.id=s.form_id
-    left join public.form_usages u on u.id=s.form_usage_id and u.form_id=f.id
+    left join public.form_usages u on u.id=s.form_usage_id
+    left join public.master_penggunaan_detail legacy on s.form_usage_id is null and legacy.id=s.penggunaan_id
+    left join public.master_forms f on f.id=coalesce(u.form_id,legacy.form_id)
     where s.id=new.surat_id;
    new.sla_policy_snapshot:=public.department_receiving_policy(dept,now(),form_id,usage_id);
   end if;

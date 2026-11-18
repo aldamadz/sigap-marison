@@ -53,7 +53,7 @@ update department_receiving_settings set enabled=false where dept_id=tid(2);
 select check_ok((department_receiving_policy(tid(2),'2026-11-05 10:00+07',tid(701),null)#>>'{receiving,available_at}')::timestamptz
  ='2026-11-09 08:00+07','scoped rule stays active even if general defaults are off');
 
-update surat_registrasi set form_id=tid(701),form_usage_id=tid(703) where id=tid(13);
+update surat_registrasi set form_usage_id=tid(703) where id=tid(13);
 insert into department_receiving_scoped_rules(dept_id,scope_kind,scope_id,cadence,period_start,enabled,open_day,open_time,cutoff_day,cutoff_time)
  values(tid(2),'usage',tid(703),'weekly',date_trunc('week',now() at time zone 'Asia/Jakarta')::date,true,1,'00:00',1,'00:01')
  on conflict(dept_id,scope_kind,scope_id,cadence,period_start) do update set enabled=true,open_time='00:00',cutoff_day=1,cutoff_time='00:01';
@@ -61,6 +61,12 @@ insert into surat_signatures(id,surat_id,user_id,step_order,available_at,signer_
  values(tid(9960),tid(13),tid(3),2,now(),jsonb_build_object('form_id',tid(702),'form_usage_id',tid(704)));
 select check_ok((select sla_policy_snapshot#>>'{receiving,week_scope}'='usage' from surat_signatures where id=tid(9960)),
  'activation resolves the registered usage, not signer snapshot');
+insert into master_penggunaan_detail values(tid(706),tid(701));
+update surat_registrasi set form_usage_id=null,penggunaan_id=tid(706) where id=tid(13);
+insert into surat_signatures(id,surat_id,user_id,step_order,available_at) values(tid(9961),tid(13),tid(3),3,now());
+select check_ok((select sla_policy_snapshot#>>'{receiving,week_scope}'='form' from surat_signatures where id=tid(9961)),
+ 'legacy registration uses its linked master form');
+update surat_registrasi set form_usage_id=tid(703) where id=tid(13);
 create temp table scoped_before as select sla_policy_snapshot from surat_signatures where id=tid(9960);
 delete from department_receiving_scoped_rules where dept_id=tid(2);
 update surat_signatures set signer_snapshot='{}' where id=tid(9960);
@@ -76,6 +82,8 @@ do $$begin
  update surat_registrasi set form_usage_id=tid(703) where id=tid(13);
  if not found then raise exception 'fixture cannot exercise workflow guard';end if;
  begin update surat_registrasi set form_usage_id=tid(704) where id=tid(13);raise exception 'registered workflow not protected';
+ exception when insufficient_privilege then null;end;
+ begin update surat_registrasi set penggunaan_id=null where id=tid(13);raise exception 'legacy workflow not protected';
  exception when insufficient_privilege then null;end;
 end $$;
 reset role;
