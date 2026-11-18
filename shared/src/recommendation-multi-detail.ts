@@ -53,6 +53,8 @@ export type RecommendationParentItem = {
   }>;
   location: string;
   pic: string;
+  registration_number?: string;
+  damage_description?: string;
   details: RecommendationDetail[];
   legacy_fields?: Record<string, unknown>;
 };
@@ -92,6 +94,7 @@ const knownParentKeys = new Set([
   "parent_item_notes", "original_name", "original_quantity", "original_notes", "applicant_original",
   "recommendation_status", "status", "is_recommended", "rejection_reason", "reason", "alasan",
   "keterangan", "location", "lokasi", "pic", "lokasi_pic", "details", "recommendation_details", "items",
+  "registration_number", "no_registrasi", "damage_description", "kerusakan",
 ]);
 
 const knownDetailKeys = new Set([
@@ -277,6 +280,8 @@ export function readLegacyRecommendationItems(rows: unknown): RecommendationMult
         applicant_original: Object.freeze({ name: originalName, quantity: originalQuantity, notes: originalNotes }),
         location,
         pic,
+        ...(typeof (row.registration_number ?? row.no_registrasi) === "string" && { registration_number: text(row.registration_number ?? row.no_registrasi) }),
+        ...(typeof (row.damage_description ?? row.kerusakan) === "string" && { damage_description: text(row.damage_description ?? row.kerusakan) }),
         details: [],
         ...(unknownFields(row, knownParentKeys) && { legacy_fields: unknownFields(row, knownParentKeys) }),
       };
@@ -337,6 +342,8 @@ function parentFields(parent: RecommendationParentItem, parentIndex: number): Le
     is_recommended: parent.status === "recommended",
     ...(parent.location && { location: parent.location }),
     ...(parent.pic && { pic: parent.pic }),
+    ...(parent.registration_number !== undefined && { no_registrasi: parent.registration_number.trim() }),
+    ...(parent.damage_description !== undefined && { kerusakan: parent.damage_description.trim() }),
     ...(locationPic && { lokasi_pic: locationPic }),
   };
 }
@@ -376,6 +383,7 @@ export function flattenRecommendationItems(model: RecommendationMultiDetail): Le
         nama_barang: detail.name,
         jumlah: detail.quantity,
         notes: detail.notes,
+        keterangan: detail.notes,
         recommendation_action: action,
         service: action === "service" ? "✓" : "",
         ganti: action === "ganti" ? "✓" : "",
