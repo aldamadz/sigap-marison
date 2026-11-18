@@ -8,7 +8,7 @@ export const monitoringDocs: DocsEntry = {
     menu: "Layanan Surat > Status Pengajuan",
     audience: "user",
     icon: SearchCheck,
-    version: "v1.0.0",
+    version: DOCS_VERSION,
     updatedAt: DOCS_UPDATED_AT,
     summary: "Pantau pengajuan sendiri dan progres pengajuan yang melibatkan penandatangan dari departemen atau kantor Anda.",
     whenToUse: [
@@ -22,6 +22,7 @@ export const monitoringDocs: DocsEntry = {
       "Cari dokumen berdasarkan judul, nomor, atau status.",
       "Buka detail untuk melihat timeline dan dokumen.",
       "Gunakan tombol dokumen atau lampiran bila perlu pemeriksaan visual.",
+      "Klik ikon bintang untuk menandai pengajuan. Pilih filter Ditandai untuk membukanya kembali.",
     ],
     examples: [
       "Setelah membuat surat, pantau apakah dokumen masih proses, selesai, atau ditolak.",
@@ -35,6 +36,11 @@ export const monitoringDocs: DocsEntry = {
   };
 
 export const monitoringDetailSections: DocsSection[] = [
+    {
+      type: "callout",
+      title: "Bintang pribadi",
+      description: "Bintang hanya terlihat oleh akun Anda dan tidak mengubah status, hak akses, atau alur persetujuan. Klik bintang lagi untuk melepas tanda.",
+    },
     {
       type: "table",
       title: "Membaca status pengajuan",

@@ -68,4 +68,5 @@ export interface DocsChangelogEntry {
   version: string;
   date: string;
   changes: string[];
+  guides?: string[];
 }

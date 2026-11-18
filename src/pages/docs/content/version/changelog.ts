@@ -1,6 +1,17 @@
 import { type DocsChangelogEntry } from "../types";
+import { DOCS_UPDATED_AT, DOCS_VERSION } from "../metadata";
 
 export const DOCS_CHANGELOG: DocsChangelogEntry[] = [
+  {
+    version: DOCS_VERSION,
+    date: DOCS_UPDATED_AT,
+    changes: [
+      "Melengkapi panduan Kas Kecil KC/KCP, revisi pengajuan, serta Kalender Kerja dan pengingat pribadi.",
+      "Menjelaskan filter periode Dashboard serta bintang dan filter Ditandai di Status Pengajuan.",
+      "Memperbarui panduan SLA dan periode penerimaan, serta menambahkan panduan What's New dan maintenance.",
+    ],
+    guides: ["request-categories", "follow-up", "calendar", "dashboard", "monitoring", "admin-sla", "admin-release-operations"],
+  },
   {
     version: "v1.27.0", date: "21 Oktober 2026",
     changes: ["Menambahkan panduan Lihat payload pada Antrean Outbound: JSON tersimpan per generasi, endpoint, hash, dan salin JSON tanpa mengirim ulang."],

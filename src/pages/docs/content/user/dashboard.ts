@@ -1,10 +1,10 @@
 import { BarChart3 } from 'lucide-react';
 import type { DocsEntry } from '../types';
-import { DOCS_VERSION } from '../metadata';
+import { DOCS_UPDATED_AT, DOCS_VERSION } from '../metadata';
 
 export const dashboardDocs: DocsEntry = {
   id: 'dashboard', title: 'Dashboard', menu: 'Dashboard', audience: 'user', icon: BarChart3,
-  version: DOCS_VERSION, updatedAt: '2026-10-19',
+  version: DOCS_VERSION, updatedAt: DOCS_UPDATED_AT,
   summary: 'Pantau pengajuan, antrean tanda tangan, penanggung jawab, dan SLA sesuai departemen atau kantor.',
   whenToUse: ['Menentukan pengajuan yang perlu segera ditindaklanjuti.', 'Melihat antrean sekarang dan pengajuan yang belum sampai ke tahap Anda.', 'Memantau pengajuan rekan satu departemen atau kantor, termasuk KCP di bawah KC.'],
   steps: ['Buka Dashboard dan pilih Pengajuan saya, Tanda tangan saya, atau Departemen / kantor.', 'Pilih kategori antrean atau SLA untuk melihat daftar yang sesuai.', 'Buka dokumen atau kirim pengingat kepada penanggung jawab tahap aktif.'],
@@ -24,15 +24,16 @@ export const dashboardDocs: DocsEntry = {
       ['Perlu perbaikan', 'Pengajuan sedang dikembalikan. Pemohon memperbaikinya melalui Tindak Lanjut, bukan membuat nomor baru.'],
     ] },
     { type: 'table', title: 'Kontrol periode', columns: ['Bagian', 'Periode'], rows: [
-      ['Antrean aktif', 'Seluruh pengajuan yang belum selesai, termasuk pengajuan dari bulan sebelumnya.'],
-      ['Selesai dan ditolak', 'Bulan terpilih berdasarkan waktu penyelesaian/keputusan, bukan waktu pembuatan awal.'],
+      ['Bulan ini', 'Mode bawaan. Bulan yang ditampilkan membatasi riwayat selesai/ditolak berdasarkan tanggal keputusan. Antrean aktif tetap mencakup pengajuan dari bulan sebelumnya.'],
+      ['Hari ini / Minggu ini', 'Klik label bulan, lalu pilih periode. Daftar dan ringkasan memfilter tanggal dibuat dalam WIB; minggu berjalan dimulai Senin.'],
+      ['Rentang tanggal', 'Klik label periode, pilih Rentang tanggal, pilih tanggal awal dan akhir di kalender, lalu klik Terapkan. Kedua tanggal termasuk dalam hasil.'],
       ['Pencarian', 'Mencari nomor, judul, pengaju, kantor, atau penanggung jawab dalam kategori yang dipilih.'],
     ] },
     { type: 'table', title: 'Membaca SLA', columns: ['Indikator', 'Perhitungan'], rows: [
       ['Antrean dalam SLA', 'Tugas tahap aktif yang waktu kerjanya belum melewati konfigurasi SLA departemen penanggung jawab.'],
       ['Antrean melewati SLA', 'Tugas tahap aktif yang waktu kerjanya sudah melebihi konfigurasi tersebut.'],
-      ['Selesai tepat waktu', 'Persentase pengajuan/tugas terukur yang selesai dalam SLA pada bulan terpilih. Jumlah pembilang dan penyebut ditampilkan bersama persentase.'],
-      ['Belum mulai / dijeda', 'Tahap yang belum aktif tidak diukur. SLA persetujuan dijeda selama pengajuan dikembalikan kepada pemohon.'],
+      ['Selesai tepat waktu', 'Persentase pengajuan atau tugas terukur yang selesai dalam SLA pada periode aktif. Jumlah pembilang dan penyebut ditampilkan bersama persentase.'],
+      ['Belum mulai / dijeda', 'SLA signer belum berjalan jika tahap belum aktif atau belum bisa mengambil keputusan, misalnya menunggu pemeriksaan, rekomendasi, periode penerimaan, atau perbaikan pemohon.'],
     ], description: 'Perhitungan menggunakan jam kerja, hari kerja, jeda istirahat, dan zona waktu konfigurasi KPI yang sudah ada. Tidak menghitung waktu kalender mentah.' },
     { type: 'callout', title: 'Memantau tidak berarti menyetujui', tone: 'info', description: 'Akses ringkasan dan detail dokumen tidak mengubah pejabat, kantor penerbit, nomor, atau hak persetujuan. Aksi tanda tangan tetap mengikuti penugasan dan tahap aktif.' },
     { type: 'steps', title: 'Mengingatkan penanggung jawab', items: [

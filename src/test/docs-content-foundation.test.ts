@@ -45,8 +45,8 @@ import {
 
 describe("docs-content-foundation – compatibility facade exports", () => {
   it("exports DOCS_VERSION and DOCS_UPDATED_AT with correct values", () => {
-    expect(DOCS_VERSION).toBe("v1.27.0");
-    expect(DOCS_UPDATED_AT).toBe("21 Oktober 2026");
+    expect(DOCS_VERSION).toBe("v1.28.0");
+    expect(DOCS_UPDATED_AT).toBe("18 November 2026");
   });
 
   it("exports DOCS_OVERVIEW_SLUG as 'overview'", () => {
@@ -93,16 +93,21 @@ describe("docs-content-foundation – compatibility facade exports", () => {
 });
 
 describe("docs-content-foundation – DOCS_VERSION matches latest changelog", () => {
-  it("latest changelog covers the outbound payload viewer and preserves previous entries", () => {
-    expect(DOCS_CHANGELOG[0]).toStrictEqual({
+  it("links the refreshed guides from the current docs version and preserves prior entries", () => {
+    expect(DOCS_CHANGELOG[0]).toMatchObject({
+      version: DOCS_VERSION, date: DOCS_UPDATED_AT,
+      guides: ["request-categories", "follow-up", "calendar", "dashboard", "monitoring", "admin-sla", "admin-release-operations"],
+    });
+    for (const id of DOCS_CHANGELOG[0].guides ?? []) expect(ALL_DOCS.some(entry => entry.id === id)).toBe(true);
+    expect(DOCS_CHANGELOG[1]).toStrictEqual({
       version: "v1.27.0",
       date: "21 Oktober 2026",
       changes: [
         "Menambahkan panduan Lihat payload pada Antrean Outbound: JSON tersimpan per generasi, endpoint, hash, dan salin JSON tanpa mengirim ulang.",
       ],
     });
-    expect(DOCS_CHANGELOG[1].version).toBe("v1.26.0");
-    expect(DOCS_CHANGELOG[1].date).toBe("8 September 2026");
+    expect(DOCS_CHANGELOG[2].version).toBe("v1.26.0");
+    expect(DOCS_CHANGELOG[2].date).toBe("8 September 2026");
   });
 
   it("no duplicate changelog versions", () => {
@@ -176,8 +181,8 @@ describe("docs-content-foundation – boundary: five content modules exist", () 
   });
 
   it("metadata module: DOCS_VERSION and DOCS_UPDATED_AT from content module", () => {
-    expect(CONTENT_DOCS_VERSION).toBe("v1.27.0");
-    expect(CONTENT_DOCS_UPDATED_AT).toBe("21 Oktober 2026");
+    expect(CONTENT_DOCS_VERSION).toBe("v1.28.0");
+    expect(CONTENT_DOCS_UPDATED_AT).toBe("18 November 2026");
   });
 
   it("navigation module: getDocsVersionPath from content module", () => {
