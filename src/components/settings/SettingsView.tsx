@@ -1,6 +1,6 @@
 // SettingsView.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import type { ReactNode } from 'react';
 import { differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from 'date-fns';
 import { 
   Shield, User as UserIcon, 
@@ -26,7 +26,7 @@ const AVATAR_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated';
 
-export const SettingsView = () => {
+export const SettingsView = ({ departmentSettings }: { departmentSettings?: ReactNode }) => {
   const { theme, setTheme } = useTheme();
   const [user, setUser] = useState<any>(null); // Gunakan any untuk fleksibilitas struktur DB
   const [officeName, setOfficeName] = useState<string>('Memuat...');
@@ -208,21 +208,21 @@ export const SettingsView = () => {
   })();
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <header>
-        <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <header className="border-b pb-5">
+        <h1 className="text-2xl font-semibold text-foreground">Pengaturan</h1>
         <p className="text-sm text-muted-foreground">Kelola profil, tampilan, dan keamanan akun.</p>
         {desktopIntegrationVisible() && <Button asChild variant="outline" className="mt-3"><Link to="/settings/devices"><Monitor className="mr-2 h-4 w-4" />Perangkat terhubung</Link></Button>}
       </header>
 
-      <div className="grid gap-6">
-        {user?.id && <NotificationPreferences userId={user.id} />}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-10 items-start">
+      <div className="divide-y divide-border">
+        <section className="space-y-4 pb-6" aria-labelledby="settings-profile">
+          <h2 id="settings-profile" className="text-base font-semibold">Profil akun</h2>
+          <div className="flex flex-col items-start gap-5 sm:flex-row sm:gap-7">
             
             {/* AVATAR SECTION */}
-            <div className="relative group self-center md:self-start">
-              <div className="relative h-36 w-36 overflow-hidden rounded-lg border-4 border-background bg-muted shadow-lg">
+            <div className="relative shrink-0">
+              <div className="relative h-20 w-20 overflow-hidden rounded-lg border bg-muted sm:h-24 sm:w-24">
                 <Avatar className={`h-full w-full rounded-lg transition-opacity ${uploading ? 'opacity-30' : 'opacity-100'}`}>
                   <AvatarImage src={avatarSrc} alt="Profile" />
                   <AvatarFallback className="rounded-lg bg-primary/10 text-3xl font-semibold text-primary">
@@ -237,18 +237,21 @@ export const SettingsView = () => {
               </div>
               
               <button 
+                type="button"
+                aria-label="Ubah foto profil"
+                title="Ubah foto profil"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="absolute -bottom-2 -right-2 rounded-lg bg-primary p-3 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                className="absolute -bottom-2 -right-2 grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground ring-2 ring-background hover:bg-primary/90 disabled:opacity-50"
               >
-                <Camera className="w-5 h-5" />
+                <Camera className="h-4 w-4" />
               </button>
               
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
             </div>
 
             {/* INFO GRID */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8 flex-1 w-full">
+            <div className="grid w-full min-w-0 flex-1 gap-x-6 gap-y-4 min-[420px]:grid-cols-2 xl:grid-cols-3">
               <ProfileItem label="Nama Lengkap" value={displayName} icon={UserIcon} />
               <ProfileItem label="NIK" value={user?.nik} icon={Fingerprint} />
               <ProfileItem label="Email" value={user?.email} icon={Mail} />
@@ -261,22 +264,15 @@ export const SettingsView = () => {
               <ProfileItem label="Akses Role" value={user?.role?.toUpperCase()} icon={Shield} />
             </div>
           </div>
-        </motion.div>
+        </section>
 
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm"
-        >
-          <div className="mb-5">
-            <h3 className="font-semibold">Tampilan</h3>
-            <p className="text-sm text-muted-foreground">Pilih tema antarmuka yang digunakan pada akun ini.</p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 max-w-lg" role="radiogroup" aria-label="Tema aplikasi">
+        <section className="grid gap-3 py-5 sm:grid-cols-[minmax(9rem,1fr)_2fr] sm:items-center" aria-labelledby="settings-theme">
+          <h2 id="settings-theme" className="text-base font-semibold">Tampilan</h2>
+          <div className="grid max-w-sm grid-cols-3 gap-1 rounded-md border p-1" role="group" aria-label="Tema aplikasi">
             {[
-              { value: 'system', label: 'System', icon: Monitor },
-              { value: 'light', label: 'Light', icon: Sun },
-              { value: 'dark', label: 'Dark', icon: Moon },
+              { value: 'system', label: 'Sistem', icon: Monitor },
+              { value: 'light', label: 'Terang', icon: Sun },
+              { value: 'dark', label: 'Gelap', icon: Moon },
             ].map((option) => {
               const Icon = option.icon;
               const active = (theme || 'system') === option.value;
@@ -284,67 +280,62 @@ export const SettingsView = () => {
                 <button
                   key={option.value}
                   type="button"
-                  role="radio"
-                  aria-checked={active}
+                  aria-pressed={active}
                   onClick={() => handleThemeChange(option.value)}
-                  className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-md border px-3 py-3 text-sm font-semibold transition-colors ${
+                  className={`flex min-h-10 items-center justify-center gap-1.5 rounded px-1.5 text-sm font-medium transition-colors ${
                     active
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted'
                   }`}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                   {option.label}
                 </button>
               );
             })}
           </div>
-        </motion.section>
+        </section>
+
+        {user?.id && <NotificationPreferences userId={user.id} />}
+        {departmentSettings}
 
         {/* SECURITY */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm"
-        >
-          <div className="flex items-center gap-3 mb-6">
-            <Key className="w-5 h-5 text-orange-500" />
-            <h3 className="font-bold">Ganti Password</h3>
-          </div>
-          <form onSubmit={handleUpdatePassword} className="space-y-4">
-            <Input 
+        <section className="grid gap-4 py-5 sm:grid-cols-[minmax(9rem,1fr)_2fr]" aria-labelledby="settings-security">
+          <h2 id="settings-security" className="flex items-start gap-2 text-base font-semibold"><Key className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />Ganti kata sandi</h2>
+          <form onSubmit={handleUpdatePassword} className="max-w-md space-y-3">
+            <label className="block space-y-1 text-sm"><span>Kata sandi baru</span><Input
               type="password" 
-              placeholder="Password Baru"
+              autoComplete="new-password"
               value={passwords.newPassword}
               onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
-            />
-            <Input 
+            /></label>
+            <label className="block space-y-1 text-sm"><span>Konfirmasi kata sandi</span><Input
               type="password" 
-              placeholder="Konfirmasi Password"
+              autoComplete="new-password"
               value={passwords.confirmPassword}
               onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
-            />
+            /></label>
             <Button
               type="submit"
               disabled={updatingPassword}
-              className="bg-orange-500 hover:bg-orange-600 w-full md:w-auto"
+              className="w-full sm:w-auto"
             >
               {updatingPassword && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Update Password
+              Simpan kata sandi
             </Button>
           </form>
-        </motion.div>
+        </section>
       </div>
     </div>
   );
 };
 
 const ProfileItem = ({ label, value, icon: Icon, highlight = false }: any) => (
-  <div className="space-y-1">
-    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{label}</p>
-    <div className={`flex items-center gap-3 ${highlight ? 'text-primary' : ''}`}>
-      <div className="p-2 rounded-lg bg-muted/50"><Icon className="w-4 h-4" /></div>
-      <span className="text-sm font-semibold truncate">{value || '-'}</span>
+  <div className="flex min-w-0 items-start gap-2.5">
+    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground"><Icon className="h-4 w-4" aria-hidden="true" /></span>
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`break-words text-sm font-medium ${highlight ? 'text-primary' : ''}`}>{value || '-'}</p>
     </div>
   </div>
 );
