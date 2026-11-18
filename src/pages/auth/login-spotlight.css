@@ -26,7 +26,7 @@
 .sigap-login-sidebar {
   display: grid;
   place-items: center;
-  padding: 2.5rem 1rem;
+  padding: 2.5rem 1.5rem;
 }
 
 .sigap-login-form {
@@ -35,17 +35,26 @@
   min-width: 0;
 }
 
+.sigap-login-brand { font-size: 1.45rem; }
+.sigap-login-heading { font-size: 1.85rem; line-height: 2.375rem; }
+
+@media (max-width: 380px) {
+  .sigap-login-sidebar { padding: 2rem 1rem; }
+  .sigap-login-brand { font-size: 1.35rem; }
+  .sigap-login-heading { font-size: 1.65rem; line-height: 2.0625rem; }
+}
+
 .sigap-login-spotlight {
   display: none;
 }
 
 @media (min-width: 1025px) {
   .sigap-login {
-    grid-template-columns: minmax(24rem, 37.5%) minmax(0, 1fr);
+    grid-template-columns: 30rem minmax(0, 1fr);
   }
 
   .sigap-login-sidebar {
-    padding-inline: 2rem;
+    padding: 3rem 3.5rem;
     border-right: 1px solid #202329;
   }
 
@@ -108,33 +117,11 @@
 }
 
 @media (min-width: 1280px) {
-  .sigap-login-sidebar { padding-inline: 3.5rem; }
   .sigap-login-quote-word { font-size: 3.5rem; }
 }
 
 @media (min-width: 1600px) {
   .sigap-login-quote-word { font-size: 4.25rem; }
-}
-
-.sigap-login-motion {
-  position: absolute;
-  right: 1.25rem;
-  bottom: 1.25rem;
-  z-index: 2;
-  display: grid;
-  width: 2.75rem;
-  height: 2.75rem;
-  place-items: center;
-  border: 1px solid #ffffff26;
-  border-radius: 0.5rem;
-  color: #aeb6be;
-}
-
-.sigap-login-motion:hover { color: #fff; background: #ffffff0d; }
-.sigap-login-motion:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
-
-.sigap-login-spotlight[data-paused="true"] .sigap-login-dust span {
-  animation-play-state: paused;
 }
 
 @keyframes sigap-login-quote-in {
@@ -150,5 +137,4 @@
 @media (prefers-reduced-motion: reduce) {
   .sigap-login-quote-text,
   .sigap-login-dust span { animation: none; }
-  .sigap-login-motion { display: none; }
 }

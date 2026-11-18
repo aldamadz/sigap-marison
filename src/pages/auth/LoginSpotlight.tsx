@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Pause, Play } from 'lucide-react';
 
 const quotes = [
   ['CONSISTENCY', 'BEATS TALENT'],
@@ -21,10 +20,7 @@ const particles = Array.from({ length: 32 }, (_, i) => ({
 
 export function LoginSpotlight() {
   const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-
   useEffect(() => {
-    if (paused) return;
     const canAnimate = window.matchMedia('(min-width: 1025px) and (prefers-reduced-motion: no-preference)');
     let timer: number | undefined;
     const sync = () => {
@@ -41,11 +37,11 @@ export function LoginSpotlight() {
       canAnimate.removeEventListener('change', sync);
       document.removeEventListener('visibilitychange', sync);
     };
-  }, [paused]);
+  }, []);
 
   const [word, line] = quotes[index];
   return (
-    <aside className="sigap-login-spotlight" aria-label="Sorotan" data-paused={paused}>
+    <aside className="sigap-login-spotlight" aria-label="Sorotan">
       <div className="sigap-login-dust" aria-hidden="true">
         {particles.map((particle, i) => <span key={i} style={particle} />)}
       </div>
@@ -55,15 +51,6 @@ export function LoginSpotlight() {
           <p className="sigap-login-quote-line">{line}</p>
         </div>
       </div>
-      <button
-        type="button"
-        className="sigap-login-motion"
-        aria-label={paused ? 'Lanjutkan animasi' : 'Jeda animasi'}
-        title={paused ? 'Lanjutkan animasi' : 'Jeda animasi'}
-        onClick={() => setPaused(value => !value)}
-      >
-        {paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
-      </button>
     </aside>
   );
 }
