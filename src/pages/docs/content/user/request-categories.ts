@@ -119,6 +119,24 @@ export const requestCategoriesDocs: DocsEntry = {
       },
       {
         type: "group",
+        title: "Kas Kecil KC/KCP",
+        description: "Gunakan form Kas Kecil yang tersedia untuk kantor Anda. Pengajuan form KEU berhenti di SIGAP dan tidak diteruskan ke sistem Pengadaan.",
+        sections: [
+          {
+            type: "steps",
+            title: "Mengajukan Kas Kecil",
+            items: [
+              "Buka Layanan Surat > Buat Baru. Pilih kegunaan Kas Kecil yang sesuai dengan kebutuhan dan kantor penerbit.",
+              "Pilih proyek jika pengeluaran terkait proyek dan pilihan tersedia, atau Tanpa Proyek bila tidak terkait proyek. Pada form yang meminta Tujuan Pengajuan, pilih tujuan yang tepat.",
+              "Isi tiap rincian: keterangan, jumlah, satuan, dan estimasi harga satuan. Cek total otomatis dan lengkapi lampiran yang diwajibkan oleh kegunaan yang dipilih.",
+              "Periksa ringkasan dan penandatangan, lalu daftarkan. Pantau tahap, catatan pemeriksa, dan PDF di Status Pengajuan.",
+              "Jika diminta memperbaiki, buka Tindak Lanjut dari akun pemohon. Jika penandatangan langsung merevisi, periksa notifikasi dan Riwayat Perbaikan; tidak perlu membuat surat baru.",
+            ],
+          },
+        ],
+      },
+      {
+        type: "group",
         title: "Unit",
         description: "Untuk permohonan/order bangun yang membutuhkan proyek, jumlah unit, dan alokasi kavling.",
         sections: [

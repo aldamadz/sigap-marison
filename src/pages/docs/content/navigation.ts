@@ -38,6 +38,7 @@ export const DOCS_ENTRY_SLUGS: Record<string, string> = {
   "admin-monitoring": "monitoring-admin",
   "admin-audit": "audit-log",
   "admin-email": "email-notification",
+  "admin-release-operations": "pembaruan-maintenance",
   "login-access": "login-akses",
   "document-file": "dokumen-lampiran-error",
   notification: "notifikasi-realtime",

@@ -107,9 +107,9 @@ describe("docs-user-content D2A characterization", () => {
     }
   });
 
-  it("matches documentation content after SUR-54 examiner revision guidance", () => {
+  it("matches the reviewed documentation content for v1.28.0", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("3044582d39ad75f565ee78240989863b48a19ca2cefde653cc8e0a904826ca3d");
+      .toBe("2934c6c93e9811ae8516a591b0221f19d76ce9b518924452388cbb26544b2734");
     const guidance=JSON.stringify(approvalInboxDocs.sections);
     expect(guidance).toContain("pemohon diberi tahu tanpa diminta konfirmasi");
     expect(guidance).toContain("revisi pemeriksa tidak menyetujui atas nama manager");
