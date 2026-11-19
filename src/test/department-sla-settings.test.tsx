@@ -64,8 +64,11 @@ describe('delegated department SLA settings', () => {
   });
   it('uses only authorized department options and resets edits when switching department', async () => {
     h.getScope.mockResolvedValue([{ dept_id: 'finance', name: 'Keuangan' }, { dept_id: 'legal', name: 'Legal' }]);
-    mount(<DepartmentSlaSettingsPage userId="admin" />); await screen.findByLabelText('Departemen');
-    fireEvent.change(screen.getByLabelText('Departemen'), { target: { value: 'legal' } });
+    mount(<DepartmentSlaSettingsPage userId="admin" />);
+    const select = await screen.findByLabelText('Departemen');
+    select.focus();
+    fireEvent.change(select, { target: { value: 'legal' } });
+    expect(screen.getByLabelText('Departemen')).toHaveFocus();
     expect(screen.getByRole('region', { name: 'Receiving policy' })).toHaveTextContent('legal');
     expect(h.getFilterOptions).not.toHaveBeenCalled();
   });
