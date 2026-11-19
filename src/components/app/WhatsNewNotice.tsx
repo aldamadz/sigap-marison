@@ -17,7 +17,7 @@ export const releaseIsCurrent = (release:ReleaseNotice,now:number) => {
 };
 
 export function WhatsNewNotice({userId,release,now}:{userId:string;release:ReleaseNotice;now:number}) {
-  const appRelease = findAppReleaseForAnnouncement(release.id);
+  const appRelease = findAppReleaseForAnnouncement(release.id, release.items[0]);
   const eligible=releaseIsCurrent(release,now);
   const key=releaseSessionKey(userId,release.id);
   const [closed,setClosed]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState('');

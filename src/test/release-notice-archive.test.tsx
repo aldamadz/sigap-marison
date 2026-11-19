@@ -11,6 +11,7 @@ const mocks=vi.hoisted(()=>({history:vi.fn()}));
 vi.mock('@/services/release-notice.service',()=>({releaseNoticeService:mocks}));
 const release={id:'release-1',publishedAt:'2026-11-12T07:00:00Z',expiresAt:'2026-11-12T17:00:00Z',items:['- Pengajuan lebih rapi','- Pengingat pekerjaan']};
 const appVersion = () => screen.getByRole('button', {name:/^Versi v1\.10\.0/});
+const previousAnnouncementId = APP_RELEASES.find(item => item.version === 'v1.10.0')!.announcementId;
 const LocationSearch = () => <output aria-label="Alamat pencarian">{useLocation().search}</output>;
 const mount = (userId?: string, search = '') => render(
   <MemoryRouter initialEntries={[`/docs/versi/changelog${search}`]}>
@@ -45,7 +46,7 @@ describe('published notices on the existing documentation changelog',()=>{
     ]});
     mount('user-a');
     const newerNotice = await screen.findByRole('button', {name:/12 November 2026/});
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    expect(screen.getAllByRole('button')).toHaveLength(4);
     expect(screen.getAllByText('Terbaru')).toHaveLength(1);
     expect(screen.getByText('14.00 WIB')).toBeInTheDocument();
     await userEvent.click(newerNotice);
@@ -67,7 +68,7 @@ describe('published notices on the existing documentation changelog',()=>{
   });
   it('attaches the existing notice by exact ID without assigning versions by date', async () => {
     mocks.history.mockResolvedValue({releases:[
-      {...release, id:APP_RELEASES[0].announcementId, publishedAt:'2026-11-18T03:52:00Z', items:['Pengumuman asli']},
+      {...release, id:previousAnnouncementId, publishedAt:'2026-11-18T03:52:00Z', items:['Pengumuman asli']},
       {...release, id:'other-same-day', publishedAt:'2026-11-18T04:00:00Z', items:['Pengumuman berbeda di hari yang sama']},
     ]});
     mount('user-a');
@@ -82,6 +83,15 @@ describe('published notices on the existing documentation changelog',()=>{
     const archived = screen.getByRole('region', {name:/^18 November 2026/});
     expect(within(archived).getByText('Pengumuman berbeda di hari yang sama')).toBeVisible();
     expect(within(archived).queryByText(/v1\.10\.0/)).toBeNull();
+  });
+  it('nests the new published notice under its matching version instead of duplicating it', async () => {
+    mocks.history.mockResolvedValue({ releases: [{ ...release, id: 'new-published-id', publishedAt: '2026-11-19T02:00:00Z',
+      items: ['Pembaruan SIGAP v1.11.0', '- Jadwal per form'] }] });
+    mount('user-a');
+    expect(await screen.findByText('Belum ada pengumuman lain.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^Versi v1\.11\.0/ }));
+    await userEvent.click(screen.getByText("Lihat pengumuman What's New"));
+    expect(screen.getByText('Jadwal per form')).toBeVisible();
   });
   it('offers retry instead of displaying internal errors',async()=>{
     mocks.history.mockRejectedValue(Error('private SQL'));mount('user-a');
@@ -109,7 +119,7 @@ describe('published notices on the existing documentation changelog',()=>{
   }));
 
   it('counts the release and legacy announcements together without counting the linked notice twice', async () => {
-    mocks.history.mockResolvedValue({ releases: [...severalNotices(), {...release, id: APP_RELEASES[0].announcementId}] });
+    mocks.history.mockResolvedValue({ releases: [...severalNotices(), {...release, id: previousAnnouncementId}] });
     mount('user-a');
     const pagination = await screen.findByRole('navigation', {name:'Halaman pembaruan aplikasi'});
     expect(screen.getByText('Halaman 1 dari 2')).toBeVisible();
@@ -121,7 +131,7 @@ describe('published notices on the existing documentation changelog',()=>{
     await userEvent.click(next);
     expect(screen.getByText('Halaman 2 dari 2')).toBeVisible();
     expect(screen.getByLabelText('Alamat pencarian')).toHaveTextContent('?page=2');
-    expect(screen.getAllByRole('button', {expanded:false})).toHaveLength(3);
+    expect(screen.getAllByRole('button', {expanded:false})).toHaveLength(4);
     expect(screen.queryByRole('button', {name:/^Versi v1\.10\.0/})).toBeNull();
     await userEvent.click(screen.getByRole('button', {name:/13 November 2026/}));
     expect(screen.getByText('Isi arsip 5')).toBeVisible();
@@ -134,7 +144,7 @@ describe('published notices on the existing documentation changelog',()=>{
     mocks.history.mockResolvedValue({ releases: severalNotices() });
     mount('user-a', '?page=2');
     expect(await screen.findByText('Halaman 2 dari 2')).toBeVisible();
-    expect(screen.getAllByRole('button', {expanded:false})).toHaveLength(3);
+    expect(screen.getAllByRole('button', {expanded:false})).toHaveLength(4);
   });
 });
 

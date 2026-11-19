@@ -56,7 +56,8 @@ export const adminSlaDetailSections: DocsSection[] = [
       title: "Periode penerimaan",
       items: [
         "SLA jam kerja signer dan periode penerimaan adalah pengaturan terpisah. Biarkan periode penerimaan nonaktif jika departemen hanya membutuhkan SLA signer.",
-        "Admin dapat menunjuk pengelola pengaturan departemen. Gunakan menu Pengaturan > SLA Departemen atau halaman konfigurasi admin sesuai akses.",
+        "Admin dapat menunjuk pengelola periode penerimaan. Pengelola memakai Pengaturan > SLA Departemen; target SLA penandatangan dan jam kerja hanya dapat diubah admin.",
+        "Atur jadwal untuk semua pengajuan, satu form, atau satu kegunaan. Aturan kegunaan didahulukan, lalu form, lalu aturan umum departemen.",
         "Untuk aturan mingguan, tentukan minggu yang berlaku dan jendela penerimaannya. Contoh: pekan ini ditutup Kamis pukul 16.00 WIB.",
         "Pengajuan di luar jendela tetap dibuat, tetapi menunggu periode penerimaan berikutnya sebelum tahap terkait bisa mengambil tindakan.",
       ],
