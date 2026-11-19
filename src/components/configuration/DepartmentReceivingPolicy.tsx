@@ -25,7 +25,8 @@ const thisMonday = () => {
 export function DepartmentReceivingPolicy({ deptId, allowSignerOverride = false, departmentField }: {
   deptId: string; allowSignerOverride?: boolean; departmentField?: ReactNode;
 }) {
-  const [selected, setSelected] = useState('');
+  const [selection, setSelection] = useState({ deptId, value: '' });
+  const selected = selection.deptId === deptId ? selection.value : '';
   const options = useQuery({
     queryKey: ['department-receiving-options', deptId],
     queryFn: () => departmentReceivingService.getScopeOptions(deptId),
@@ -40,7 +41,7 @@ export function DepartmentReceivingPolicy({ deptId, allowSignerOverride = false,
         <label className="grid min-w-0 gap-1.5 text-sm font-medium">
           <span>Berlaku untuk</span>
           <select className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm font-normal" value={target ? selected : ''}
-            disabled={options.isPending || options.isError} onChange={event => setSelected(event.target.value)}>
+            disabled={options.isPending || options.isError} onChange={event => setSelection({ deptId, value: event.target.value })}>
             <option value="">Semua pengajuan (aturan umum)</option>
             {(['form', 'usage'] as const).map(kind => <optgroup key={kind} label={kind === 'form' ? 'Form' : 'Kegunaan'}>
               {options.data?.filter(option => option.kind === kind).map(option => <option key={option.id} value={`${kind}:${option.id}`}>{option.label}</option>)}
