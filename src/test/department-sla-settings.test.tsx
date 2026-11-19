@@ -9,7 +9,10 @@ import { DepartmentSlaManagers } from '@/components/configuration/DepartmentSlaM
 const h = vi.hoisted(() => ({ getScope: vi.fn(), getConfig: vi.fn(), saveConfig: vi.fn(), getFilterOptions: vi.fn(), getSummary: vi.fn(), getDetails: vi.fn(), getManagerCandidates: vi.fn(), setManagers: vi.fn() }));
 vi.mock('@/services/department-receiving.service', () => ({ departmentReceivingService: h }));
 vi.mock('@/services/department-kpi.service', async original => ({ ...await original<typeof import('@/services/department-kpi.service')>(), departmentKpiService: h }));
-vi.mock('@/components/configuration/DepartmentReceivingPolicy', () => ({ DepartmentReceivingPolicy: ({ deptId }: { deptId: string }) => <section aria-label="Receiving policy">{deptId}</section> }));
+vi.mock('@/components/configuration/DepartmentReceivingPolicy', () => ({
+  DepartmentReceivingPolicy: ({ deptId, departmentField }: { deptId: string; departmentField?: React.ReactNode }) =>
+    <section aria-label="Receiving policy">{deptId}{departmentField}</section>,
+}));
 vi.mock('@/components/settings/SettingsView', () => ({ SettingsView: ({ departmentSettings }: { departmentSettings?: React.ReactNode }) => <div>Profile settings{departmentSettings}</div> }));
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
 const clients: QueryClient[] = [];
@@ -61,8 +64,11 @@ describe('delegated department SLA settings', () => {
   });
   it('uses only authorized department options and resets edits when switching department', async () => {
     h.getScope.mockResolvedValue([{ dept_id: 'finance', name: 'Keuangan' }, { dept_id: 'legal', name: 'Legal' }]);
-    mount(<DepartmentSlaSettingsPage userId="admin" />); await screen.findByLabelText('Departemen');
-    fireEvent.change(screen.getByLabelText('Departemen'), { target: { value: 'legal' } });
+    mount(<DepartmentSlaSettingsPage userId="admin" />);
+    const select = await screen.findByLabelText('Departemen');
+    select.focus();
+    fireEvent.change(select, { target: { value: 'legal' } });
+    expect(screen.getByLabelText('Departemen')).toHaveFocus();
     expect(screen.getByRole('region', { name: 'Receiving policy' })).toHaveTextContent('legal');
     expect(h.getFilterOptions).not.toHaveBeenCalled();
   });

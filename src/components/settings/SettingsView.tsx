@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 // Services & Libs
 import { getCurrentUser } from '@/services/user-ui.service';
@@ -32,6 +33,7 @@ export const SettingsView = ({ departmentSettings }: { departmentSettings?: Reac
   const [officeName, setOfficeName] = useState<string>('Memuat...');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [passwords, setPasswords] = useState({ newPassword: '', confirmPassword: '' });
   
@@ -130,8 +132,15 @@ export const SettingsView = ({ departmentSettings }: { departmentSettings?: Reac
     }
   };
 
+  const changePasswordOpen = (open: boolean) => {
+    if (updatingPassword) return;
+    setPasswordOpen(open);
+    if (!open) setPasswords({ newPassword: '', confirmPassword: '' });
+  };
+
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (updatingPassword) return;
     if (passwords.newPassword.length < 6) {
       toast({ title: "Gagal", description: "Password minimal 6 karakter.", variant: "destructive" });
       return;
@@ -142,18 +151,23 @@ export const SettingsView = ({ departmentSettings }: { departmentSettings?: Reac
     }
 
     setUpdatingPassword(true);
-    const { data: authData } = await supabase.auth.getUser();
-    const { error } = await supabase.auth.updateUser({ password: passwords.newPassword });
-    setUpdatingPassword(false);
-
-    if (error) {
-      toast({ title: "Gagal", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const { error } = await supabase.auth.updateUser({ password: passwords.newPassword });
+      if (error) {
+        toast({ title: "Gagal", description: error.message, variant: "destructive" });
+        return;
+      }
       if (authData.user?.id) {
         await supabase.rpc('record_auth_audit_event', { p_event: 'password_changed' });
       }
       toast({ title: "Berhasil", description: "Password diperbarui." });
       setPasswords({ newPassword: '', confirmPassword: '' });
+      setPasswordOpen(false);
+    } catch {
+      toast({ title: "Gagal", description: "Perubahan kata sandi belum dapat dikonfirmasi.", variant: "destructive" });
+    } finally {
+      setUpdatingPassword(false);
     }
   };
 
@@ -299,31 +313,35 @@ export const SettingsView = ({ departmentSettings }: { departmentSettings?: Reac
         {user?.id && <NotificationPreferences userId={user.id} />}
         {departmentSettings}
 
-        {/* SECURITY */}
-        <section className="grid gap-4 py-5 sm:grid-cols-[minmax(9rem,1fr)_2fr]" aria-labelledby="settings-security">
-          <h2 id="settings-security" className="flex items-start gap-2 text-base font-semibold"><Key className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />Ganti kata sandi</h2>
-          <form onSubmit={handleUpdatePassword} className="max-w-md space-y-3">
-            <label className="block space-y-1 text-sm"><span>Kata sandi baru</span><Input
-              type="password" 
-              autoComplete="new-password"
-              value={passwords.newPassword}
-              onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
-            /></label>
-            <label className="block space-y-1 text-sm"><span>Konfirmasi kata sandi</span><Input
-              type="password" 
-              autoComplete="new-password"
-              value={passwords.confirmPassword}
-              onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
-            /></label>
-            <Button
-              type="submit"
-              disabled={updatingPassword}
-              className="w-full sm:w-auto"
-            >
-              {updatingPassword && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Simpan kata sandi
-            </Button>
-          </form>
+        <section className="grid gap-3 py-5 sm:grid-cols-[minmax(9rem,1fr)_2fr] sm:items-center" aria-labelledby="settings-security">
+          <h2 id="settings-security" className="flex items-center gap-2 text-base font-semibold"><Key className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />Keamanan</h2>
+          <Dialog open={passwordOpen} onOpenChange={changePasswordOpen}>
+            <DialogTrigger asChild><Button type="button" variant="outline" className="justify-self-start">Ganti kata sandi</Button></DialogTrigger>
+            <DialogContent className="max-w-sm rounded-lg" accessibilityDescription="Perubahan kata sandi akun SIGAP">
+              <DialogHeader className="pr-10 text-left"><DialogTitle>Ganti kata sandi</DialogTitle></DialogHeader>
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <fieldset disabled={updatingPassword} className="min-w-0 space-y-3">
+                  <label className="block space-y-1.5 text-sm"><span>Kata sandi baru</span><Input
+                    type="password" autoComplete="new-password" required
+                    value={passwords.newPassword}
+                    onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
+                  /></label>
+                  <label className="block space-y-1.5 text-sm"><span>Konfirmasi kata sandi</span><Input
+                    type="password" autoComplete="new-password" required
+                    value={passwords.confirmPassword}
+                    onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
+                  /></label>
+                </fieldset>
+                <DialogFooter className="gap-2 sm:space-x-0">
+                  <Button type="button" variant="outline" disabled={updatingPassword} onClick={() => changePasswordOpen(false)}>Batal</Button>
+                  <Button type="submit" disabled={updatingPassword}>
+                    {updatingPassword && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                    Simpan kata sandi
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </section>
       </div>
     </div>
