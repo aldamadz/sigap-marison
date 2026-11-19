@@ -109,7 +109,7 @@ describe("docs-user-content D2A characterization", () => {
 
   it("matches the reviewed documentation content for v1.28.0", () => {
     expect(createHash("sha256").update(JSON.stringify(normalizedRuntime())).digest("hex"))
-      .toBe("2934c6c93e9811ae8516a591b0221f19d76ce9b518924452388cbb26544b2734");
+      .toBe("e50f4a5f7afcb39cf8307a44b458f889b7613dd01ea4b259e181c3fedf2ce90f");
     const guidance=JSON.stringify(approvalInboxDocs.sections);
     expect(guidance).toContain("pemohon diberi tahu tanpa diminta konfirmasi");
     expect(guidance).toContain("revisi pemeriksa tidak menyetujui atas nama manager");

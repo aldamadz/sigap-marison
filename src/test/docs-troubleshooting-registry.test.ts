@@ -47,7 +47,7 @@ describe("docs-troubleshooting-registry D2C", () => {
   });
 
   it("matches the reviewed documentation content for v1.28.0", () => {
-    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("860351ca9f56bb13db83c20bf6ca68215ae64189a396056d8f47b90b117de1b5");
+    expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe("85a649e908fbecf7c4c446b19c29ce9e96704f5d3f022adfce70eb96e4fffd07");
   });
 
   it("keeps facade and imports acyclic", () => {
