@@ -1,11 +1,12 @@
 // SettingsView.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from 'date-fns';
 import { 
   Shield, User as UserIcon, 
-  Key, Mail, Briefcase, Building, Fingerprint, Loader2, 
-  Camera, Phone, CalendarDays, Monitor, Moon, Sun
+  Key, Mail, Building, Fingerprint, Loader2,
+  Camera, Phone, CalendarDays, Monitor, Moon, Sun, SlidersHorizontal, ChevronRight
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 // Services & Libs
 import { getCurrentUser } from '@/services/user-ui.service';
@@ -24,12 +26,13 @@ const AVATAR_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const PROFILE_UPDATED_EVENT = 'sigap:profile-updated';
 
-export const SettingsView = () => {
+export const SettingsView = ({ departmentSettings }: { departmentSettings?: ReactNode }) => {
   const { theme, setTheme } = useTheme();
   const [user, setUser] = useState<any>(null); // Gunakan any untuk fleksibilitas struktur DB
   const [officeName, setOfficeName] = useState<string>('Memuat...');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [passwords, setPasswords] = useState({ newPassword: '', confirmPassword: '' });
   
@@ -128,8 +131,15 @@ export const SettingsView = () => {
     }
   };
 
+  const changePasswordOpen = (open: boolean) => {
+    if (updatingPassword) return;
+    setPasswordOpen(open);
+    if (!open) setPasswords({ newPassword: '', confirmPassword: '' });
+  };
+
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (updatingPassword) return;
     if (passwords.newPassword.length < 6) {
       toast({ title: "Gagal", description: "Password minimal 6 karakter.", variant: "destructive" });
       return;
@@ -140,18 +150,23 @@ export const SettingsView = () => {
     }
 
     setUpdatingPassword(true);
-    const { data: authData } = await supabase.auth.getUser();
-    const { error } = await supabase.auth.updateUser({ password: passwords.newPassword });
-    setUpdatingPassword(false);
-
-    if (error) {
-      toast({ title: "Gagal", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const { error } = await supabase.auth.updateUser({ password: passwords.newPassword });
+      if (error) {
+        toast({ title: "Gagal", description: error.message, variant: "destructive" });
+        return;
+      }
       if (authData.user?.id) {
         await supabase.rpc('record_auth_audit_event', { p_event: 'password_changed' });
       }
       toast({ title: "Berhasil", description: "Password diperbarui." });
       setPasswords({ newPassword: '', confirmPassword: '' });
+      setPasswordOpen(false);
+    } catch {
+      toast({ title: "Gagal", description: "Perubahan kata sandi belum dapat dikonfirmasi.", variant: "destructive" });
+    } finally {
+      setUpdatingPassword(false);
     }
   };
 
@@ -183,6 +198,7 @@ export const SettingsView = () => {
   // Mapping data dari JSON: full_name dan avatar_url
   const displayName = user?.full_name || user?.fullName || 'User';
   const avatarSrc = user?.avatar_url || user?.photoUrl || undefined;
+  const jobTitle = user?.job_title || user?.jobTitle;
 
   const tenureText = (() => {
     if (!user?.join_date) return '-';
@@ -206,23 +222,23 @@ export const SettingsView = () => {
   })();
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <header>
-        <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <header className="border-b pb-5">
+        <h1 className="text-2xl font-semibold text-foreground">Pengaturan</h1>
         <p className="text-sm text-muted-foreground">Kelola profil, tampilan, dan keamanan akun.</p>
       </header>
 
-      <div className="grid gap-6">
-        {user?.id && <NotificationPreferences userId={user.id} />}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-10 items-start">
-            
-            {/* AVATAR SECTION */}
-            <div className="relative group self-center md:self-start">
-              <div className="relative h-36 w-36 overflow-hidden rounded-lg border-4 border-background bg-muted shadow-lg">
+      <div className="grid gap-7 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <section className="min-w-0 space-y-5 xl:border-r xl:pr-7" aria-labelledby="settings-profile">
+          <h2 id="settings-profile" className="flex items-center gap-2 text-base font-semibold">
+            <UserIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />Profil akun
+          </h2>
+          <div className="flex items-center gap-4">
+            <div className="relative shrink-0">
+              <div className="relative h-16 w-16 overflow-hidden rounded-lg border bg-muted">
                 <Avatar className={`h-full w-full rounded-lg transition-opacity ${uploading ? 'opacity-30' : 'opacity-100'}`}>
                   <AvatarImage src={avatarSrc} alt="Profile" />
-                  <AvatarFallback className="rounded-lg bg-primary/10 text-3xl font-semibold text-primary">
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-xl font-semibold text-primary">
                     {displayName.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
@@ -234,114 +250,120 @@ export const SettingsView = () => {
               </div>
               
               <button 
+                type="button"
+                aria-label="Ubah foto profil"
+                title="Ubah foto profil"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="absolute -bottom-2 -right-2 rounded-lg bg-primary p-3 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                className="absolute -bottom-1.5 -right-1.5 grid h-8 w-8 place-items-center rounded-md border bg-background text-muted-foreground ring-2 ring-background hover:bg-muted hover:text-foreground disabled:opacity-50"
               >
-                <Camera className="w-5 h-5" />
+                <Camera className="h-4 w-4" />
               </button>
               
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
             </div>
 
-            {/* INFO GRID */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8 flex-1 w-full">
-              <ProfileItem label="Nama Lengkap" value={displayName} icon={UserIcon} />
-              <ProfileItem label="NIK" value={user?.nik} icon={Fingerprint} />
-              <ProfileItem label="Email" value={user?.email} icon={Mail} />
-              <ProfileItem label="Nomor HP" value={user?.phone} icon={Phone} />
-              <ProfileItem label="Jabatan" value={user?.job_title || user?.jobTitle} icon={Briefcase} />
-              <ProfileItem label="Unit Kerja" value={officeName} icon={Building} highlight />
-              <ProfileItem label="Departemen" value={user?.departmentName} icon={Building} />
-              <ProfileItem label="Tanggal Masuk" value={user?.join_date} icon={CalendarDays} />
-              <ProfileItem label="Masa Kerja" value={tenureText} icon={CalendarDays} />
-              <ProfileItem label="Akses Role" value={user?.role?.toUpperCase()} icon={Shield} />
+            <div className="min-w-0">
+              <p className="break-words text-lg font-semibold leading-tight">{displayName}</p>
+              {jobTitle && <p className="mt-1 break-words text-sm text-muted-foreground">{jobTitle}</p>}
             </div>
           </div>
-        </motion.div>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-4 border-t pt-4 sm:gap-x-5">
+            <ProfileItem label="Unit kerja" value={officeName} icon={Building} />
+            <ProfileItem label="Departemen" value={user?.departmentName} icon={Building} />
+            <ProfileItem label="NIK" value={user?.nik} icon={Fingerprint} />
+            <ProfileItem label="Peran" value={user?.role?.toUpperCase()} icon={Shield} />
+            <ProfileItem label="Tanggal masuk" value={user?.join_date} icon={CalendarDays} />
+            <ProfileItem label="Masa kerja" value={tenureText} icon={CalendarDays} />
+            <ProfileItem label="Nomor HP" value={user?.phone} icon={Phone} />
+            <ProfileItem label="Email" value={user?.email} icon={Mail} wide />
+          </dl>
+        </section>
 
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm"
-        >
-          <div className="mb-5">
-            <h3 className="font-semibold">Tampilan</h3>
-            <p className="text-sm text-muted-foreground">Pilih tema antarmuka yang digunakan pada akun ini.</p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 max-w-lg" role="radiogroup" aria-label="Tema aplikasi">
-            {[
-              { value: 'system', label: 'System', icon: Monitor },
-              { value: 'light', label: 'Light', icon: Sun },
-              { value: 'dark', label: 'Dark', icon: Moon },
-            ].map((option) => {
-              const Icon = option.icon;
-              const active = (theme || 'system') === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => handleThemeChange(option.value)}
-                  className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-md border px-3 py-3 text-sm font-semibold transition-colors ${
-                    active
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </motion.section>
+        <div className="min-w-0 divide-y divide-border border-t xl:border-t-0">
+          <section className="space-y-4 py-5 xl:pt-0" aria-labelledby="settings-preferences">
+            <h2 id="settings-preferences" className="flex items-center gap-2 text-base font-semibold">
+              <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />Preferensi
+            </h2>
+            <div className="space-y-2">
+              <h3 id="settings-theme" className="text-sm font-medium">Tampilan</h3>
+              <div className="grid max-w-sm grid-cols-3 gap-1 rounded-md border bg-muted/40 p-1" role="group" aria-label="Tema aplikasi">
+                {[
+                  { value: 'system', label: 'Sistem', icon: Monitor },
+                  { value: 'light', label: 'Terang', icon: Sun },
+                  { value: 'dark', label: 'Gelap', icon: Moon },
+                ].map((option) => {
+                  const Icon = option.icon;
+                  const active = (theme || 'system') === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => handleThemeChange(option.value)}
+                      className={`flex min-h-9 min-w-0 flex-wrap items-center justify-center gap-x-1.5 rounded px-1.5 py-1 text-sm font-medium transition-colors ${
+                        active
+                          ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
+                          : 'text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {user?.id && <NotificationPreferences userId={user.id} />}
+          </section>
 
-        {/* SECURITY */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="bg-card border rounded-lg p-5 sm:p-6 shadow-sm"
-        >
-          <div className="flex items-center gap-3 mb-6">
-            <Key className="w-5 h-5 text-orange-500" />
-            <h3 className="font-bold">Ganti Password</h3>
-          </div>
-          <form onSubmit={handleUpdatePassword} className="space-y-4">
-            <Input 
-              type="password" 
-              placeholder="Password Baru"
-              value={passwords.newPassword}
-              onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
-            />
-            <Input 
-              type="password" 
-              placeholder="Konfirmasi Password"
-              value={passwords.confirmPassword}
-              onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
-            />
-            <Button
-              type="submit"
-              disabled={updatingPassword}
-              className="bg-orange-500 hover:bg-orange-600 w-full md:w-auto"
-            >
-              {updatingPassword && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Update Password
-            </Button>
-          </form>
-        </motion.div>
+          <section className="space-y-2 py-5" aria-labelledby="settings-security">
+            <h2 id="settings-security" className="flex items-center gap-2 text-base font-semibold"><Shield className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />Keamanan</h2>
+            <Dialog open={passwordOpen} onOpenChange={changePasswordOpen}>
+              <DialogTrigger asChild>
+                <Button type="button" variant="ghost" className="h-auto min-h-11 w-full justify-start gap-2.5 whitespace-normal px-2 text-left">
+                  <Key className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />Ganti kata sandi
+                  <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-sm rounded-lg" accessibilityDescription="Perubahan kata sandi akun SIGAP">
+                <DialogHeader className="pr-10 text-left"><DialogTitle>Ganti kata sandi</DialogTitle></DialogHeader>
+                <form onSubmit={handleUpdatePassword} className="space-y-4">
+                  <fieldset disabled={updatingPassword} className="min-w-0 space-y-3">
+                    <label className="block space-y-1.5 text-sm"><span>Kata sandi baru</span><Input
+                      type="password" autoComplete="new-password" required
+                      value={passwords.newPassword}
+                      onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
+                    /></label>
+                    <label className="block space-y-1.5 text-sm"><span>Konfirmasi kata sandi</span><Input
+                      type="password" autoComplete="new-password" required
+                      value={passwords.confirmPassword}
+                      onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
+                    /></label>
+                  </fieldset>
+                  <DialogFooter className="gap-2 sm:space-x-0">
+                    <Button type="button" variant="outline" disabled={updatingPassword} onClick={() => changePasswordOpen(false)}>Batal</Button>
+                    <Button type="submit" disabled={updatingPassword}>
+                      {updatingPassword && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                      Simpan kata sandi
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </section>
+          {departmentSettings}
+        </div>
       </div>
     </div>
   );
 };
 
-const ProfileItem = ({ label, value, icon: Icon, highlight = false }: any) => (
-  <div className="space-y-1">
-    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{label}</p>
-    <div className={`flex items-center gap-3 ${highlight ? 'text-primary' : ''}`}>
-      <div className="p-2 rounded-lg bg-muted/50"><Icon className="w-4 h-4" /></div>
-      <span className="text-sm font-semibold truncate">{value || '-'}</span>
-    </div>
+const ProfileItem = ({ label, value, icon: Icon, wide }: { label: string; value?: string; icon: LucideIcon; wide?: boolean }) => (
+  <div className={`min-w-0 space-y-1 ${wide ? 'col-span-2' : ''}`}>
+    <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{label}
+    </dt>
+    <dd className="break-words text-sm font-medium">{value || '-'}</dd>
   </div>
 );

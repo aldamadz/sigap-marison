@@ -8,7 +8,7 @@ export const adminSlaDocs: DocsEntry = {
     menu: "SLA Departemen dan Konfigurasi > SLA Departemen",
     audience: "admin",
     icon: BarChart3,
-    version: "v1.0.0",
+    version: DOCS_VERSION,
     updatedAt: DOCS_UPDATED_AT,
     summary: "Mengatur dan memantau performa approval berdasarkan jam kerja efektif departemen.",
     whenToUse: [
@@ -48,8 +48,19 @@ export const adminSlaDetailSections: DocsSection[] = [
     {
       type: "callout",
       title: "SLA berhenti saat pengajuan dikembalikan",
-      description: "Jika signer mengembalikan pengajuan ke pemohon, waktu SLA signer berhenti. Ketika pemohon memilih Lanjutkan proses, approval dimulai ulang dari tahap 1 dan SLA dihitung dari waktu proses dilanjutkan.",
+      description: "Waktu SLA signer berhenti ketika tahap tidak bisa mengambil keputusan, termasuk saat menunggu pemeriksaan, rekomendasi, perbaikan pemohon, atau periode penerimaan. Saat tahap siap, waktu kerja dilanjutkan sesuai alur; revisi internal tidak selalu kembali ke tahap pertama.",
       tone: "info",
+    },
+    {
+      type: "steps",
+      title: "Periode penerimaan",
+      items: [
+        "SLA jam kerja signer dan periode penerimaan adalah pengaturan terpisah. Biarkan periode penerimaan nonaktif jika departemen hanya membutuhkan SLA signer.",
+        "Admin dapat menunjuk pengelola periode penerimaan. Pengelola memakai Pengaturan > SLA Departemen; target SLA penandatangan dan jam kerja hanya dapat diubah admin.",
+        "Atur jadwal untuk semua pengajuan, satu form, atau satu kegunaan. Aturan kegunaan didahulukan, lalu form, lalu aturan umum departemen.",
+        "Untuk aturan mingguan, tentukan minggu yang berlaku dan jendela penerimaannya. Contoh: pekan ini ditutup Kamis pukul 16.00 WIB.",
+        "Pengajuan di luar jendela tetap dibuat, tetapi menunggu periode penerimaan berikutnya sebelum tahap terkait bisa mengambil tindakan.",
+      ],
     },
     {
       type: "table",

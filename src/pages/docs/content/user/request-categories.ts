@@ -74,8 +74,8 @@ export const requestCategoriesDocs: DocsEntry = {
             columns: ["Bagian", "Aturan"],
             rows: [
               ["Data utama", "Nama barang, satuan, jumlah, status prioritas, keterangan, catatan, dan lampiran yang dikonfigurasi."],
-              ["Rekomendasi", "Opsi rekomendasi hanya tersedia pada departemen yang diizinkan. Dokumen rekomendasi menjadi child dari pengajuan induk dan memiliki nomor serta approval sendiri."],
-              ["Proyek cabang", "KC/KCP yang memiliki proyek wajib memilih proyek. Cabang tanpa proyek memakai kode virtual 000 untuk pengajuan non-unit."],
+              ["Rekomendasi", "Pemohon Aset dapat memilih apakah perlu rekomendasi. Dokumen rekomendasi terkait dengan pengajuan induk, tetapi memiliki nomor dan persetujuan sendiri."],
+              ["Proyek cabang", "KC/KCP memilih proyek external. Jika tidak ada proyek external terdaftar, pengajuan Aset yang memenuhi syarat dapat memakai kode virtual 000 tanpa membuat proyek baru."],
               ["Setelah dikirim", "Barang dapat disetujui seluruhnya, disetujui sebagian, dikembalikan untuk perbaikan, atau ditolak sesuai keputusan signer."],
             ],
           },
@@ -113,6 +113,24 @@ export const requestCategoriesDocs: DocsEntry = {
               ["Proyek Marison", "Pilih proyek yang siap Marison, atau centang 'Tanpa Proyek (Dana Umum)' untuk pengajuan dana tidak terikat proyek; surat tersebut dikirim ke Marison tanpa project_id."],
               ["Persetujuan", "Mengikuti kegunaan dan matrix Non Aset yang tersedia untuk departemen/kantor pemohon."],
               ["Pencatatan", "Kategori menunjukkan kebutuhan bukan aset; keputusan akuntansi akhir tetap mengikuti kebijakan perusahaan."],
+            ],
+          },
+        ],
+      },
+      {
+        type: "group",
+        title: "Kas Kecil KC/KCP",
+        description: "Gunakan form Kas Kecil yang tersedia untuk kantor Anda. Pengajuan form KEU berhenti di SIGAP dan tidak diteruskan ke sistem Pengadaan.",
+        sections: [
+          {
+            type: "steps",
+            title: "Mengajukan Kas Kecil",
+            items: [
+              "Buka Layanan Surat > Buat Baru. Pilih kegunaan Kas Kecil yang sesuai dengan kebutuhan dan kantor penerbit.",
+              "Pilih proyek jika pengeluaran terkait proyek dan pilihan tersedia, atau Tanpa Proyek bila tidak terkait proyek. Pada form yang meminta Tujuan Pengajuan, pilih tujuan yang tepat.",
+              "Isi tiap rincian: keterangan, jumlah, satuan, dan estimasi harga satuan. Cek total otomatis dan lengkapi lampiran yang diwajibkan oleh kegunaan yang dipilih.",
+              "Periksa ringkasan dan penandatangan, lalu daftarkan. Pantau tahap, catatan pemeriksa, dan PDF di Status Pengajuan.",
+              "Jika diminta memperbaiki, buka Tindak Lanjut dari akun pemohon. Jika penandatangan langsung merevisi, periksa notifikasi dan Riwayat Perbaikan; tidak perlu membuat surat baru.",
             ],
           },
         ],
@@ -165,7 +183,7 @@ export const requestCategoriesDocs: DocsEntry = {
               ["SPK dan pembangunan", "Pembuatan SPK, pembangunan kawasan, talud, jalan, jembatan, pondasi, saluran, fasos, atau fasum.", "Tidak memilih kavling/unit tertentu."],
               ["Perbaikan dan infrastruktur proyek", "Perbaikan jalan, saluran, jaringan air/listrik, penerangan, perkerasan, atau rehabilitasi kawasan.", "Tidak menghasilkan rekap adendum atau kode produksi Unit."],
               ["Material, alat, dan tenaga proyek", "Sirtu, pasir, urugan, sewa excavator, tenaga harian proyek, pemadatan, atau pembersihan lahan.", "Mengikuti matrix Permohonan Teknik Cabang."],
-              ["Cabang tanpa proyek", "Pengajuan non-unit dari KC/KCP yang belum memiliki master proyek.", "Nomor surat memakai kode proyek virtual 000."],
+              ["Proyek wajib", "Non Unit memakai proyek dan jenis pekerjaan dari API external Marison.", "Pastikan proyek tersedia di sistem perencanaan; kode virtual 000 tidak dapat digunakan."],
             ],
           },
           {
@@ -173,7 +191,7 @@ export const requestCategoriesDocs: DocsEntry = {
             title: "Mengisi pekerjaan Non Unit",
             items: [
               "Pilih Proyek Tujuan yang sesuai. Pemohon Kantor Pusat melihat seluruh proyek siap, sedangkan pemohon cabang hanya melihat proyek siap pada kantornya.",
-              "Pada setiap item, pilih jenis pekerjaan lalu isi nama pekerjaan yang benar-benar diajukan.",
+              "Klik Dapatkan Nomor Surat setelah memilih proyek. Pada setiap item, pilih jenis pekerjaan proyek dari API external, lalu isi nama pekerjaan yang diajukan.",
               "Isi nilai pengajuan. Angka dapat diketik atau ditempel dalam format seperti 1000000 atau 1.000.000.",
               "Tambahkan catatan perencanaan jika ada ruang lingkup, lokasi, atau ketentuan teknis yang perlu diketahui penandatangan.",
               "Periksa total dan rincian item pada ringkasan sebelum menekan Data Sudah Benar, Daftarkan.",
@@ -212,7 +230,7 @@ export const requestCategoriesDocs: DocsEntry = {
           ["Aset", "Inventaris/aset perusahaan", "Mengikuti konteks kantor", "Tidak", "Dapat tersedia", "Komputer inventaris"],
           ["Non Aset", "Barang/jasa dan biaya operasional", "Mengikuti konteks kantor", "Tidak", "Tidak", "Sewa alat atau banner"],
           ["Unit", "Order bangun dan unit properti", "Wajib", "Wajib dialokasikan", "Tidak", "Pembangunan 3 unit"],
-          ["Non Unit", "Pekerjaan pembangunan/proyek fisik tanpa alokasi kavling", "Sesuai kegunaan; dapat memakai 000", "Tidak", "Tidak", "SPK atau pekerjaan kawasan"],
+          ["Non Unit", "Pekerjaan pembangunan/proyek fisik tanpa alokasi kavling", "Wajib proyek external", "Tidak", "Tidak", "SPK atau pekerjaan kawasan"],
         ],
       },
       {

@@ -5,13 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DepartmentSlaSettingsPage from '@/pages/settings/DepartmentSlaSettingsPage';
 import SettingsPage from '@/pages/settings/SettingsPage';
 import { DepartmentSlaManagers } from '@/components/configuration/DepartmentSlaManagers';
-import { DEFAULT_DEPARTMENT_KPI_CONFIG } from '@/services/department-kpi.service';
 
 const h = vi.hoisted(() => ({ getScope: vi.fn(), getConfig: vi.fn(), saveConfig: vi.fn(), getFilterOptions: vi.fn(), getSummary: vi.fn(), getDetails: vi.fn(), getManagerCandidates: vi.fn(), setManagers: vi.fn() }));
 vi.mock('@/services/department-receiving.service', () => ({ departmentReceivingService: h }));
 vi.mock('@/services/department-kpi.service', async original => ({ ...await original<typeof import('@/services/department-kpi.service')>(), departmentKpiService: h }));
-vi.mock('@/components/configuration/DepartmentReceivingPolicy', () => ({ DepartmentReceivingPolicy: ({ deptId }: { deptId: string }) => <section aria-label="Receiving policy">{deptId}</section> }));
-vi.mock('@/components/settings/SettingsView', () => ({ SettingsView: () => <div>Profile settings</div> }));
+vi.mock('@/components/configuration/DepartmentReceivingPolicy', () => ({
+  DepartmentReceivingPolicy: ({ deptId, departmentField }: { deptId: string; departmentField?: React.ReactNode }) =>
+    <section aria-label="Receiving policy">{deptId}{departmentField}</section>,
+}));
+vi.mock('@/components/settings/SettingsView', () => ({ SettingsView: ({ departmentSettings }: { departmentSettings?: React.ReactNode }) => <div>Profile settings{departmentSettings}</div> }));
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
 const clients: QueryClient[] = [];
 const mount = (view: React.ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) => {
@@ -21,8 +23,6 @@ const mount = (view: React.ReactNode, client = new QueryClient({ defaultOptions:
 beforeEach(() => {
   vi.resetAllMocks();
   h.getScope.mockResolvedValue([{ dept_id: 'finance', name: 'Keuangan' }]);
-  h.getConfig.mockImplementation(async (deptId: string) => ({ ...DEFAULT_DEPARTMENT_KPI_CONFIG, dept_id: deptId, sla_minutes: deptId === 'finance' ? 180 : 90, is_active: false }));
-  h.saveConfig.mockResolvedValue(undefined);
   h.getManagerCandidates.mockResolvedValue([{ user_id: 'alice', full_name: 'Alice', selected: true }, { user_id: 'bob', full_name: 'Bob', selected: false }]);
   h.setManagers.mockResolvedValue(undefined);
 });
@@ -38,23 +38,20 @@ describe('delegated department SLA settings', () => {
     expect(h.getFilterOptions).not.toHaveBeenCalled(); expect(h.getSummary).not.toHaveBeenCalled(); expect(h.getDetails).not.toHaveBeenCalled();
     expect(h.getManagerCandidates).not.toHaveBeenCalled();
   });
-  it('loads and saves only scoped config; keeps signer fields and exposes no report or delegation UI', async () => {
+  it('opens only the receiving policy, without requesting or editing signer SLA', async () => {
     mount(<DepartmentSlaSettingsPage userId="delegate" />);
-    expect(await screen.findByLabelText('SLA menit')).toHaveValue(180);
-    expect(screen.getByRole('region', { name: 'Receiving policy' })).toHaveTextContent('finance');
-    fireEvent.change(screen.getByLabelText('SLA menit'), { target: { value: '240' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Simpan konfigurasi' }));
-    await waitFor(() => expect(h.saveConfig).toHaveBeenCalledWith({ ...DEFAULT_DEPARTMENT_KPI_CONFIG, dept_id: 'finance', sla_minutes: 240, is_active: false }));
-    expect(h.getScope).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole('region', { name: 'Receiving policy' })).toHaveTextContent('finance');
+    expect(screen.queryByLabelText('SLA menit')).not.toBeInTheDocument();
+    expect(h.getConfig).not.toHaveBeenCalled(); expect(h.saveConfig).not.toHaveBeenCalled();
     expect(h.getFilterOptions).not.toHaveBeenCalled(); expect(h.getSummary).not.toHaveBeenCalled(); expect(h.getDetails).not.toHaveBeenCalled();
     expect(h.getManagerCandidates).not.toHaveBeenCalled(); expect(screen.queryByText('Simpan pengelola')).not.toBeInTheDocument();
   });
   it('clears the editor and blocks writes when a transferred/revoked manager loses scope', async () => {
-    mount(<DepartmentSlaSettingsPage userId="delegate" />); await screen.findByLabelText('SLA menit');
+    const { client } = mount(<DepartmentSlaSettingsPage userId="delegate" />); await screen.findByRole('region', { name: 'Receiving policy' });
     h.getScope.mockResolvedValue([]);
-    fireEvent.click(screen.getByRole('button', { name: 'Simpan konfigurasi' }));
+    void client.refetchQueries({ queryKey: ['department-sla-scope', 'delegate'] });
     await screen.findByText('Anda tidak memiliki akses pengelolaan SLA departemen.');
-    expect(h.saveConfig).not.toHaveBeenCalled(); expect(screen.queryByLabelText('SLA menit')).not.toBeInTheDocument();
+    expect(h.saveConfig).not.toHaveBeenCalled(); expect(screen.queryByRole('region', { name: 'Receiving policy' })).not.toBeInTheDocument();
   });
   it('does not mount cached authorized department data before scope revalidation', async () => {
     const client = new QueryClient();
@@ -67,29 +64,20 @@ describe('delegated department SLA settings', () => {
   });
   it('uses only authorized department options and resets edits when switching department', async () => {
     h.getScope.mockResolvedValue([{ dept_id: 'finance', name: 'Keuangan' }, { dept_id: 'legal', name: 'Legal' }]);
-    mount(<DepartmentSlaSettingsPage userId="admin" />); await screen.findByLabelText('SLA menit');
-    fireEvent.change(screen.getByLabelText('SLA menit'), { target: { value: '999' } });
-    fireEvent.change(screen.getByLabelText('Departemen'), { target: { value: 'legal' } });
-    await waitFor(() => expect(screen.getByLabelText('SLA menit')).toHaveValue(90));
+    mount(<DepartmentSlaSettingsPage userId="admin" />);
+    const select = await screen.findByLabelText('Departemen');
+    select.focus();
+    fireEvent.change(select, { target: { value: 'legal' } });
+    expect(screen.getByLabelText('Departemen')).toHaveFocus();
     expect(screen.getByRole('region', { name: 'Receiving policy' })).toHaveTextContent('legal');
     expect(h.getFilterOptions).not.toHaveBeenCalled();
   });
-  it('blocks configuration edits after a read failure and retries without loading reports', async () => {
-    h.getConfig.mockRejectedValueOnce(Error('private detail'));
+  it('blocks receiving edits after a scope read failure and retries without loading reports', async () => {
+    h.getScope.mockRejectedValueOnce(Error('private detail'));
     mount(<DepartmentSlaSettingsPage userId="delegate" />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Konfigurasi SLA belum dapat dimuat.');
-    expect(screen.queryByRole('button', { name: 'Simpan konfigurasi' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Coba lagi' })); await screen.findByLabelText('SLA menit');
-  });
-  it('reports failed writes without success and validates invalid schedules', async () => {
-    mount(<DepartmentSlaSettingsPage userId="delegate" />); await screen.findByLabelText('SLA menit');
-    fireEvent.change(screen.getByLabelText('Selesai kerja'), { target: { value: '07:00' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Simpan konfigurasi' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Periksa SLA'); expect(h.saveConfig).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText('Selesai kerja'), { target: { value: '17:00' } }); h.saveConfig.mockRejectedValueOnce(Error('denied'));
-    fireEvent.click(screen.getByRole('button', { name: 'Simpan konfigurasi' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Konfigurasi belum dapat dikonfirmasi.'));
-    expect(screen.queryByText('Konfigurasi SLA tersimpan.')).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Akses departemen belum dapat dikonfirmasi.');
+    expect(screen.queryByRole('region', { name: 'Receiving policy' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Coba lagi' })); await screen.findByRole('region', { name: 'Receiving policy' });
   });
 });
 

@@ -14,6 +14,7 @@ import { adminSlaDocs, adminSlaDetailSections } from "./sla";
 import { adminMonitoringDocs, adminMonitoringDetailSections } from "./monitoring";
 import { adminAuditDocs, adminAuditDetailSections } from "./audit";
 import { adminEmailDocs, adminEmailDetailSections } from "./email";
+import { adminReleaseOperationsDocs } from "./release-operations";
 import type { DocsEntry, DocsSection } from "../types";
 
 export type AdminDocsId =
@@ -32,7 +33,8 @@ export type AdminDocsId =
   | "admin-sla"
   | "admin-monitoring"
   | "admin-audit"
-  | "admin-email";
+  | "admin-email"
+  | "admin-release-operations";
 
 export const ADMIN_DOCS: DocsEntry[] = [
   adminUsersDocs,
@@ -51,6 +53,7 @@ export const ADMIN_DOCS: DocsEntry[] = [
   adminMonitoringDocs,
   adminAuditDocs,
   adminEmailDocs,
+  adminReleaseOperationsDocs,
 ];
 
 export const ADMIN_DETAIL_SECTIONS_BY_ID: Readonly<Partial<Record<AdminDocsId, DocsSection[]>>> = {

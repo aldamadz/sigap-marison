@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { ReleaseNotice } from '@/services/release-notice.service';
 import { ReleaseNoticeContent } from '@/components/app/ReleaseNoticeContent';
+import { findAppReleaseForAnnouncement } from '@/lib/app-releases';
 
 export const releaseSessionKey = (userId:string,releaseId:string) => `sigap-release:v1:${userId}:${releaseId}`;
 export const releaseIsCurrent = (release:ReleaseNotice,now:number) => {
@@ -16,6 +17,7 @@ export const releaseIsCurrent = (release:ReleaseNotice,now:number) => {
 };
 
 export function WhatsNewNotice({userId,release,now}:{userId:string;release:ReleaseNotice;now:number}) {
+  const appRelease = findAppReleaseForAnnouncement(release.id, release.items[0]);
   const eligible=releaseIsCurrent(release,now);
   const key=releaseSessionKey(userId,release.id);
   const [closed,setClosed]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState('');
@@ -49,7 +51,7 @@ export function WhatsNewNotice({userId,release,now}:{userId:string;release:Relea
   return <Dialog open={open} onOpenChange={value=>{if(!value&&!saving)void acknowledge();}}>
     <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
       <DialogHeader><Sparkles className="mb-2 h-6 w-6 text-primary" /><DialogTitle>What's New di SIGAP</DialogTitle>
-        <DialogDescription>Pembaruan layanan SIGAP.</DialogDescription></DialogHeader>
+        <DialogDescription>{appRelease ? `Versi aplikasi ${appRelease.version}` : 'Pembaruan layanan SIGAP.'}</DialogDescription></DialogHeader>
       <ReleaseNoticeContent items={release.items} />
       <div className="flex items-start gap-2 pt-2"><Checkbox id={checkboxId} className="rounded-[2px]" checked={dontShowAgain} disabled={saving} onCheckedChange={value=>setDontShowAgain(value===true)} />
         <label htmlFor={checkboxId} className="cursor-pointer text-sm leading-4">Jangan tampilkan lagi untuk pembaruan ini</label></div>

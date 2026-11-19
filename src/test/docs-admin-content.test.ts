@@ -13,6 +13,7 @@ import { ADMIN_DETAIL_SECTIONS_BY_ID, ADMIN_DOCS } from "../pages/docs/content/a
 import { adminAuditDocs, adminAuditDetailSections } from "../pages/docs/content/admin/audit";
 import { adminDepartmentsDocs, adminDepartmentsDetailSections } from "../pages/docs/content/admin/departments";
 import { adminEmailDocs, adminEmailDetailSections } from "../pages/docs/content/admin/email";
+import { adminReleaseOperationsDocs } from "../pages/docs/content/admin/release-operations";
 import { adminEntitiesDocs, adminEntitiesDetailSections } from "../pages/docs/content/admin/entities";
 import { adminFormUsagesDocs, adminFormUsagesDetailSections } from "../pages/docs/content/admin/form-usages";
 import { adminHierarchyDocs, adminHierarchyDetailSections } from "../pages/docs/content/admin/hierarchy";
@@ -31,14 +32,14 @@ const ids = [
   "admin-users", "admin-hierarchy", "admin-master-data", "admin-departments",
   "admin-entities", "admin-letter-types", "admin-offices", "admin-projects",
   "admin-form-usages", "admin-integration", "admin-numbering", "admin-job-title-labels",
-  "admin-sla", "admin-monitoring", "admin-audit", "admin-email",
+  "admin-sla", "admin-monitoring", "admin-audit", "admin-email", "admin-release-operations",
 ] as const;
 
 const fileEntries = [
   adminUsersDocs, adminHierarchyDocs, adminMasterDataDocs, adminDepartmentsDocs,
   adminEntitiesDocs, adminLetterTypesDocs, adminOfficesDocs, adminProjectsDocs,
   adminFormUsagesDocs, adminIntegrationDocs, adminNumberingDocs, adminJobTitleLabelsDocs,
-  adminSlaDocs, adminMonitoringDocs, adminAuditDocs, adminEmailDocs,
+  adminSlaDocs, adminMonitoringDocs, adminAuditDocs, adminEmailDocs, adminReleaseOperationsDocs,
 ];
 
 const fileDetails = {
@@ -75,7 +76,7 @@ const normalized = () => ({
 });
 
 describe("docs-admin-content D2B", () => {
-  it("preserves all 16 file-owned entries, order, audience, icons, and canonical paths", () => {
+  it("preserves file-owned entries, order, audience, icons, and canonical paths", () => {
     expect(ADMIN_DOCS).toStrictEqual(fileEntries);
     expect(ADMIN_DOCS.map((entry) => entry.id)).toEqual(ids);
     expect(new Set(ids).size).toBe(ids.length);
@@ -92,9 +93,9 @@ describe("docs-admin-content D2B", () => {
     expect(Object.keys(ADMIN_DETAIL_SECTIONS_BY_ID)).toHaveLength(15);
   });
 
-  it("matches documentation content after MRN-25 payload viewer updates", () => {
+  it("matches the reviewed documentation content for v1.28.0", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "0c485e76c2becd83512b8d2fcd86e3db110ed6b42a55ed73b08f50b159995362",
+      "6225eef944bf2c4b006c7460438a31ba36283f2b1f3fda41ea93dd10b44bc854",
     );
   });
 
@@ -106,7 +107,7 @@ describe("docs-admin-content D2B", () => {
       const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       expect(facade).not.toMatch(new RegExp(`^\\s*(?:${escapedId}|"${escapedId}")\\s*:\\s*\\[`, "m"));
     }
-    for (const file of ["users", "hierarchy", "master-data", "departments", "entities", "letter-types", "offices", "projects", "form-usages", "integration", "numbering", "job-title-labels", "sla", "monitoring", "audit", "email"]) {
+    for (const file of ["users", "hierarchy", "master-data", "departments", "entities", "letter-types", "offices", "projects", "form-usages", "integration", "numbering", "job-title-labels", "sla", "monitoring", "audit", "email", "release-operations"]) {
       expect(existsSync(`src/pages/docs/content/admin/${file}.ts`)).toBe(true);
     }
   });
