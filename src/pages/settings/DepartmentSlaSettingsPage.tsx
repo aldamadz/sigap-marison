@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
-import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DepartmentReceivingPolicy } from '@/components/configuration/DepartmentReceivingPolicy';
 import { departmentReceivingService } from '@/services/department-receiving.service';
@@ -16,15 +15,19 @@ export default function DepartmentSlaSettingsPage({ userId }: { userId: string }
   const deptId = departments.some(row => row.dept_id === selected) ? selected : departments[0]?.dept_id;
 
   return <div className="sigap-page mx-auto max-w-5xl space-y-6">
-    <header className="space-y-2 border-b pb-5">
-      <Button asChild variant="ghost" size="sm" className="-ml-2"><Link to="/settings"><ArrowLeft className="h-4 w-4" />Pengaturan</Link></Button>
+    <header>
       <h1 className="text-2xl font-semibold">SLA departemen</h1>
     </header>
     {scope.isPending || !scope.isFetchedAfterMount ? <p role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />Memeriksa akses departemen...</p> : scope.isError ?
       <div role="alert" className="space-y-3 text-sm"><p>Akses departemen belum dapat dikonfirmasi.</p><Button variant="outline" onClick={() => { void scope.refetch(); }}><RefreshCw className="h-4 w-4" />Coba lagi</Button></div> : !deptId ?
-        <p role="status" className="text-sm text-muted-foreground">Anda tidak memiliki akses pengelolaan SLA departemen.</p> : <>
-          <label className="block max-w-md space-y-1.5 text-sm"><span>Departemen</span><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={deptId} onChange={event => setSelected(event.target.value)}>{departments.map(row => <option key={row.dept_id} value={row.dept_id}>{row.name}</option>)}</select></label>
-          <DepartmentReceivingPolicy key={`${userId}-${deptId}`} deptId={deptId} />
-        </>}
+        <p role="status" className="text-sm text-muted-foreground">Anda tidak memiliki akses pengelolaan SLA departemen.</p> :
+          <DepartmentReceivingPolicy key={`${userId}-${deptId}`} deptId={deptId} departmentField={
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium">
+              <span>Departemen</span>
+              <select className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm font-normal" value={deptId} onChange={event => setSelected(event.target.value)}>
+                {departments.map(row => <option key={row.dept_id} value={row.dept_id}>{row.name}</option>)}
+              </select>
+            </label>
+          } />}
   </div>;
 }

@@ -12,7 +12,7 @@ export default function SettingsPage({ userId }: { userId: string }) {
   const departmentSettings = scope.isSuccess && scope.isFetchedAfterMount && scope.data.length > 0
     ? <nav aria-label="Pengaturan departemen" className="py-4">
       <Link to="/settings/department-sla" className="flex min-h-10 items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-muted">
-        <Timer className="h-4 w-4 text-primary" aria-hidden="true" />SLA departemen<ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <Timer className="h-4 w-4 text-muted-foreground" aria-hidden="true" />SLA departemen<ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
       </Link>
     </nav> : undefined
   return <SettingsView departmentSettings={departmentSettings} />
