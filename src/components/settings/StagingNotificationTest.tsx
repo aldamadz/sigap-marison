@@ -8,9 +8,12 @@ export function StagingNotificationTest({ userId }: { userId: string }) {
   const staging = ['https://sigap.marison-testing.biz.id', 'https://sigap.marison-testing.biz.id/']
     .includes(import.meta.env.VITE_APP_PUBLIC_URL);
   if (!staging || !userId) return null;
-  return <div className="flex flex-wrap items-start gap-3">
-    <NotificationTestAction userId={userId} mode="popup" />
-    <NotificationTestAction userId={userId} mode="delivery" />
+  return <div className="space-y-2 pt-2" role="group" aria-label="Uji notifikasi staging">
+    <p className="text-xs font-medium text-muted-foreground">Uji notifikasi staging</p>
+    <div className="grid items-start gap-2 sm:grid-cols-2">
+      <NotificationTestAction userId={userId} mode="popup" />
+      <NotificationTestAction userId={userId} mode="delivery" />
+    </div>
   </div>;
 }
 
@@ -65,8 +68,8 @@ function NotificationTestAction({ userId, mode }: { userId: string; mode: 'popup
   };
 
   if (!staging || !userId) return null;
-  return <div className="max-w-lg space-y-2">
-    <Button type="button" variant="outline" size="sm" className="w-52 max-w-full justify-center" disabled={busy || cooling}
+  return <div className="min-w-0 max-w-lg space-y-2">
+    <Button type="button" variant="outline" size="sm" className="h-auto min-h-10 w-full justify-center whitespace-normal text-center" disabled={busy || cooling}
       onClick={() => { void sendTest(); }}>
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'popup' ? <BellRing className="h-4 w-4" /> : <Send className="h-4 w-4" />}
       {busy ? 'Mengirim tes...' : cooling ? `Tes lagi dalam ${remaining} dtk` : mode === 'popup' ? 'Tes popup browser' : 'Tes pengiriman SIGAP'}
