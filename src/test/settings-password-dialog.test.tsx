@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsView } from '@/components/settings/SettingsView';
 
@@ -35,7 +36,7 @@ afterEach(cleanup);
 
 describe('change password dialog', () => {
   it('hides the form and clears a canceled entry without making a request', async () => {
-    render(<SettingsView />);
+    render(<MemoryRouter><SettingsView /></MemoryRouter>);
     await screen.findByRole('button', { name: 'Ganti kata sandi' });
     expect(screen.queryByLabelText('Kata sandi baru')).not.toBeInTheDocument();
     const dialog = await openPasswordDialog();
@@ -47,7 +48,7 @@ describe('change password dialog', () => {
   });
 
   it('keeps failed submissions open and closes the dialog after an audited success', async () => {
-    render(<SettingsView />);
+    render(<MemoryRouter><SettingsView /></MemoryRouter>);
     const dialog = await openPasswordDialog();
     const value = 'fixture-new-password';
     fireEvent.change(dialog.getByLabelText('Kata sandi baru'), { target: { value } });
