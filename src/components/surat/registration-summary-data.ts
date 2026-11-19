@@ -100,6 +100,7 @@ const applyRecommendationDecisionsToItems = (
 
 export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryData => {
   const snapshot = asRecord(surat?.data_snapshot);
+  const snapshotSurat = asRecord(snapshot.surat);
   const snapshotRequester = asRecord(snapshot.requester);
   const requester = Object.keys(snapshotRequester).length > 0 ? snapshotRequester : asRecord(surat?.requester_snapshot);
   const snapshotLocation = asRecord(snapshot.location);
@@ -126,11 +127,21 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
   const form = Object.keys(locationForm).length > 0 ? locationForm : asRecord(snapshot.form);
   const policy = asRecord(surat?.policy_snapshot);
   const formIdentity = { nomor_form: typeof form.nomor_form === "string" ? form.nomor_form : null };
+  const category = mergedInput.request_category || snapshotSurat.request_category || policy.request_category || "-";
+  const isRecommendation = formInput.linked_document_type === "recommendation" ||
+    snapshotInput.linked_document_type === "recommendation" ||
+    formIdentity.nomor_form?.trim().toUpperCase() === "FM-UAI.HRD-30-00";
+  // The recommendation document uses the Asset module too, but does not offer this choice.
+  const showRecommendationChoice = !isRecommendation && (policy.request_category || category) === "asset";
   const keu10 = isKeu10Form(formIdentity);
   const showFundType = usesFundSubmissionType(formIdentity, mergedInput.request_category || asRecord(snapshot.surat).request_category);
   const purpose = normalizeKeu10Config(policy.keu10_config)?.purposes.find((entry) => entry.code === mergedInput.keu10_purpose_code);
   const fields: RegistrationSummaryField[] = Object.entries(mergedInput)
-    .filter(([key, value]) => !SUMMARY_HIDDEN_KEYS.has(key) && !(key === "fund_type" && !showFundType) && !(keu10 && key === "keu10_purpose_label") && formatSummaryValue(value) !== "-")
+    .filter(([key, value]) => !SUMMARY_HIDDEN_KEYS.has(key) &&
+      (key !== "requires_recommendation" || (showRecommendationChoice && typeof value === "boolean")) &&
+      !(key === "fund_type" && !showFundType) &&
+      !(keu10 && key === "keu10_purpose_label") &&
+      formatSummaryValue(value) !== "-")
     .map(([key, value]) => ({
       key,
       label: showFundType && key === "catatan" ? "Catatan pemohon" : key === "rab_not_required" ? "Kebutuhan RAB" : key === "requester_has_rab" ? "Penanda RAB pemohon (data lama)" : key === "fund_type" ? "Jenis Pengajuan Dana" : keu10 && key === "keu10_purpose_code" ? "Tujuan Pengajuan" : humanizeInputKey(key),
@@ -177,13 +188,12 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
   const office = asRecord(location.office);
   const project = asRecord(location.project);
   const requestedProject = asRecord(mergedInput.requested_project);
-  const snapshotSurat = asRecord(snapshot.surat);
 
   return {
     suratId: typeof surat?.id === "string" ? surat.id : undefined,
     noSurat: String(surat?.no_surat || ""),
     title: String(surat?.judul_surat || ""),
-    category: mergedInput.request_category || snapshotSurat.request_category || "-",
+    category,
     usageName: String(policy.usage_name || "-"),
     formName: String(form.nama_form || "-"),
     formNumber: String(form.nomor_form || ""),
@@ -215,7 +225,7 @@ export const buildRegistrationSummaryData = (surat: any): RegistrationSummaryDat
       name: String(signature.profiles?.full_name || signature.signer_snapshot?.full_name || "Belum ditentukan"),
       jobTitle: signature.profiles?.job_title || signature.signer_snapshot?.job_title || undefined,
     })),
-    isRecommendation: formInput.linked_document_type === "recommendation",
+    isRecommendation,
     revision: activeRevision,
   };
 };
