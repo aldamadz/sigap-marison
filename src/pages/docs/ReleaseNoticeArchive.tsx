@@ -17,7 +17,7 @@ export function ReleaseNoticeArchive({ userId }: { userId?: string }) {
   const query = useQuery({ queryKey: ['release-notice-history', userId], queryFn: releaseNoticeService.history,
     enabled: !!userId, staleTime: 30000, retry: 1 });
   const notices = userId ? query.data?.releases ?? [] : [];
-  const announcements = notices.filter(release => !findAppReleaseForAnnouncement(release.id));
+  const announcements = notices.filter(release => !findAppReleaseForAnnouncement(release.id, release.items[0]));
   const { page, pageCount, start, end, goToPage } = useVersionHistoryPage(APP_RELEASES.length + announcements.length);
   const visibleAnnouncements = announcements.slice(Math.max(0, start - APP_RELEASES.length), Math.max(0, end - APP_RELEASES.length));
 
@@ -28,7 +28,7 @@ export function ReleaseNoticeArchive({ userId }: { userId?: string }) {
     </div>
     <Accordion key={JSON.stringify([userId, page])} type="single" collapsible className="space-y-2">
       {APP_RELEASES.slice(start, end).map(release => {
-        const notice = notices.find(item => item.id === release.announcementId);
+        const notice = notices.find(item => findAppReleaseForAnnouncement(item.id, item.items[0]) === release);
         const latest = release === APP_RELEASES[0];
         return <VersionHistoryRow key={release.version} value={`version:${release.version}`} latest={latest} summary={<>
             <span className="font-semibold tabular-nums text-primary">Versi {release.version}</span>

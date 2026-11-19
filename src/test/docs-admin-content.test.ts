@@ -95,7 +95,7 @@ describe("docs-admin-content D2B", () => {
 
   it("matches the reviewed documentation content for v1.28.0", () => {
     expect(createHash("sha256").update(JSON.stringify(normalized())).digest("hex")).toBe(
-      "3f370554c8003d6491657435698305571ea90d87cf32bc799589512a8d98721e",
+      "6225eef944bf2c4b006c7460438a31ba36283f2b1f3fda41ea93dd10b44bc854",
     );
   });
 
